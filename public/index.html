@@ -101,6 +101,37 @@
       <div id="subjects-list"></div>
     </section>
 
+    <section id="subject-stats-section" style="margin-top: 32px; display: none;">
+      <h2 id="subject-stats-title">Огляд суб’єкта</h2>
+
+      <div class="grid">
+        <div class="card">
+          <div class="label">Остання перевірка</div>
+          <div id="subject-last-checked" style="font-size: 18px; font-weight: 700;">-</div>
+        </div>
+
+        <div class="card">
+          <div class="label">Перевірено кандидатів</div>
+          <div id="subject-scanned" class="value">-</div>
+        </div>
+
+        <div class="card">
+          <div class="label">Поріг збігу</div>
+          <div id="subject-threshold" class="value">-</div>
+        </div>
+
+        <div class="card">
+          <div class="label">Підтверджені згадки</div>
+          <div id="subject-confirmed" class="value">-</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top: 16px;">
+        <div class="label">Розподіл згадок за джерелами</div>
+        <div id="subject-provider-stats">Завантаження...</div>
+      </div>
+    </section>
+
     <section id="mentions-section" style="margin-top: 32px; display: none;">
       <h2 id="mentions-title">Згадки</h2>
 

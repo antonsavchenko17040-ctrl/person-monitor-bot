@@ -136,8 +136,18 @@ async function loadSubjects() {
 
       card.append(name, organization, position, city, count);
 
-      card.addEventListener("click", () => {
-        loadMentions(subject.id, subject.full_name);
+      card.addEventListener("click", async () => {
+        await Promise.all([
+          loadSubjectStats(subject.id, subject.full_name),
+          loadMentions(subject.id, subject.full_name),
+        ]);
+
+        document
+          .getElementById("subject-stats-section")
+          .scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
       });
 
       container.append(card);
@@ -145,6 +155,113 @@ async function loadSubjects() {
   } catch (error) {
     console.error("Subjects loading failed:", error);
     container.textContent = "Не вдалося завантажити суб’єктів.";
+  }
+}
+
+function formatPortalDateTime(value) {
+  if (!value) {
+    return "Ще не перевірявся";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString("uk-UA", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+async function loadSubjectStats(subjectId, fullName) {
+  const section =
+    document.getElementById("subject-stats-section");
+
+  const title =
+    document.getElementById("subject-stats-title");
+
+  const lastChecked =
+    document.getElementById("subject-last-checked");
+
+  const scanned =
+    document.getElementById("subject-scanned");
+
+  const threshold =
+    document.getElementById("subject-threshold");
+
+  const confirmed =
+    document.getElementById("subject-confirmed");
+
+  const providers =
+    document.getElementById("subject-provider-stats");
+
+  section.style.display = "block";
+  title.textContent = `Огляд: ${fullName}`;
+  providers.textContent = "Завантаження...";
+
+  try {
+    const response = await fetch(
+      `/api/subject-stats?subjectId=${encodeURIComponent(subjectId)}`,
+      {
+        headers: { Accept: "application/json" },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    lastChecked.textContent =
+      formatPortalDateTime(data.subject.last_checked_at);
+
+    scanned.textContent =
+      String(data.subject.last_scanned_count ?? 0);
+
+    threshold.textContent =
+      `${data.subject.match_threshold ?? 0}%`;
+
+    confirmed.textContent =
+      `${data.summary.confirmed ?? 0} із ${data.summary.mentions ?? 0}`;
+
+    providers.replaceChildren();
+
+    if (!data.providers?.length) {
+      providers.textContent =
+        "Збережених згадок поки немає.";
+      return;
+    }
+
+    for (const item of data.providers) {
+      const row = document.createElement("div");
+
+      row.style.display = "flex";
+      row.style.justifyContent = "space-between";
+      row.style.gap = "16px";
+      row.style.padding = "10px 0";
+      row.style.borderBottom = "1px solid #252b36";
+
+      const name = document.createElement("span");
+      name.textContent = providerLabel(item.provider);
+
+      const value = document.createElement("strong");
+      value.textContent =
+        `${item.mentions} · підтверджено ${item.confirmed}`;
+
+      row.append(name, value);
+      providers.append(row);
+    }
+  } catch (error) {
+    console.error("Subject statistics loading failed:", error);
+
+    providers.textContent =
+      "Не вдалося завантажити статистику.";
   }
 }
 
