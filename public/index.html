@@ -77,21 +77,21 @@
 <body>
   <main>
     <h1>Person Monitor</h1>
-    <div class="subtitle">Public-source monitoring portal</div>
+    <div class="subtitle">Портал моніторингу відкритих джерел</div>
 
     <div class="status">
       <span id="dot" class="dot"></span>
-      <span id="status">Checking service...</span>
+      <span id="status">Перевірка сервісу...</span>
     </div>
 
     <div class="grid">
       <div class="card">
-        <div class="label">Subjects</div>
+        <div class="label">Суб’єкти</div>
         <div id="subjects" class="value">-</div>
       </div>
 
       <div class="card">
-        <div class="label">Mentions</div>
+        <div class="label">Згадки</div>
         <div id="mentions" class="value">-</div>
       </div>
     </div>
@@ -103,6 +103,25 @@
 
     <section id="mentions-section" style="margin-top: 32px; display: none;">
       <h2 id="mentions-title">Згадки</h2>
+
+      <div class="card" style="margin-bottom: 16px; padding: 16px;">
+        <input
+          id="mentions-search"
+          type="search"
+          placeholder="Пошук серед згадок..."
+          style="width: 100%; padding: 12px; margin-bottom: 12px; border-radius: 10px; border: 1px solid #2a303b; background: #0b0d12; color: inherit;"
+        >
+
+        <select
+          id="mentions-provider"
+          style="width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #2a303b; background: #0b0d12; color: inherit;"
+        >
+          <option value="">Усі джерела</option>
+        </select>
+
+        <div id="mentions-count" class="label" style="margin-top: 12px;"></div>
+      </div>
+
       <div id="mentions-list"></div>
     </section>
   </main>
