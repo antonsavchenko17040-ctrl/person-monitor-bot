@@ -25,7 +25,9 @@
     "nazk:facts:dry": "node --env-file=.env scripts/extract-nazk-facts.js --dry-run",
     "nazk:facts:extract": "node --env-file=.env scripts/extract-nazk-facts.js",
     "analytics:dry": "node --env-file=.env scripts/build-analytics.js --dry-run",
-    "analytics:build": "node --env-file=.env scripts/build-analytics.js"
+    "analytics:build": "node --env-file=.env scripts/build-analytics.js",
+    "assets:dry": "node --env-file=.env scripts/track-assets.js --dry-run",
+    "assets:build": "node --env-file=.env scripts/track-assets.js"
   },
   "engines": {
     "node": ">=22"
