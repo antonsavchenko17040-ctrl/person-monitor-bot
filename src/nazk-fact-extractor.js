@@ -215,6 +215,77 @@ function resolveActor(ref, actors) {
   };
 }
 
+export function extractThirdPartyRightIdentity(
+  right,
+) {
+  const companyName =
+    clean(right?.ua_company_name) ||
+    clean(right?.ukr_company_name) ||
+    clean(right?.eng_company_name);
+
+  const rawEdrpou =
+    clean(right?.ua_company_code);
+
+  const edrpouDigits =
+    String(rawEdrpou ?? "")
+      .replace(/\D/g, "");
+
+  const edrpou =
+    edrpouDigits.length === 8
+      ? edrpouDigits
+      : null;
+
+  const foreignCompanyCode =
+    clean(right?.eng_company_code);
+
+  const personName =
+    [
+      clean(right?.ua_lastname),
+      clean(right?.ua_firstname),
+      clean(right?.ua_middlename),
+    ]
+      .filter(Boolean)
+      .join(" ") || null;
+
+  const hasOrganization =
+    Boolean(
+      companyName ||
+      edrpou ||
+      foreignCompanyCode,
+    );
+
+  const kind =
+    hasOrganization
+      ? "organization"
+      : personName
+        ? "person"
+        : "unknown";
+
+  const name =
+    kind === "organization"
+      ? (
+          companyName ||
+          edrpou ||
+          foreignCompanyCode
+        )
+      : personName;
+
+  /*
+   * Deliberately exclude:
+   * tax IDs, birthdays, passports,
+   * addresses and other sensitive data.
+   */
+  return {
+    kind,
+    name,
+
+    edrpou,
+
+    foreign_company_code:
+      foreignCompanyCode,
+  };
+}
+
 function thirdPartyName(right) {
   const company =
     clean(right?.ua_company_name) ||
@@ -248,6 +319,13 @@ function reduceRights(rights, actors) {
     const actor =
       resolveActor(ref, actors);
 
+    const thirdParty =
+      ref === "j"
+        ? extractThirdPartyRightIdentity(
+            right,
+          )
+        : null;
+
     return {
       belongs_ref: ref,
 
@@ -265,9 +343,18 @@ function reduceRights(rights, actors) {
         ),
 
       third_party_name:
-        ref === "j"
-          ? thirdPartyName(right)
-          : null,
+        thirdParty?.name ?? null,
+
+      third_party_kind:
+        thirdParty?.kind ?? null,
+
+      third_party_edrpou:
+        thirdParty?.edrpou ?? null,
+
+      third_party_foreign_code:
+        thirdParty
+          ?.foreign_company_code ??
+        null,
     };
   });
 }

@@ -33,7 +33,11 @@
     "income:enrich:dry": "node --env-file=.env scripts/enrich-income-sources.js --dry-run",
     "income:enrich": "node --env-file=.env scripts/enrich-income-sources.js",
     "income:graph:dry": "node --env-file=.env scripts/build-income-source-graph.js --dry-run",
-    "income:graph:build": "node --env-file=.env scripts/build-income-source-graph.js"
+    "income:graph:build": "node --env-file=.env scripts/build-income-source-graph.js",
+    "thirdparty:enrich:dry": "node --env-file=.env scripts/enrich-third-party-rights.js --dry-run",
+    "thirdparty:enrich": "node --env-file=.env scripts/enrich-third-party-rights.js",
+    "familygraph:dry": "node --env-file=.env scripts/build-family-third-party-graph.js --dry-run",
+    "familygraph:build": "node --env-file=.env scripts/build-family-third-party-graph.js"
   },
   "engines": {
     "node": ">=22"

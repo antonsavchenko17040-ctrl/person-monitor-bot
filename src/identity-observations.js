@@ -666,6 +666,11 @@ export async function observeAndResolvePerson(
       resolver_version =
         EXCLUDED.resolver_version,
       details =
+        COALESCE(
+          identity_observations.details,
+          '{}'::jsonb
+        )
+        ||
         EXCLUDED.details,
       updated_at = now()
 
