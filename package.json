@@ -7,7 +7,23 @@
   "scripts": {
     "start": "node --env-file=.env src/bot.js",
     "test": "node --test",
-    "court:update": "python scripts/update-court-open-data-index.py"
+    "court:update": "python scripts/update-court-open-data-index.py",
+    "db:migrate:analytics": "node --env-file=.env scripts/migrate-analytics-schema.js",
+    "db:verify:analytics": "node --env-file=.env scripts/migrate-analytics-schema.js --verify-only",
+    "entity:verify": "node --env-file=.env scripts/verify-entity-resolution.js",
+    "db:migrate:identity": "node --env-file=.env scripts/migrate-identity-observations.js",
+    "db:verify:identity": "node --env-file=.env scripts/migrate-identity-observations.js --verify-only",
+    "identity:verify": "node --env-file=.env scripts/verify-identity-observations.js",
+    "db:migrate:ingestion": "node --env-file=.env scripts/migrate-fact-ingestion.js",
+    "db:verify:ingestion": "node --env-file=.env scripts/migrate-fact-ingestion.js --verify-only",
+    "nazk:bootstrap": "node --env-file=.env scripts/bootstrap-nazk-declarations.js",
+    "nazk:bootstrap:dry": "node --env-file=.env scripts/bootstrap-nazk-declarations.js --dry-run",
+    "nazk:api:dry": "node --env-file=.env scripts/sync-nazk-documents.js --dry-run",
+    "nazk:api:one": "node --env-file=.env scripts/sync-nazk-documents.js --limit=1",
+    "nazk:api:sync": "node --env-file=.env scripts/sync-nazk-documents.js",
+    "nazk:api:inspect": "node --env-file=.env scripts/inspect-nazk-structure.js",
+    "nazk:facts:dry": "node --env-file=.env scripts/extract-nazk-facts.js --dry-run",
+    "nazk:facts:extract": "node --env-file=.env scripts/extract-nazk-facts.js"
   },
   "engines": {
     "node": ">=22"
