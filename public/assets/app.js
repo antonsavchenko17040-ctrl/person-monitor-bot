@@ -553,6 +553,101 @@ const graphNodeOverrides = new Map();
 let graphDragState = null;
 let graphSuppressClickUntil = 0;
 
+const GRAPH_LAYOUT_STORAGE_PREFIX =
+  "person-monitor:graph-layout:v1";
+
+function graphLayoutStorageKey(
+  subjectId = activeGraphSubjectId,
+  year = activeSubjectGraph?.year
+) {
+  if (!subjectId || year == null) {
+    return null;
+  }
+
+  return (
+    GRAPH_LAYOUT_STORAGE_PREFIX +
+    ":" +
+    String(subjectId) +
+    ":" +
+    String(year)
+  );
+}
+
+function saveGraphNodeOverrides() {
+  const key = graphLayoutStorageKey();
+
+  if (!key) {
+    return;
+  }
+
+  try {
+    localStorage.setItem(
+      key,
+      JSON.stringify(
+        Object.fromEntries(
+          graphNodeOverrides
+        )
+      )
+    );
+  } catch (error) {
+    console.warn(
+      "Graph layout save failed:",
+      error
+    );
+  }
+}
+
+function loadGraphNodeOverrides(
+  subjectId,
+  year
+) {
+  graphNodeOverrides.clear();
+
+  const key =
+    graphLayoutStorageKey(
+      subjectId,
+      year
+    );
+
+  if (!key) {
+    return;
+  }
+
+  try {
+    const raw =
+      localStorage.getItem(key);
+
+    if (!raw) {
+      return;
+    }
+
+    const saved = JSON.parse(raw);
+
+    for (
+      const [nodeId, point]
+      of Object.entries(saved)
+    ) {
+      if (
+        Number.isFinite(point?.x) &&
+        Number.isFinite(point?.y)
+      ) {
+        graphNodeOverrides.set(
+          nodeId,
+          {
+            x: point.x,
+            y: point.y,
+          }
+        );
+      }
+    }
+  } catch (error) {
+    console.warn(
+      "Graph layout load failed:",
+      error
+    );
+  }
+}
+
 function graphNodeColor(type) {
   return GRAPH_NODE_COLORS[type] ?? "#94a3b8";
 }
@@ -1132,11 +1227,13 @@ function renderSubjectGraph() {
         );
       } catch {}
 
+      saveGraphNodeOverrides();
       graphDragState = null;
     };
 
   svg.onpointercancel =
     () => {
+      saveGraphNodeOverrides();
       graphDragState = null;
     };
 
@@ -1636,7 +1733,11 @@ async function loadSubjectGraph(
 
     activeSubjectGraph = data;
 
-    graphNodeOverrides.clear();
+    loadGraphNodeOverrides(
+      subjectId,
+      data.year
+    );
+
     graphDragState = null;
 
     populateGraphYears(data);
@@ -1696,6 +1797,33 @@ document
   ?.addEventListener(
     "change",
     renderSubjectGraph
+  );
+
+document
+  .getElementById(
+    "graph-reset-layout"
+  )
+  ?.addEventListener(
+    "click",
+    () => {
+      const key =
+        graphLayoutStorageKey();
+
+      if (key) {
+        try {
+          localStorage.removeItem(key);
+        } catch (error) {
+          console.warn(
+            "Graph layout reset failed:",
+            error
+          );
+        }
+      }
+
+      graphNodeOverrides.clear();
+      graphDragState = null;
+      renderSubjectGraph();
+    }
   );
 
 loadHealth();
