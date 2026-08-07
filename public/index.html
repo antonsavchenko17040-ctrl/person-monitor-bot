@@ -1,0 +1,121 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Person Monitor</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Arial, sans-serif;
+      background: #0b0d12;
+      color: #f5f7fa;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    main {
+      width: min(760px, 100%);
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 42px;
+    }
+    .subtitle {
+      color: #9da7b5;
+      margin-bottom: 32px;
+    }
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border: 1px solid #2a303b;
+      border-radius: 999px;
+      margin-bottom: 24px;
+    }
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #888;
+    }
+    .dot.ok {
+      background: #3ddc84;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+    .card {
+      background: #141821;
+      border: 1px solid #252b36;
+      border-radius: 16px;
+      padding: 24px;
+    }
+    .label {
+      color: #9da7b5;
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+    .value {
+      font-size: 36px;
+      font-weight: 700;
+    }
+    .error {
+      color: #ff7b7b;
+    }
+    @media (max-width: 560px) {
+      .grid { grid-template-columns: 1fr; }
+      h1 { font-size: 34px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Person Monitor</h1>
+    <div class="subtitle">Public-source monitoring portal</div>
+
+    <div class="status">
+      <span id="dot" class="dot"></span>
+      <span id="status">Checking service...</span>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="label">Subjects</div>
+        <div id="subjects" class="value">-</div>
+      </div>
+
+      <div class="card">
+        <div class="label">Mentions</div>
+        <div id="mentions" class="value">-</div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    async function loadHealth() {
+      try {
+        const response = await fetch("/api/health");
+        if (!response.ok) throw new Error("Request failed");
+
+        const data = await response.json();
+
+        document.getElementById("subjects").textContent = data.subjects;
+        document.getElementById("mentions").textContent = data.mentions;
+        document.getElementById("status").textContent = "Service online";
+        document.getElementById("dot").classList.add("ok");
+      } catch (error) {
+        document.getElementById("status").textContent = "Service unavailable";
+        document.getElementById("status").classList.add("error");
+      }
+    }
+
+    loadHealth();
+  </script>
+</body>
+</html>
