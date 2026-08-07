@@ -121,7 +121,15 @@ async function loadMentions(subjectId, fullName) {
       source.textContent = mention.source || mention.provider || "Джерело";
 
       const link = document.createElement("a");
-      link.href = mention.url;
+      const publicUrl =
+        mention.provider === "nazk-declarations"
+          ? mention.url.replace(
+              "https://public-api.nazk.gov.ua/v2/documents/",
+              "https://public.nazk.gov.ua/documents/"
+            )
+          : mention.url;
+
+      link.href = publicUrl;
       link.target = "_blank";
       link.rel = "noopener noreferrer";
       link.textContent = mention.title || mention.url;
