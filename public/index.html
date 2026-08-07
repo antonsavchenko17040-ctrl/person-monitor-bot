@@ -132,6 +132,42 @@
       </div>
     </section>
 
+    <section id="subject-graph-section" style="margin-top: 32px; display: none;">
+      <h2 id="subject-graph-title">Граф зв’язків</h2>
+
+      <div class="card" style="margin-bottom: 16px; padding: 16px;">
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
+          <label>
+            <div class="label">Рік</div>
+            <select id="graph-year" style="width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #2a303b; background: #0b0d12; color: inherit;"></select>
+          </label>
+
+          <label>
+            <div class="label">Тип зв’язку</div>
+            <select id="graph-relation" style="width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #2a303b; background: #0b0d12; color: inherit;">
+              <option value="">Усі зв’язки</option>
+              <option value="employed_by">Працює в</option>
+              <option value="declared_asset">Деклароване майно</option>
+              <option value="income_from">Джерело доходу</option>
+              <option value="family_member_observed">Член сім’ї</option>
+              <option value="third_party_rightsholder">Сторонній правовласник</option>
+              <option value="resolved_to">Ідентифіковано</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div class="card" style="padding: 12px; overflow-x: auto;">
+        <div id="subject-graph-status" class="label" style="margin-bottom: 10px;">Завантаження…</div>
+        <svg id="subject-graph" viewBox="0 0 720 460" role="img" aria-label="Граф зв’язків" style="width: 100%; min-width: 580px; height: auto; background: #0b0d12; border-radius: 12px;"></svg>
+      </div>
+
+      <div id="subject-graph-details" class="card" style="margin-top: 16px;">
+        <div class="label">Деталі вузла</div>
+        <div id="subject-graph-details-content">Натисніть вузол</div>
+      </div>
+    </section>
+
     <section id="mentions-section" style="margin-top: 32px; display: none;">
       <h2 id="mentions-title">Згадки</h2>
 

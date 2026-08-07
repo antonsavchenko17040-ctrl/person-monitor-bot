@@ -37,7 +37,8 @@
     "thirdparty:enrich:dry": "node --env-file=.env scripts/enrich-third-party-rights.js --dry-run",
     "thirdparty:enrich": "node --env-file=.env scripts/enrich-third-party-rights.js",
     "familygraph:dry": "node --env-file=.env scripts/build-family-third-party-graph.js --dry-run",
-    "familygraph:build": "node --env-file=.env scripts/build-family-third-party-graph.js"
+    "familygraph:build": "node --env-file=.env scripts/build-family-third-party-graph.js",
+    "subjectgraph:verify": "node --env-file=.env scripts/verify-subject-graph.js"
   },
   "engines": {
     "node": ">=22"

@@ -140,6 +140,7 @@ async function loadSubjects() {
         await Promise.all([
           loadSubjectStats(subject.id, subject.full_name),
           loadMentions(subject.id, subject.full_name),
+          loadSubjectGraph(subject.id, subject.full_name),
         ]);
 
         document
@@ -534,6 +535,658 @@ document
     visibleMentions += PAGE_SIZE;
     renderMentions();
   });
+
+
+const GRAPH_NODE_COLORS = {
+  person: "#60a5fa",
+  asset: "#f59e0b",
+  organization: "#34d399",
+  person_observation: "#c084fc",
+  organization_observation: "#fb7185",
+};
+
+let activeGraphSubjectId = null;
+let activeGraphSubjectName = "";
+let activeSubjectGraph = null;
+
+function graphNodeColor(type) {
+  return GRAPH_NODE_COLORS[type] ?? "#94a3b8";
+}
+
+function graphVisibleData(graph, relationType) {
+  const allNodes = graph.nodes ?? [];
+  const allEdges = graph.edges ?? [];
+
+  if (!relationType) {
+    return {
+      nodes: allNodes,
+      edges: allEdges,
+    };
+  }
+
+  let edges =
+    allEdges.filter(
+      (edge) =>
+        edge.type === relationType
+    );
+
+  if (
+    relationType ===
+      "third_party_rightsholder"
+  ) {
+    const sourceIds =
+      new Set(
+        edges.map(
+          (edge) =>
+            String(edge.source)
+        )
+      );
+
+    const pathEdges =
+      allEdges.filter(
+        (edge) =>
+          sourceIds.has(
+            String(edge.target)
+          ) &&
+          String(edge.source) ===
+            String(
+              graph.subject?.entity_id
+            )
+      );
+
+    const seen =
+      new Set(
+        edges.map(
+          (edge) =>
+            String(edge.id)
+        )
+      );
+
+    for (const edge of pathEdges) {
+      if (
+        !seen.has(
+          String(edge.id)
+        )
+      ) {
+        edges.push(edge);
+      }
+    }
+  }
+
+  const nodeIds =
+    new Set([
+      String(
+        graph.subject?.entity_id ?? ""
+      ),
+    ]);
+
+  for (const edge of edges) {
+    nodeIds.add(
+      String(edge.source)
+    );
+    nodeIds.add(
+      String(edge.target)
+    );
+  }
+
+  return {
+    nodes:
+      allNodes.filter(
+        (node) =>
+          nodeIds.has(
+            String(node.id)
+          )
+      ),
+    edges,
+  };
+}
+
+function graphNodePositions(nodes) {
+  const width = 720;
+  const height = 460;
+  const positions = new Map();
+
+  const byDepth = new Map();
+
+  for (const node of nodes) {
+    const depth =
+      Number(node.depth ?? 0);
+
+    if (!byDepth.has(depth)) {
+      byDepth.set(depth, []);
+    }
+
+    byDepth.get(depth).push(node);
+  }
+
+  const depths =
+    [...byDepth.keys()]
+      .sort((a, b) => a - b);
+
+  for (const depth of depths) {
+    const items =
+      byDepth.get(depth);
+
+    const x =
+      depths.length <= 1
+        ? width / 2
+        : 90 +
+          (
+            depth /
+            Math.max(
+              ...depths,
+              1
+            )
+          ) *
+            (width - 180);
+
+    items.forEach(
+      (node, index) => {
+        const gap =
+          height /
+          (items.length + 1);
+
+        positions.set(
+          String(node.id),
+          {
+            x,
+            y:
+              gap *
+              (index + 1),
+          }
+        );
+      }
+    );
+  }
+
+  return positions;
+}
+
+function showGraphNodeDetails(node) {
+  const container =
+    document.getElementById(
+      "subject-graph-details-content"
+    );
+
+  if (!container) {
+    return;
+  }
+
+  container.replaceChildren();
+
+  const title =
+    document.createElement("div");
+
+  title.style.fontSize = "20px";
+  title.style.fontWeight = "700";
+  title.textContent =
+    node.label ?? "Без назви";
+
+  const meta =
+    document.createElement("div");
+
+  meta.className = "label";
+  meta.style.marginTop = "8px";
+  meta.textContent =
+    `${node.entity_type ?? "entity"}` +
+    ` · depth ${node.depth ?? 0}`;
+
+  container.append(
+    title,
+    meta
+  );
+
+  const entries =
+    Object.entries(
+      node.metadata ?? {}
+    ).filter(
+      ([, value]) =>
+        value !== null &&
+        value !== "" &&
+        value !== undefined
+    );
+
+  for (
+    const [key, value]
+    of entries
+  ) {
+    const row =
+      document.createElement("div");
+
+    row.style.marginTop = "8px";
+
+    const strong =
+      document.createElement("strong");
+
+    strong.textContent =
+      `${key}: `;
+
+    row.append(
+      strong,
+      document.createTextNode(
+        typeof value === "object"
+          ? JSON.stringify(value)
+          : String(value)
+      )
+    );
+
+    container.append(row);
+  }
+}
+
+function renderSubjectGraph() {
+  const svg =
+    document.getElementById(
+      "subject-graph"
+    );
+
+  const status =
+    document.getElementById(
+      "subject-graph-status"
+    );
+
+  const relationSelect =
+    document.getElementById(
+      "graph-relation"
+    );
+
+  if (
+    !svg ||
+    !status ||
+    !activeSubjectGraph
+  ) {
+    return;
+  }
+
+  const relationType =
+    relationSelect?.value ?? "";
+
+  const {
+    nodes,
+    edges,
+  } =
+    graphVisibleData(
+      activeSubjectGraph,
+      relationType
+    );
+
+  svg.replaceChildren();
+
+  const positions =
+    graphNodePositions(nodes);
+
+  const namespace =
+    "http://www.w3.org/2000/svg";
+
+  for (const edge of edges) {
+    const source =
+      positions.get(
+        String(edge.source)
+      );
+
+    const target =
+      positions.get(
+        String(edge.target)
+      );
+
+    if (!source || !target) {
+      continue;
+    }
+
+    const line =
+      document.createElementNS(
+        namespace,
+        "line"
+      );
+
+    line.setAttribute(
+      "x1",
+      source.x
+    );
+    line.setAttribute(
+      "y1",
+      source.y
+    );
+    line.setAttribute(
+      "x2",
+      target.x
+    );
+    line.setAttribute(
+      "y2",
+      target.y
+    );
+    line.setAttribute(
+      "stroke",
+      "#475569"
+    );
+    line.setAttribute(
+      "stroke-width",
+      "2"
+    );
+
+    const title =
+      document.createElementNS(
+        namespace,
+        "title"
+      );
+
+    title.textContent =
+      edge.label ??
+      edge.type ??
+      "Зв’язок";
+
+    line.append(title);
+    svg.append(line);
+  }
+
+  for (const node of nodes) {
+    const point =
+      positions.get(
+        String(node.id)
+      );
+
+    if (!point) {
+      continue;
+    }
+
+    const group =
+      document.createElementNS(
+        namespace,
+        "g"
+      );
+
+    group.style.cursor = "pointer";
+
+    const circle =
+      document.createElementNS(
+        namespace,
+        "circle"
+      );
+
+    circle.setAttribute(
+      "cx",
+      point.x
+    );
+    circle.setAttribute(
+      "cy",
+      point.y
+    );
+    circle.setAttribute(
+      "r",
+      Number(node.depth) === 0
+        ? "20"
+        : "15"
+    );
+    circle.setAttribute(
+      "fill",
+      graphNodeColor(
+        node.entity_type
+      )
+    );
+    circle.setAttribute(
+      "stroke",
+      "#e2e8f0"
+    );
+    circle.setAttribute(
+      "stroke-width",
+      Number(node.depth) === 0
+        ? "3"
+        : "1.5"
+    );
+
+    const text =
+      document.createElementNS(
+        namespace,
+        "text"
+      );
+
+    text.setAttribute(
+      "x",
+      point.x
+    );
+    text.setAttribute(
+      "y",
+      point.y + 34
+    );
+    text.setAttribute(
+      "text-anchor",
+      "middle"
+    );
+    text.setAttribute(
+      "fill",
+      "#e2e8f0"
+    );
+    text.setAttribute(
+      "font-size",
+      "11"
+    );
+
+    const label =
+      String(
+        node.label ?? "Без назви"
+      );
+
+    text.textContent =
+      label.length > 26
+        ? `${label.slice(0, 25)}…`
+        : label;
+
+    const title =
+      document.createElementNS(
+        namespace,
+        "title"
+      );
+
+    title.textContent = label;
+
+    group.append(
+      circle,
+      text,
+      title
+    );
+
+    group.addEventListener(
+      "click",
+      () =>
+        showGraphNodeDetails(node)
+    );
+
+    svg.append(group);
+  }
+
+  status.textContent =
+    `Рік: ${activeSubjectGraph.year ?? "—"} · ` +
+    `вузлів: ${nodes.length} · ` +
+    `зв’язків: ${edges.length}`;
+}
+
+function populateGraphYears(graph) {
+  const select =
+    document.getElementById(
+      "graph-year"
+    );
+
+  if (!select) {
+    return;
+  }
+
+  select.replaceChildren();
+
+  const years =
+    graph.available_years ?? [];
+
+  if (!years.length) {
+    const option =
+      document.createElement(
+        "option"
+      );
+
+    option.value = "";
+    option.textContent =
+      "Немає даних";
+    select.append(option);
+    return;
+  }
+
+  for (const year of years) {
+    const option =
+      document.createElement(
+        "option"
+      );
+
+    option.value =
+      String(year);
+
+    option.textContent =
+      String(year);
+
+    if (
+      Number(year) ===
+      Number(graph.year)
+    ) {
+      option.selected = true;
+    }
+
+    select.append(option);
+  }
+}
+
+async function loadSubjectGraph(
+  subjectId,
+  fullName,
+  year = null
+) {
+  const section =
+    document.getElementById(
+      "subject-graph-section"
+    );
+
+  const title =
+    document.getElementById(
+      "subject-graph-title"
+    );
+
+  const status =
+    document.getElementById(
+      "subject-graph-status"
+    );
+
+  if (
+    !section ||
+    !title ||
+    !status
+  ) {
+    return;
+  }
+
+  activeGraphSubjectId =
+    subjectId;
+
+  activeGraphSubjectName =
+    fullName ?? "";
+
+  section.style.display =
+    "block";
+
+  title.textContent =
+    `Граф зв’язків: ${fullName}`;
+
+  status.textContent =
+    "Завантаження...";
+
+  const params =
+    new URLSearchParams({
+      subjectId,
+    });
+
+  if (year != null && year !== "") {
+    params.set(
+      "year",
+      String(year)
+    );
+  }
+
+  try {
+    const response =
+      await fetch(
+        `/api/subject-graph?${params.toString()}`,
+        {
+          headers: {
+            Accept:
+              "application/json",
+          },
+        }
+      );
+
+    if (!response.ok) {
+      throw new Error(
+        `HTTP ${response.status}`
+      );
+    }
+
+    const data =
+      await response.json();
+
+    activeSubjectGraph = data;
+
+    populateGraphYears(data);
+
+    const relationSelect =
+      document.getElementById(
+        "graph-relation"
+      );
+
+    if (relationSelect) {
+      relationSelect.value = "";
+    }
+
+    const details =
+      document.getElementById(
+        "subject-graph-details-content"
+      );
+
+    if (details) {
+      details.textContent =
+        "Натисніть вузол";
+    }
+
+    renderSubjectGraph();
+  } catch (error) {
+    console.error(
+      "Subject graph loading failed:",
+      error
+    );
+
+    activeSubjectGraph = null;
+
+    status.textContent =
+      "Не вдалося завантажити граф.";
+  }
+}
+
+document
+  .getElementById("graph-year")
+  ?.addEventListener(
+    "change",
+    (event) => {
+      if (!activeGraphSubjectId) {
+        return;
+      }
+
+      loadSubjectGraph(
+        activeGraphSubjectId,
+        activeGraphSubjectName,
+        event.target.value
+      );
+    }
+  );
+
+document
+  .getElementById("graph-relation")
+  ?.addEventListener(
+    "change",
+    renderSubjectGraph
+  );
 
 loadHealth();
 loadSubjects();
