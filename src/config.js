@@ -11,7 +11,6 @@ function numberEnv(name, fallback, min, max) {
 
 export function config() {
   const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
-  if (!token) throw new Error("Не заповнено TELEGRAM_BOT_TOKEN у файлі .env");
 
   return {
     telegramToken: token,
