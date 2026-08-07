@@ -23,7 +23,9 @@
     "nazk:api:sync": "node --env-file=.env scripts/sync-nazk-documents.js",
     "nazk:api:inspect": "node --env-file=.env scripts/inspect-nazk-structure.js",
     "nazk:facts:dry": "node --env-file=.env scripts/extract-nazk-facts.js --dry-run",
-    "nazk:facts:extract": "node --env-file=.env scripts/extract-nazk-facts.js"
+    "nazk:facts:extract": "node --env-file=.env scripts/extract-nazk-facts.js",
+    "analytics:dry": "node --env-file=.env scripts/build-analytics.js --dry-run",
+    "analytics:build": "node --env-file=.env scripts/build-analytics.js"
   },
   "engines": {
     "node": ">=22"
