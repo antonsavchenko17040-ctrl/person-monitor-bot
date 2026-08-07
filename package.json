@@ -1,0 +1,19 @@
+{
+  "name": "person-monitor-bot-local",
+  "version": "1.1.0-reconstructed",
+  "private": true,
+  "type": "module",
+  "description": "Локальний Telegram-бот для ручного моніторингу публічних згадок про осіб",
+  "scripts": {
+    "start": "node --env-file=.env src/bot.js",
+    "test": "node --test",
+    "court:update": "python scripts/update-court-open-data-index.py"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "pdfkit": "^0.17.2"
+  }
+}
