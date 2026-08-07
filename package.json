@@ -13,6 +13,7 @@
     "node": ">=22"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
     "exceljs": "^4.4.0",
     "pdfkit": "^0.17.2"
   }
