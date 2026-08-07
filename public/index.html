@@ -97,25 +97,6 @@
     </div>
   </main>
 
-  <script>
-    async function loadHealth() {
-      try {
-        const response = await fetch("/api/health");
-        if (!response.ok) throw new Error("Request failed");
-
-        const data = await response.json();
-
-        document.getElementById("subjects").textContent = data.subjects;
-        document.getElementById("mentions").textContent = data.mentions;
-        document.getElementById("status").textContent = "Service online";
-        document.getElementById("dot").classList.add("ok");
-      } catch (error) {
-        document.getElementById("status").textContent = "Service unavailable";
-        document.getElementById("status").classList.add("error");
-      }
-    }
-
-    loadHealth();
-  </script>
+  <script src="/assets/app.js"></script>
 </body>
 </html>
