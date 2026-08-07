@@ -549,6 +549,10 @@ let activeGraphSubjectId = null;
 let activeGraphSubjectName = "";
 let activeSubjectGraph = null;
 
+const graphNodeOverrides = new Map();
+let graphDragState = null;
+let graphSuppressClickUntil = 0;
+
 function graphNodeColor(type) {
   return GRAPH_NODE_COLORS[type] ?? "#94a3b8";
 }
@@ -638,6 +642,32 @@ function graphVisibleData(graph, relationType) {
           )
       ),
     edges,
+  };
+}
+
+function graphPointerPosition(svg, event) {
+  const point = svg.createSVGPoint();
+
+  point.x = event.clientX;
+  point.y = event.clientY;
+
+  const matrix = svg.getScreenCTM();
+
+  if (!matrix) {
+    return {
+      x: 0,
+      y: 0,
+    };
+  }
+
+  const transformed =
+    point.matrixTransform(
+      matrix.inverse()
+    );
+
+  return {
+    x: transformed.x,
+    y: transformed.y,
   };
 }
 
@@ -868,6 +898,21 @@ function graphNodeLayout(nodes, edges) {
     );
   }
 
+  for (
+    const [nodeId, override]
+    of graphNodeOverrides
+  ) {
+    const point =
+      positions.get(nodeId);
+
+    if (!point) {
+      continue;
+    }
+
+    point.x = override.x;
+    point.y = override.y;
+  }
+
   return {
     positions,
     width,
@@ -1003,6 +1048,97 @@ function renderSubjectGraph() {
 
   svg.style.minWidth =
     "700px";
+
+  svg.style.touchAction = "none";
+  svg.style.userSelect = "none";
+
+  svg.onpointermove =
+    (event) => {
+      if (
+        !graphDragState ||
+        event.pointerId !==
+          graphDragState.pointerId
+      ) {
+        return;
+      }
+
+      const current =
+        graphPointerPosition(
+          svg,
+          event
+        );
+
+      const dx =
+        current.x -
+        graphDragState.startX;
+
+      const dy =
+        current.y -
+        graphDragState.startY;
+
+      if (
+        Math.abs(dx) > 2 ||
+        Math.abs(dy) > 2
+      ) {
+        graphSuppressClickUntil =
+          Date.now() + 250;
+      }
+
+      const nextX =
+        Math.max(
+          0,
+          Math.min(
+            width -
+              graphDragState.width,
+            graphDragState.nodeX +
+              dx
+          )
+        );
+
+      const nextY =
+        Math.max(
+          48,
+          Math.min(
+            height - 24,
+            graphDragState.nodeY +
+              dy
+          )
+        );
+
+      graphNodeOverrides.set(
+        graphDragState.nodeId,
+        {
+          x: nextX,
+          y: nextY,
+        }
+      );
+
+      renderSubjectGraph();
+    };
+
+  svg.onpointerup =
+    (event) => {
+      if (
+        !graphDragState ||
+        event.pointerId !==
+          graphDragState.pointerId
+      ) {
+        return;
+      }
+
+      try {
+        svg.releasePointerCapture(
+          event.pointerId
+        );
+      } catch {}
+
+      graphDragState = null;
+    };
+
+  svg.onpointercancel =
+    () => {
+      graphDragState = null;
+    };
 
   const namespace =
     "http://www.w3.org/2000/svg";
@@ -1162,7 +1298,49 @@ function renderSubjectGraph() {
       );
 
     group.style.cursor =
-      "pointer";
+      "grab";
+
+    group.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (
+          event.button !== 0
+        ) {
+          return;
+        }
+
+        const start =
+          graphPointerPosition(
+            svg,
+            event
+          );
+
+        graphDragState = {
+          pointerId:
+            event.pointerId,
+          nodeId:
+            String(node.id),
+          startX:
+            start.x,
+          startY:
+            start.y,
+          nodeX:
+            point.x,
+          nodeY:
+            point.y,
+          width:
+            point.width,
+        };
+
+        try {
+          svg.setPointerCapture(
+            event.pointerId
+          );
+        } catch {}
+
+        event.preventDefault();
+      }
+    );
 
     const rect =
       document.createElementNS(
@@ -1306,10 +1484,18 @@ function renderSubjectGraph() {
 
     group.addEventListener(
       "click",
-      () =>
+      () => {
+        if (
+          Date.now() <
+          graphSuppressClickUntil
+        ) {
+          return;
+        }
+
         showGraphNodeDetails(
           node
-        )
+        );
+      }
     );
 
     svg.append(group);
@@ -1449,6 +1635,9 @@ async function loadSubjectGraph(
       await response.json();
 
     activeSubjectGraph = data;
+
+    graphNodeOverrides.clear();
+    graphDragState = null;
 
     populateGraphYears(data);
 
