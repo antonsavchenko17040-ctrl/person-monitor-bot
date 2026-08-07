@@ -71,6 +71,87 @@ function sourceName(item) {
   );
 }
 
+export function extractIncomeSourceDetails(item) {
+  const companyName =
+    clean(item?.source_ua_company_name) ||
+    clean(item?.source_ukr_company_name) ||
+    null;
+
+  const rawEdrpou =
+    clean(item?.source_ua_company_code);
+
+  const edrpouDigits =
+    String(rawEdrpou ?? "")
+      .replace(/\D/g, "");
+
+  const edrpou =
+    edrpouDigits.length === 8
+      ? edrpouDigits
+      : null;
+
+  const foreignCompanyName =
+    clean(item?.source_eng_company_name);
+
+  const foreignCompanyCode =
+    clean(item?.source_eng_company_code);
+
+  const explicitPersonName =
+    clean(item?.source_ukr_fullname) ||
+    clean(item?.source_eng_fullname);
+
+  const assembledPersonName =
+    [
+      clean(item?.source_ua_lastname),
+      clean(item?.source_ua_firstname),
+      clean(item?.source_ua_middlename),
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+  const personName =
+    explicitPersonName ||
+    assembledPersonName ||
+    null;
+
+  const hasOrganization =
+    Boolean(
+      companyName ||
+      edrpou ||
+      foreignCompanyName ||
+      foreignCompanyCode,
+    );
+
+  const sourceType =
+    hasOrganization
+      ? "organization"
+      : personName
+        ? "person"
+        : "unknown";
+
+  /*
+   * Intentionally exclude:
+   * tax numbers, birthdays, passport data,
+   * addresses and other sensitive fields.
+   */
+  return {
+    source_type: sourceType,
+
+    company_name:
+      companyName,
+
+    edrpou,
+
+    foreign_company_name:
+      foreignCompanyName,
+
+    foreign_company_code:
+      foreignCompanyCode,
+
+    person_name:
+      personName,
+  };
+}
+
 function buildActorMap(payload) {
   const profile = stepData(payload, 1) ?? {};
 
@@ -583,6 +664,11 @@ export function extractNazkFacts(
 
             source:
               sourceName(item),
+
+            source_details:
+              extractIncomeSourceDetails(
+                item,
+              ),
           },
         }),
       );

@@ -29,7 +29,11 @@
     "assets:dry": "node --env-file=.env scripts/track-assets.js --dry-run",
     "assets:build": "node --env-file=.env scripts/track-assets.js",
     "graph:dry": "node --env-file=.env scripts/build-relations-graph.js --dry-run",
-    "graph:build": "node --env-file=.env scripts/build-relations-graph.js"
+    "graph:build": "node --env-file=.env scripts/build-relations-graph.js",
+    "income:enrich:dry": "node --env-file=.env scripts/enrich-income-sources.js --dry-run",
+    "income:enrich": "node --env-file=.env scripts/enrich-income-sources.js",
+    "income:graph:dry": "node --env-file=.env scripts/build-income-source-graph.js --dry-run",
+    "income:graph:build": "node --env-file=.env scripts/build-income-source-graph.js"
   },
   "engines": {
     "node": ">=22"
