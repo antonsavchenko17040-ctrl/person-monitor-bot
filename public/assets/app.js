@@ -47,6 +47,7 @@ async function loadSubjects() {
       const card = document.createElement("div");
       card.className = "card";
       card.style.marginBottom = "16px";
+      card.style.cursor = "pointer";
 
       const name = document.createElement("div");
       name.className = "value";
@@ -67,11 +68,103 @@ async function loadSubjects() {
       city.textContent = subject.city ?? "";
 
       card.append(name, organization, position, city);
+
+      card.addEventListener("click", () => {
+        loadMentions(subject.id, subject.full_name);
+      });
+
       container.append(card);
     }
   } catch (error) {
     console.error("Subjects loading failed:", error);
     container.textContent = "Не вдалося завантажити суб’єктів.";
+  }
+}
+
+async function loadMentions(subjectId, fullName) {
+  const section = document.getElementById("mentions-section");
+  const title = document.getElementById("mentions-title");
+  const container = document.getElementById("mentions-list");
+
+  section.style.display = "block";
+  title.textContent = `Згадки: ${fullName}`;
+  container.textContent = "Завантаження...";
+
+  try {
+    const response = await fetch(
+      `/api/mentions?subjectId=${encodeURIComponent(subjectId)}`,
+      {
+        headers: { Accept: "application/json" },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    container.replaceChildren();
+
+    if (!data.mentions?.length) {
+      container.textContent = "Згадок поки не знайдено.";
+      return;
+    }
+
+    for (const mention of data.mentions) {
+      const card = document.createElement("div");
+      card.className = "card";
+      card.style.marginBottom = "16px";
+
+      const source = document.createElement("div");
+      source.className = "label";
+      source.textContent = mention.source || mention.provider || "Джерело";
+
+      const link = document.createElement("a");
+      link.href = mention.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = mention.title || mention.url;
+      link.style.color = "inherit";
+      link.style.fontSize = "18px";
+      link.style.fontWeight = "700";
+
+      card.append(source, link);
+
+      if (mention.snippet) {
+        const snippet = document.createElement("div");
+        snippet.style.marginTop = "12px";
+        snippet.textContent = mention.snippet;
+        card.append(snippet);
+      }
+
+      const meta = document.createElement("div");
+      meta.className = "label";
+      meta.style.marginTop = "12px";
+
+      const parts = [];
+
+      if (mention.match_score != null) {
+        parts.push(`Збіг: ${mention.match_score}%`);
+      }
+
+      if (mention.published_at) {
+        parts.push(`Дата: ${mention.published_at}`);
+      }
+
+      meta.textContent = parts.join(" · ");
+      card.append(meta);
+
+      container.append(card);
+    }
+
+    section.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  } catch (error) {
+    console.error("Mentions loading failed:", error);
+    container.textContent = "Не вдалося завантажити згадки.";
   }
 }
 
