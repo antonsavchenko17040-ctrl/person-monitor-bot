@@ -27,7 +27,9 @@
     "analytics:dry": "node --env-file=.env scripts/build-analytics.js --dry-run",
     "analytics:build": "node --env-file=.env scripts/build-analytics.js",
     "assets:dry": "node --env-file=.env scripts/track-assets.js --dry-run",
-    "assets:build": "node --env-file=.env scripts/track-assets.js"
+    "assets:build": "node --env-file=.env scripts/track-assets.js",
+    "graph:dry": "node --env-file=.env scripts/build-relations-graph.js --dry-run",
+    "graph:build": "node --env-file=.env scripts/build-relations-graph.js"
   },
   "engines": {
     "node": ">=22"
