@@ -1,3 +1,63 @@
+const PROVIDER_LABELS = {
+  "nazk-declarations": "Реєстр декларацій НАЗК",
+  "nazk-corrupt-register": "Реєстр корупціонерів НАЗК",
+  "court-open-data": "Судова влада України",
+  "court-register": "Єдиний державний реєстр судових рішень",
+  "google-news-rss": "Google News",
+  "google-web": "Google",
+  "official-sites": "Офіційні сайти",
+  prozorro: "Prozorro",
+};
+
+const PAGE_SIZE = 20;
+
+let activeMentions = [];
+let visibleMentions = PAGE_SIZE;
+
+function providerLabel(provider) {
+  return PROVIDER_LABELS[provider] ?? provider ?? "Інше джерело";
+}
+
+function parseMentionTimestamp(value) {
+  if (!value) {
+    return 0;
+  }
+
+  const ukrainianDate = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(value);
+
+  if (ukrainianDate) {
+    const [, day, month, year] = ukrainianDate;
+
+    return Date.UTC(
+      Number(year),
+      Number(month) - 1,
+      Number(day)
+    );
+  }
+
+  const timestamp = Date.parse(value);
+
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function formatMentionDate(value) {
+  if (!value) {
+    return "";
+  }
+
+  const timestamp = parseMentionTimestamp(value);
+
+  if (!timestamp) {
+    return value;
+  }
+
+  return new Date(timestamp).toLocaleDateString("uk-UA", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
 async function loadHealth() {
   const status = document.getElementById("status");
   const dot = document.getElementById("dot");
@@ -57,10 +117,12 @@ async function loadSubjects() {
       const organization = document.createElement("div");
       organization.className = "label";
       organization.style.marginTop = "12px";
-      organization.textContent = subject.organization ?? "Організацію не вказано";
+      organization.textContent =
+        subject.organization ?? "Організацію не вказано";
 
       const position = document.createElement("div");
-      position.textContent = subject.position ?? "Посаду не вказано";
+      position.textContent =
+        subject.position ?? "Посаду не вказано";
 
       const city = document.createElement("div");
       city.className = "label";
@@ -86,53 +148,95 @@ async function loadSubjects() {
   }
 }
 
-let activeMentions = [];
-
 function renderMentions() {
   const container = document.getElementById("mentions-list");
   const search = document
     .getElementById("mentions-search")
     .value.trim()
     .toLowerCase();
-  const provider = document.getElementById("mentions-provider").value;
-  const count = document.getElementById("mentions-count");
 
-  const filtered = activeMentions.filter((mention) => {
-    const matchesProvider = !provider || mention.provider === provider;
+  const provider =
+    document.getElementById("mentions-provider").value;
 
-    const haystack = [
-      mention.title,
-      mention.snippet,
-      mention.source,
-      mention.provider,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
+  const sort =
+    document.getElementById("mentions-sort").value;
 
-    const matchesSearch = !search || haystack.includes(search);
+  const count =
+    document.getElementById("mentions-count");
 
-    return matchesProvider && matchesSearch;
-  });
+  const moreButton =
+    document.getElementById("mentions-more");
 
-  count.textContent = `Показано: ${filtered.length} із ${activeMentions.length}`;
+  const filtered = activeMentions
+    .filter((mention) => {
+      const matchesProvider =
+        !provider || mention.provider === provider;
+
+      const haystack = [
+        mention.title,
+        mention.snippet,
+        mention.source,
+        providerLabel(mention.provider),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      const matchesSearch =
+        !search || haystack.includes(search);
+
+      return matchesProvider && matchesSearch;
+    })
+    .sort((a, b) => {
+      if (sort === "oldest") {
+        return (
+          parseMentionTimestamp(a.published_at) -
+          parseMentionTimestamp(b.published_at)
+        );
+      }
+
+      if (sort === "score") {
+        return (
+          Number(b.match_score ?? 0) -
+          Number(a.match_score ?? 0)
+        );
+      }
+
+      return (
+        parseMentionTimestamp(b.published_at) -
+        parseMentionTimestamp(a.published_at)
+      );
+    });
+
+  const visible = filtered.slice(0, visibleMentions);
+
+  count.textContent =
+    `Показано: ${visible.length} із ${filtered.length}` +
+    (filtered.length !== activeMentions.length
+      ? ` · Усього: ${activeMentions.length}`
+      : "");
+
   container.replaceChildren();
 
   if (!filtered.length) {
     container.textContent = activeMentions.length
       ? "За вибраними параметрами нічого не знайдено."
       : "Згадок поки не знайдено.";
+
+    moreButton.style.display = "none";
     return;
   }
 
-  for (const mention of filtered) {
+  for (const mention of visible) {
     const card = document.createElement("div");
     card.className = "card";
     card.style.marginBottom = "16px";
 
     const source = document.createElement("div");
     source.className = "label";
-    source.textContent = mention.source || mention.provider || "Джерело";
+    source.textContent =
+      mention.source ||
+      providerLabel(mention.provider);
 
     const link = document.createElement("a");
 
@@ -147,7 +251,8 @@ function renderMentions() {
     link.href = publicUrl;
     link.target = "_blank";
     link.rel = "noopener noreferrer";
-    link.textContent = mention.title || mention.url;
+    link.textContent =
+      mention.title || mention.url;
     link.style.color = "inherit";
     link.style.fontSize = "18px";
     link.style.fontWeight = "700";
@@ -172,17 +277,9 @@ function renderMentions() {
     }
 
     if (mention.published_at) {
-      const parsedDate = new Date(mention.published_at);
-
-      const formattedDate = Number.isNaN(parsedDate.getTime())
-        ? mention.published_at
-        : parsedDate.toLocaleDateString("uk-UA", {
-            day: "2-digit",
-            month: "2-digit",
-            year: "numeric",
-          });
-
-      parts.push(`Дата: ${formattedDate}`);
+      parts.push(
+        `Дата: ${formatMentionDate(mention.published_at)}`
+      );
     }
 
     meta.textContent = parts.join(" · ");
@@ -190,19 +287,48 @@ function renderMentions() {
 
     container.append(card);
   }
+
+  moreButton.style.display =
+    visible.length < filtered.length
+      ? "block"
+      : "none";
+}
+
+function resetMentionPage() {
+  visibleMentions = PAGE_SIZE;
+  renderMentions();
 }
 
 async function loadMentions(subjectId, fullName) {
-  const section = document.getElementById("mentions-section");
-  const title = document.getElementById("mentions-title");
-  const container = document.getElementById("mentions-list");
-  const search = document.getElementById("mentions-search");
-  const providerSelect = document.getElementById("mentions-provider");
+  const section =
+    document.getElementById("mentions-section");
+
+  const title =
+    document.getElementById("mentions-title");
+
+  const container =
+    document.getElementById("mentions-list");
+
+  const search =
+    document.getElementById("mentions-search");
+
+  const providerSelect =
+    document.getElementById("mentions-provider");
+
+  const sortSelect =
+    document.getElementById("mentions-sort");
+
+  const moreButton =
+    document.getElementById("mentions-more");
 
   section.style.display = "block";
   title.textContent = `Згадки: ${fullName}`;
   container.textContent = "Завантаження...";
+
   search.value = "";
+  sortSelect.value = "newest";
+  visibleMentions = PAGE_SIZE;
+  moreButton.style.display = "none";
 
   try {
     const response = await fetch(
@@ -217,23 +343,37 @@ async function loadMentions(subjectId, fullName) {
     }
 
     const data = await response.json();
+
     activeMentions = data.mentions ?? [];
 
-    const providers = [...new Set(
-      activeMentions.map((item) => item.provider).filter(Boolean)
-    )].sort();
+    const providers = [
+      ...new Set(
+        activeMentions
+          .map((item) => item.provider)
+          .filter(Boolean)
+      ),
+    ].sort((a, b) =>
+      providerLabel(a).localeCompare(
+        providerLabel(b),
+        "uk"
+      )
+    );
 
     providerSelect.replaceChildren();
 
-    const allOption = document.createElement("option");
+    const allOption =
+      document.createElement("option");
+
     allOption.value = "";
     allOption.textContent = "Усі джерела";
     providerSelect.append(allOption);
 
     for (const provider of providers) {
-      const option = document.createElement("option");
+      const option =
+        document.createElement("option");
+
       option.value = provider;
-      option.textContent = provider;
+      option.textContent = providerLabel(provider);
       providerSelect.append(option);
     }
 
@@ -246,17 +386,29 @@ async function loadMentions(subjectId, fullName) {
   } catch (error) {
     console.error("Mentions loading failed:", error);
     activeMentions = [];
-    container.textContent = "Не вдалося завантажити згадки.";
+    container.textContent =
+      "Не вдалося завантажити згадки.";
   }
 }
 
 document
   .getElementById("mentions-search")
-  .addEventListener("input", renderMentions);
+  .addEventListener("input", resetMentionPage);
 
 document
   .getElementById("mentions-provider")
-  .addEventListener("change", renderMentions);
+  .addEventListener("change", resetMentionPage);
+
+document
+  .getElementById("mentions-sort")
+  .addEventListener("change", resetMentionPage);
+
+document
+  .getElementById("mentions-more")
+  .addEventListener("click", () => {
+    visibleMentions += PAGE_SIZE;
+    renderMentions();
+  });
 
 loadHealth();
 loadSubjects();

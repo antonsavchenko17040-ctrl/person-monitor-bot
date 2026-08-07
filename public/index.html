@@ -1,5 +1,5 @@
 ﻿<!doctype html>
-<html lang="en">
+<html lang="uk">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -114,15 +114,32 @@
 
         <select
           id="mentions-provider"
-          style="width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #2a303b; background: #0b0d12; color: inherit;"
+          style="width: 100%; padding: 12px; margin-bottom: 12px; border-radius: 10px; border: 1px solid #2a303b; background: #0b0d12; color: inherit;"
         >
           <option value="">Усі джерела</option>
+        </select>
+
+        <select
+          id="mentions-sort"
+          style="width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #2a303b; background: #0b0d12; color: inherit;"
+        >
+          <option value="newest">Новіші спочатку</option>
+          <option value="oldest">Старіші спочатку</option>
+          <option value="score">Найвищий збіг</option>
         </select>
 
         <div id="mentions-count" class="label" style="margin-top: 12px;"></div>
       </div>
 
       <div id="mentions-list"></div>
+
+      <button
+        id="mentions-more"
+        type="button"
+        style="display: none; width: 100%; padding: 14px; margin-top: 8px; border-radius: 12px; border: 1px solid #2a303b; background: #141821; color: inherit; font-weight: 700; cursor: pointer;"
+      >
+        Показати ще
+      </button>
     </section>
   </main>
 
