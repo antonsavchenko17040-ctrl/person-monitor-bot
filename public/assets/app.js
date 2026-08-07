@@ -67,7 +67,12 @@ async function loadSubjects() {
       city.style.marginTop = "8px";
       city.textContent = subject.city ?? "";
 
-      card.append(name, organization, position, city);
+      const count = document.createElement("div");
+      count.className = "label";
+      count.style.marginTop = "10px";
+      count.textContent = `Згадок: ${subject.mention_count ?? 0}`;
+
+      card.append(name, organization, position, city, count);
 
       card.addEventListener("click", () => {
         loadMentions(subject.id, subject.full_name);
@@ -157,7 +162,17 @@ async function loadMentions(subjectId, fullName) {
       }
 
       if (mention.published_at) {
-        parts.push(`Дата: ${mention.published_at}`);
+        const parsedDate = new Date(mention.published_at);
+
+        const formattedDate = Number.isNaN(parsedDate.getTime())
+          ? mention.published_at
+          : parsedDate.toLocaleDateString("uk-UA", {
+              day: "2-digit",
+              month: "2-digit",
+              year: "numeric",
+            });
+
+        parts.push(`Дата: ${formattedDate}`);
       }
 
       meta.textContent = parts.join(" · ");

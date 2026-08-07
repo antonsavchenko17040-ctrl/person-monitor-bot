@@ -1,8 +1,20 @@
 import { listSubjects } from "../src/store.js";
+import { db } from "../src/db.js";
 
 export default async function handler(request, response) {
   try {
     const subjects = await listSubjects();
+    const sql = db();
+
+    const counts = await sql`
+      SELECT subject_id, count(*)::int AS mention_count
+      FROM mentions
+      GROUP BY subject_id
+    `;
+
+    const countBySubject = new Map(
+      counts.map((row) => [row.subject_id, row.mention_count])
+    );
 
     return response.status(200).json({
       ok: true,
@@ -17,6 +29,7 @@ export default async function handler(request, response) {
         enabled: subject.enabled,
         last_checked_at: subject.last_checked_at,
         last_scanned_count: subject.last_scanned_count ?? null,
+        mention_count: countBySubject.get(subject.id) ?? 0,
       })),
     });
   } catch (error) {
