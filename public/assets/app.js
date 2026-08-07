@@ -321,6 +321,14 @@ async function loadMentions(subjectId, fullName) {
   const moreButton =
     document.getElementById("mentions-more");
 
+  const excelReport =
+    document.getElementById("excel-report");
+
+  excelReport.href =
+    `/api/report-excel?subjectId=${encodeURIComponent(subjectId)}`;
+
+  excelReport.style.display = "inline-block";
+
   section.style.display = "block";
   title.textContent = `Згадки: ${fullName}`;
   container.textContent = "Завантаження...";
