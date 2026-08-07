@@ -641,16 +641,15 @@ function graphVisibleData(graph, relationType) {
   };
 }
 
-function graphNodePositions(nodes) {
-  const width = 720;
-  const height = 460;
+function graphNodeLayout(nodes, edges) {
+  const width = 780;
+  const rowHeight = 44;
+  const nodeHeight = 30;
   const positions = new Map();
-
   const byDepth = new Map();
 
   for (const node of nodes) {
-    const depth =
-      Number(node.depth ?? 0);
+    const depth = Number(node.depth ?? 0);
 
     if (!byDepth.has(depth)) {
       byDepth.set(depth, []);
@@ -659,47 +658,222 @@ function graphNodePositions(nodes) {
     byDepth.get(depth).push(node);
   }
 
-  const depths =
-    [...byDepth.keys()]
-      .sort((a, b) => a - b);
+  const depthZero = byDepth.get(0) ?? [];
+  const depthOne = byDepth.get(1) ?? [];
+  const depthTwo = byDepth.get(2) ?? [];
 
-  for (const depth of depths) {
-    const items =
-      byDepth.get(depth);
+  const maxRows = Math.max(
+    depthOne.length,
+    depthTwo.length,
+    1
+  );
 
-    const x =
-      depths.length <= 1
-        ? width / 2
-        : 90 +
-          (
-            depth /
-            Math.max(
-              ...depths,
-              1
-            )
-          ) *
-            (width - 180);
+  const height = Math.max(
+    520,
+    maxRows * rowHeight + 100
+  );
+
+  const columns = {
+    0: {
+      x: 24,
+      width: 210,
+    },
+    1: {
+      x: 280,
+      width: 220,
+    },
+    2: {
+      x: 550,
+      width: 205,
+    },
+  };
+
+  function placeColumn(items, depth) {
+    if (!items.length) {
+      return;
+    }
+
+    const column =
+      columns[depth] ??
+      columns[2];
+
+    const totalSpan =
+      (items.length - 1) *
+      rowHeight;
+
+    const startY =
+      height / 2 -
+      totalSpan / 2;
 
     items.forEach(
       (node, index) => {
-        const gap =
-          height /
-          (items.length + 1);
-
         positions.set(
           String(node.id),
           {
-            x,
+            x: column.x,
             y:
-              gap *
-              (index + 1),
+              startY +
+              index * rowHeight,
+            width:
+              column.width,
+            height:
+              nodeHeight,
           }
         );
       }
     );
   }
 
-  return positions;
+  const rootItems =
+    [...depthZero];
+
+  placeColumn(
+    rootItems,
+    0
+  );
+
+  const typePriority = {
+    asset: 0,
+    organization: 1,
+    organization_observation: 2,
+    person_observation: 3,
+    person: 4,
+  };
+
+  const firstLevel =
+    [...depthOne]
+      .sort((a, b) => {
+        const aPriority =
+          typePriority[
+            a.entity_type
+          ] ?? 9;
+
+        const bPriority =
+          typePriority[
+            b.entity_type
+          ] ?? 9;
+
+        if (
+          aPriority !==
+          bPriority
+        ) {
+          return (
+            aPriority -
+            bPriority
+          );
+        }
+
+        return String(
+          a.label ?? ""
+        ).localeCompare(
+          String(
+            b.label ?? ""
+          ),
+          "uk"
+        );
+      });
+
+  placeColumn(
+    firstLevel,
+    1
+  );
+
+  const secondLevel =
+    [...depthTwo]
+      .sort((a, b) => {
+        function sourceScore(
+          node
+        ) {
+          const sourceYs =
+            edges
+              .filter(
+                (edge) =>
+                  String(
+                    edge.target
+                  ) ===
+                  String(
+                    node.id
+                  )
+              )
+              .map(
+                (edge) =>
+                  positions.get(
+                    String(
+                      edge.source
+                    )
+                  )?.y
+              )
+              .filter(
+                Number.isFinite
+              );
+
+          if (
+            !sourceYs.length
+          ) {
+            return (
+              height / 2
+            );
+          }
+
+          return (
+            sourceYs.reduce(
+              (sum, value) =>
+                sum + value,
+              0
+            ) /
+            sourceYs.length
+          );
+        }
+
+        const scoreDiff =
+          sourceScore(a) -
+          sourceScore(b);
+
+        if (
+          Math.abs(
+            scoreDiff
+          ) > 0.5
+        ) {
+          return scoreDiff;
+        }
+
+        return String(
+          a.label ?? ""
+        ).localeCompare(
+          String(
+            b.label ?? ""
+          ),
+          "uk"
+        );
+      });
+
+  placeColumn(
+    secondLevel,
+    2
+  );
+
+  for (
+    const [depth, items]
+    of byDepth
+  ) {
+    if (
+      depth <= 2
+    ) {
+      continue;
+    }
+
+    placeColumn(
+      items,
+      depth
+    );
+  }
+
+  return {
+    positions,
+    width,
+    height,
+    nodeHeight,
+  };
 }
 
 function showGraphNodeDetails(node) {
@@ -812,11 +986,82 @@ function renderSubjectGraph() {
 
   svg.replaceChildren();
 
-  const positions =
-    graphNodePositions(nodes);
+  const {
+    positions,
+    width,
+    height,
+  } =
+    graphNodeLayout(
+      nodes,
+      edges
+    );
+
+  svg.setAttribute(
+    "viewBox",
+    `0 0 ${width} ${height}`
+  );
+
+  svg.style.minWidth =
+    "700px";
 
   const namespace =
     "http://www.w3.org/2000/svg";
+
+  const headings = [
+    {
+      x: 129,
+      text: "Суб’єкт",
+    },
+    {
+      x: 390,
+      text:
+        "Пов’язані об’єкти та особи",
+    },
+    {
+      x: 652,
+      text: "Треті сторони",
+    },
+  ];
+
+  for (
+    const heading
+    of headings
+  ) {
+    const text =
+      document.createElementNS(
+        namespace,
+        "text"
+      );
+
+    text.setAttribute(
+      "x",
+      heading.x
+    );
+    text.setAttribute(
+      "y",
+      "28"
+    );
+    text.setAttribute(
+      "text-anchor",
+      "middle"
+    );
+    text.setAttribute(
+      "fill",
+      "#64748b"
+    );
+    text.setAttribute(
+      "font-size",
+      "12"
+    );
+    text.setAttribute(
+      "font-weight",
+      "700"
+    );
+    text.textContent =
+      heading.text;
+
+    svg.append(text);
+  }
 
   for (const edge of edges) {
     const source =
@@ -829,39 +1074,60 @@ function renderSubjectGraph() {
         String(edge.target)
       );
 
-    if (!source || !target) {
+    if (
+      !source ||
+      !target
+    ) {
       continue;
     }
 
-    const line =
-      document.createElementNS(
-        namespace,
-        "line"
+    const sourceX =
+      source.x +
+      source.width;
+
+    const targetX =
+      target.x;
+
+    const horizontalGap =
+      Math.max(
+        40,
+        (
+          targetX -
+          sourceX
+        ) / 2
       );
 
-    line.setAttribute(
-      "x1",
-      source.x
+    const path =
+      document.createElementNS(
+        namespace,
+        "path"
+      );
+
+    path.setAttribute(
+      "d",
+      [
+        `M ${sourceX} ${source.y}`,
+        `C ${sourceX + horizontalGap} ${source.y},`,
+        `${targetX - horizontalGap} ${target.y},`,
+        `${targetX} ${target.y}`,
+      ].join(" ")
     );
-    line.setAttribute(
-      "y1",
-      source.y
+
+    path.setAttribute(
+      "fill",
+      "none"
     );
-    line.setAttribute(
-      "x2",
-      target.x
-    );
-    line.setAttribute(
-      "y2",
-      target.y
-    );
-    line.setAttribute(
+    path.setAttribute(
       "stroke",
       "#475569"
     );
-    line.setAttribute(
+    path.setAttribute(
       "stroke-width",
-      "2"
+      "1.5"
+    );
+    path.setAttribute(
+      "stroke-opacity",
+      "0.72"
     );
 
     const title =
@@ -875,8 +1141,8 @@ function renderSubjectGraph() {
       edge.type ??
       "Зв’язок";
 
-    line.append(title);
-    svg.append(line);
+    path.append(title);
+    svg.append(path);
   }
 
   for (const node of nodes) {
@@ -895,43 +1161,78 @@ function renderSubjectGraph() {
         "g"
       );
 
-    group.style.cursor = "pointer";
+    group.style.cursor =
+      "pointer";
 
-    const circle =
+    const rect =
+      document.createElementNS(
+        namespace,
+        "rect"
+      );
+
+    rect.setAttribute(
+      "x",
+      point.x
+    );
+    rect.setAttribute(
+      "y",
+      point.y -
+        point.height / 2
+    );
+    rect.setAttribute(
+      "width",
+      point.width
+    );
+    rect.setAttribute(
+      "height",
+      point.height
+    );
+    rect.setAttribute(
+      "rx",
+      "9"
+    );
+    rect.setAttribute(
+      "fill",
+      "#111827"
+    );
+    rect.setAttribute(
+      "stroke",
+      graphNodeColor(
+        node.entity_type
+      )
+    );
+    rect.setAttribute(
+      "stroke-width",
+      Number(node.depth) === 0
+        ? "2.5"
+        : "1.5"
+    );
+
+    const dot =
       document.createElementNS(
         namespace,
         "circle"
       );
 
-    circle.setAttribute(
+    dot.setAttribute(
       "cx",
-      point.x
+      point.x + 14
     );
-    circle.setAttribute(
+    dot.setAttribute(
       "cy",
       point.y
     );
-    circle.setAttribute(
+    dot.setAttribute(
       "r",
       Number(node.depth) === 0
-        ? "20"
-        : "15"
+        ? "6"
+        : "5"
     );
-    circle.setAttribute(
+    dot.setAttribute(
       "fill",
       graphNodeColor(
         node.entity_type
       )
-    );
-    circle.setAttribute(
-      "stroke",
-      "#e2e8f0"
-    );
-    circle.setAttribute(
-      "stroke-width",
-      Number(node.depth) === 0
-        ? "3"
-        : "1.5"
     );
 
     const text =
@@ -942,15 +1243,11 @@ function renderSubjectGraph() {
 
     text.setAttribute(
       "x",
-      point.x
+      point.x + 27
     );
     text.setAttribute(
       "y",
-      point.y + 34
-    );
-    text.setAttribute(
-      "text-anchor",
-      "middle"
+      point.y + 4
     );
     text.setAttribute(
       "fill",
@@ -958,17 +1255,37 @@ function renderSubjectGraph() {
     );
     text.setAttribute(
       "font-size",
-      "11"
+      Number(node.depth) === 0
+        ? "11.5"
+        : "10.5"
+    );
+    text.setAttribute(
+      "font-weight",
+      Number(node.depth) === 0
+        ? "700"
+        : "500"
     );
 
     const label =
       String(
-        node.label ?? "Без назви"
+        node.label ??
+        "Без назви"
       );
 
+    const maxChars =
+      Number(node.depth) === 0
+        ? 27
+        : 29;
+
     text.textContent =
-      label.length > 26
-        ? `${label.slice(0, 25)}…`
+      label.length >
+        maxChars
+        ? (
+            label.slice(
+              0,
+              maxChars - 1
+            ) + "…"
+          )
         : label;
 
     const title =
@@ -977,10 +1294,12 @@ function renderSubjectGraph() {
         "title"
       );
 
-    title.textContent = label;
+    title.textContent =
+      label;
 
     group.append(
-      circle,
+      rect,
+      dot,
       text,
       title
     );
@@ -988,7 +1307,9 @@ function renderSubjectGraph() {
     group.addEventListener(
       "click",
       () =>
-        showGraphNodeDetails(node)
+        showGraphNodeDetails(
+          node
+        )
     );
 
     svg.append(group);
