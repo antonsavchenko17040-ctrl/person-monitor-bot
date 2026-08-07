@@ -251,3 +251,37 @@ test(
     );
   },
 );
+
+test(
+  "minor typo in position is not a career change",
+  async () => {
+    const {
+      isMeaningfulEmploymentChange,
+    } = await import(
+      "../src/asset-tracking.js"
+    );
+
+    const changed =
+      isMeaningfulEmploymentChange(
+        {
+          workplace:
+            "НАЦІОНАЛЬНЕ АГЕНТСТВО З ПИТАНЬ ЗАПОБІГАННЯ КОРУПЦІЇ",
+
+          position:
+            "Головний спеціаліст Відділу цифрової трансформації та інноваційного розвитку",
+        },
+        {
+          workplace:
+            "НАЦІОНАЛЬНЕ АГЕНТСТВО З ПИТАНЬ ЗАПОБІГАННЯ КОРУПЦІЇ",
+
+          position:
+            "Головний спеціаліст Віддіду цифрової трансформації та інноваційного розвитку",
+        },
+      );
+
+    assert.equal(
+      changed,
+      false,
+    );
+  },
+);

@@ -4,6 +4,10 @@ import {
   stableFingerprint,
 } from "./utils.js";
 
+import {
+  textSimilarity,
+} from "./entity-resolution.js";
+
 const VERSION = "asset-tracking-v1";
 
 function text(value) {
@@ -766,6 +770,44 @@ function careerRecord(
   };
 }
 
+export function isMeaningfulEmploymentChange(
+  previous,
+  current,
+) {
+  const previousWorkplace =
+    previous?.workplace ?? "";
+
+  const currentWorkplace =
+    current?.workplace ?? "";
+
+  const previousPosition =
+    previous?.position ?? "";
+
+  const currentPosition =
+    current?.position ?? "";
+
+  const workplaceSame =
+    text(previousWorkplace) ===
+      text(currentWorkplace) ||
+    textSimilarity(
+      previousWorkplace,
+      currentWorkplace,
+    ) >= 0.8;
+
+  const positionSame =
+    text(previousPosition) ===
+      text(currentPosition) ||
+    textSimilarity(
+      previousPosition,
+      currentPosition,
+    ) >= 0.8;
+
+  return !(
+    workplaceSame &&
+    positionSame
+  );
+}
+
 function buildCareer(records) {
   for (
     let index = 1;
@@ -779,18 +821,10 @@ function buildCareer(records) {
       records[index];
 
     current.changed =
-      text(
-        current.workplace,
-      ) !==
-        text(
-          previous.workplace,
-        ) ||
-      text(
-        current.position,
-      ) !==
-        text(
-          previous.position,
-        );
+      isMeaningfulEmploymentChange(
+        previous,
+        current,
+      );
   }
 
   return records;
