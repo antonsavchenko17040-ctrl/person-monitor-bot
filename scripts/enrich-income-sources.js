@@ -1,7 +1,7 @@
 import { db } from "../src/db.js";
 
 import {
-  extractIncomeSourceDetails,
+  extractNazkFacts,
 } from "../src/nazk-fact-extractor.js";
 
 const sql = db();
@@ -46,12 +46,14 @@ for (const fact of facts) {
 const documents = await sql`
   SELECT
     id,
+
+    metadata
+      ->> 'document_guid'
+      AS document_guid,
+
     raw_payload
       -> 'nazk_document'
-      -> 'data'
-      -> 'step_11'
-      -> 'data'
-      AS items
+      AS payload
 
   FROM source_documents
 
@@ -72,6 +74,7 @@ const stats = {
   rawItems: 0,
   matchedFacts: 0,
   missingFacts: 0,
+  missingExtracted: 0,
 
   organizations: 0,
   people: 0,
@@ -85,7 +88,40 @@ const stats = {
 
 for (const document of documents) {
   const items =
-    document.items ?? [];
+    document.payload
+      ?.data
+      ?.step_11
+      ?.data ??
+    [];
+
+  const extractedIncomeFacts =
+    extractNazkFacts(
+      document.payload,
+      {
+        documentGuid:
+          document.document_guid ??
+          document.payload?.id ??
+          null,
+      },
+    ).filter(
+      (fact) =>
+        fact.factType ===
+        "income",
+    );
+
+  const extractedIndex =
+    new Map(
+      extractedIncomeFacts.map(
+        (fact) => [
+          String(
+            fact.metadata
+              ?.item_ref ??
+            "",
+          ),
+          fact,
+        ],
+      ),
+    );
 
   for (
     let index = 0;
@@ -115,10 +151,23 @@ for (const document of documents) {
 
     stats.matchedFacts += 1;
 
+    const extractedFact =
+      extractedIndex.get(ref);
+
+    if (!extractedFact) {
+      stats.missingExtracted += 1;
+      continue;
+    }
+
     const details =
-      extractIncomeSourceDetails(
-        item,
-      );
+      extractedFact.valueJson
+        ?.source_details ??
+      null;
+
+    if (!details) {
+      stats.missingExtracted += 1;
+      continue;
+    }
 
     if (
       details.source_type ===
@@ -216,6 +265,9 @@ console.log(
 
 console.table([stats]);
 
-if (stats.missingFacts) {
+if (
+  stats.missingFacts ||
+  stats.missingExtracted
+) {
   process.exitCode = 1;
 }
