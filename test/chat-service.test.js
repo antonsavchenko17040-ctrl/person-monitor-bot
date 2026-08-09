@@ -4572,6 +4572,493 @@ test(
 );
 
 test(
+  "uses vehicle preflight without loading full subject knowledge",
+  async () => {
+    let knowledgeCalls = 0;
+    let subjectCalls = 0;
+    let vehicleCalls = 0;
+    let retrieverCalls = 0;
+    let modelCalls = 0;
+
+    const fakeClient = {
+      responses: {
+        async create() {
+          modelCalls += 1;
+
+          throw new Error(
+            "MODEL_SHOULD_NOT_BE_CALLED"
+          );
+        },
+      },
+    };
+
+    const result =
+      await createSubjectChatResponse({
+        subjectId:
+          "subject-1",
+
+        message:
+          "Які автомобілі були у декларанта та членів сім’ї у 2025 році?",
+
+        client:
+          fakeClient,
+
+        model:
+          "test-model",
+
+        subjectLoader:
+          async (subjectId) => {
+            subjectCalls += 1;
+
+            assert.equal(
+              subjectId,
+              "subject-1",
+            );
+
+            return {
+              id:
+                "subject-1",
+
+              entity_id:
+                "entity-1",
+
+              full_name:
+                "Тестова Особа",
+            };
+          },
+
+        vehicleContextLoader:
+          async (
+            entityId,
+            year
+          ) => {
+            vehicleCalls += 1;
+
+            assert.equal(
+              entityId,
+              "entity-1",
+            );
+
+            assert.equal(
+              year,
+              2025,
+            );
+
+            return {
+              detected_years:
+                [2025],
+
+              facts: [
+                {
+                  fact_type:
+                    "vehicle",
+
+                  source_document_id:
+                    "doc-2025",
+
+                  metadata: {
+                    declaration_year:
+                      2025,
+                  },
+
+                  value_json: {
+                    brand:
+                      "LAND ROVER",
+
+                    model:
+                      "RANGE ROVER",
+
+                    production_year:
+                      2016,
+
+                    acquisition_date:
+                      "2016-05-19",
+
+                    cost:
+                      4693990,
+
+                    rights: [
+                      {
+                        actor: {
+                          role:
+                            "declarant",
+
+                          name:
+                            "Тестовий Декларант",
+                        },
+
+                        ownership_type:
+                          "Власність",
+                      },
+                    ],
+                  },
+                },
+
+                {
+                  fact_type:
+                    "vehicle",
+
+                  source_document_id:
+                    "doc-2025",
+
+                  metadata: {
+                    declaration_year:
+                      2025,
+                  },
+
+                  value_json: {
+                    brand:
+                      "MERCEDES-BENZ",
+
+                    model:
+                      "S 500 4 MATIC",
+
+                    production_year:
+                      2014,
+
+                    acquisition_date:
+                      "2014-02-14",
+
+                    cost:
+                      1830637,
+
+                    rights: [
+                      {
+                        actor: {
+                          role:
+                            "family",
+
+                          name:
+                            "Тестова Дружина",
+
+                          relation:
+                            "дружина",
+                        },
+
+                        ownership_type:
+                          "Власність",
+                      },
+                    ],
+                  },
+                },
+              ],
+
+              analytics: {
+                yearly: [
+                  {
+                    year:
+                      2025,
+
+                    sourceDocumentId:
+                      "doc-2025",
+                  },
+                ],
+              },
+
+              source_documents: [
+                {
+                  id:
+                    "doc-2025",
+
+                  url:
+                    "https://example.test/declaration-2025",
+                },
+              ],
+            };
+          },
+
+        knowledgeLoader:
+          async () => {
+            knowledgeCalls += 1;
+
+            throw new Error(
+              "FULL_KNOWLEDGE_SHOULD_NOT_LOAD"
+            );
+          },
+
+        retriever:
+          () => {
+            retrieverCalls += 1;
+
+            throw new Error(
+              "RETRIEVER_SHOULD_NOT_RUN"
+            );
+          },
+      });
+
+    assert.equal(
+      result.model,
+      "person-monitor-facts",
+    );
+
+    assert.equal(
+      result.retrieval.version,
+      "deterministic-vehicles-v1",
+    );
+
+    assert.deepEqual(
+      result.retrieval
+        .detected_years,
+      [2025],
+    );
+
+    assert.equal(
+      result.retrieval
+        .counts.facts,
+      2,
+    );
+
+    assert.equal(
+      result.retrieval
+        .counts.source_documents,
+      1,
+    );
+
+    assert.match(
+      result.answer,
+      /LAND ROVER RANGE ROVER/,
+    );
+
+    assert.match(
+      result.answer,
+      /MERCEDES-BENZ S 500 4 MATIC/,
+    );
+
+    assert.match(
+      result.answer,
+      /4 693 990/,
+    );
+
+    assert.match(
+      result.answer,
+      /1 830 637/,
+    );
+
+    assert.match(
+      result.answer,
+      /Тестова Дружина \(дружина\)/,
+    );
+
+    assert.match(
+      result.answer,
+      /declaration-2025/,
+    );
+
+    assert.equal(
+      subjectCalls,
+      1,
+    );
+
+    assert.equal(
+      vehicleCalls,
+      1,
+    );
+
+    assert.equal(
+      knowledgeCalls,
+      0,
+    );
+
+    assert.equal(
+      retrieverCalls,
+      0,
+    );
+
+    assert.equal(
+      modelCalls,
+      0,
+    );
+  },
+);
+
+test(
+  "falls back to full knowledge pipeline for analytical vehicle question",
+  async () => {
+    let knowledgeCalls = 0;
+    let subjectCalls = 0;
+    let vehicleCalls = 0;
+    let retrieverCalls = 0;
+    let modelCalls = 0;
+
+    const fakeClient = {
+      responses: {
+        async create() {
+          modelCalls += 1;
+
+          return {
+            output_text:
+              "Аналітична відповідь",
+          };
+        },
+      },
+    };
+
+    const fakeKnowledge = {
+      subject: {
+        full_name:
+          "Тестова Особа",
+      },
+
+      facts: [],
+    };
+
+    const fakeContext = {
+      retrieval_version:
+        "subject-retrieval-v1",
+
+      detected_years:
+        [2025],
+
+      counts: {
+        facts: 1,
+        relations: 0,
+        mentions: 0,
+        cross_checks: 0,
+        source_documents: 0,
+      },
+
+      subject:
+        fakeKnowledge.subject,
+
+      facts: [
+        {
+          fact_type:
+            "vehicle",
+
+          source_document_id:
+            "doc-2025",
+
+          metadata: {
+            declaration_year:
+              2025,
+          },
+
+          value_json: {
+            brand:
+              "LAND ROVER",
+
+            model:
+              "RANGE ROVER",
+
+            production_year:
+              2016,
+
+            rights: [
+              {
+                actor: {
+                  role:
+                    "declarant",
+                },
+
+                ownership_type:
+                  "Власність",
+              },
+            ],
+          },
+        },
+      ],
+
+      relations: [],
+      mentions: [],
+      cross_checks: [],
+      source_documents: [],
+
+      analytics: {
+        yearly: [],
+        transitions: [],
+      },
+    };
+
+    const result =
+      await createSubjectChatResponse({
+        subjectId:
+          "subject-1",
+
+        message:
+          "Проаналізуй автомобілі декларанта у 2025 році та оціни ризики",
+
+        client:
+          fakeClient,
+
+        model:
+          "test-model",
+
+        subjectLoader:
+          async () => {
+            subjectCalls += 1;
+
+            throw new Error(
+              "SUBJECT_PREFLIGHT_SHOULD_NOT_RUN"
+            );
+          },
+
+        vehicleContextLoader:
+          async () => {
+            vehicleCalls += 1;
+
+            throw new Error(
+              "VEHICLE_PREFLIGHT_SHOULD_NOT_RUN"
+            );
+          },
+
+        knowledgeLoader:
+          async () => {
+            knowledgeCalls += 1;
+
+            return fakeKnowledge;
+          },
+
+        retriever:
+          () => {
+            retrieverCalls += 1;
+
+            return fakeContext;
+          },
+      });
+
+    assert.equal(
+      result.answer,
+      "Аналітична відповідь",
+    );
+
+    assert.equal(
+      result.model,
+      "test-model",
+    );
+
+    assert.equal(
+      result.retrieval.version,
+      "subject-retrieval-v1",
+    );
+
+    assert.equal(
+      subjectCalls,
+      0,
+    );
+
+    assert.equal(
+      vehicleCalls,
+      0,
+    );
+
+    assert.equal(
+      knowledgeCalls,
+      1,
+    );
+
+    assert.equal(
+      retrieverCalls,
+      1,
+    );
+
+    assert.equal(
+      modelCalls,
+      1,
+    );
+  },
+);
+
+test(
   "uses family member preflight without loading full subject knowledge",
   async () => {
     let knowledgeCalls = 0;

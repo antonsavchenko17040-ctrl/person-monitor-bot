@@ -3,6 +3,7 @@ import {
   loadDeterministicFamilyContext,
   loadDeterministicIncomeContext,
   loadDeterministicOrganizationRelationsContext,
+  loadDeterministicVehicleContext,
   loadSubjectKnowledge,
 } from "./chat-context.js";
 
@@ -4950,6 +4951,8 @@ export async function createSubjectChatResponse({
     loadDeterministicFamilyContext,
   incomeContextLoader =
     loadDeterministicIncomeContext,
+  vehicleContextLoader =
+    loadDeterministicVehicleContext,
   organizationRelationsContextLoader =
     loadDeterministicOrganizationRelationsContext,
   retriever =
@@ -4970,6 +4973,106 @@ export async function createSubjectChatResponse({
       message,
       history
     );
+
+  /*
+   * Fast-path для factual vehicle-list
+   * запиту за одним конкретним роком.
+   *
+   * Завантажуємо лише vehicle facts
+   * канонічної декларації року.
+   */
+  if (
+    isVehicleListQuestion(
+      contextualQuestion
+    )
+  ) {
+    const vehicleYears =
+      [
+        ...new Set(
+          String(
+            contextualQuestion ??
+            ""
+          ).match(
+            /\b(?:19|20)\d{2}\b/g
+          ) ?? []
+        ),
+      ]
+        .map(Number)
+        .filter(
+          Number.isInteger
+        );
+
+    if (
+      vehicleYears.length === 1
+    ) {
+      const subject =
+        await subjectLoader(
+          subjectId
+        );
+
+      if (!subject) {
+        throw new Error(
+          "SUBJECT_NOT_FOUND",
+        );
+      }
+
+      const entityId =
+        subject.entity_id ??
+        subject.id;
+
+      const fastContext =
+        await vehicleContextLoader(
+          entityId,
+          vehicleYears[0]
+        );
+
+      if (fastContext) {
+        const fastAnswer =
+          buildDeterministicVehicleAnswer(
+            contextualQuestion,
+            fastContext
+          );
+
+        if (fastAnswer) {
+          return {
+            answer:
+              fastAnswer,
+
+            model:
+              "person-monitor-facts",
+
+            retrieval: {
+              version:
+                "deterministic-vehicles-v1",
+
+              detected_years:
+                fastContext
+                  .detected_years ??
+                vehicleYears,
+
+              counts: {
+                facts:
+                  fastContext
+                    .facts
+                    ?.length ??
+                  0,
+
+                source_documents:
+                  fastContext
+                    .source_documents
+                    ?.length ??
+                  0,
+
+                mentions: 0,
+                relations: 0,
+                cross_checks: 0,
+              },
+            },
+          };
+        }
+      }
+    }
+  }
 
   /*
    * Fast-path для factual family-member
