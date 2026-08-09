@@ -5,6 +5,7 @@ import {
   loadDeterministicFamilyContext,
   loadDeterministicIncomeContext,
   loadDeterministicOrganizationRelationsContext,
+  loadDeterministicRealEstateContext,
   loadDeterministicVehicleContext,
   loadSubjectKnowledge,
 } from "./chat-context.js";
@@ -4949,6 +4950,8 @@ export async function createSubjectChatResponse({
     getSubject,
   declarationContextLoader =
     loadDeterministicDeclarationContext,
+  realEstateContextLoader =
+    loadDeterministicRealEstateContext,
   cashContextLoader =
     loadDeterministicCashContext,
   employmentContextLoader =
@@ -4979,6 +4982,106 @@ export async function createSubjectChatResponse({
       message,
       history
     );
+
+  /*
+   * Fast-path для factual real-estate
+   * запиту за одним конкретним роком.
+   *
+   * Завантажуємо лише real_estate facts
+   * канонічної декларації року.
+   */
+  if (
+    isRealEstateListQuestion(
+      contextualQuestion
+    )
+  ) {
+    const realEstateYears =
+      [
+        ...new Set(
+          String(
+            contextualQuestion ??
+            ""
+          ).match(
+            /\b(?:19|20)\d{2}\b/g
+          ) ?? []
+        ),
+      ]
+        .map(Number)
+        .filter(
+          Number.isInteger
+        );
+
+    if (
+      realEstateYears.length === 1
+    ) {
+      const subject =
+        await subjectLoader(
+          subjectId
+        );
+
+      if (!subject) {
+        throw new Error(
+          "SUBJECT_NOT_FOUND",
+        );
+      }
+
+      const entityId =
+        subject.entity_id ??
+        subject.id;
+
+      const fastContext =
+        await realEstateContextLoader(
+          entityId,
+          realEstateYears[0]
+        );
+
+      if (fastContext) {
+        const fastAnswer =
+          buildDeterministicRealEstateAnswer(
+            contextualQuestion,
+            fastContext
+          );
+
+        if (fastAnswer) {
+          return {
+            answer:
+              fastAnswer,
+
+            model:
+              "person-monitor-facts",
+
+            retrieval: {
+              version:
+                "deterministic-real-estate-v1",
+
+              detected_years:
+                fastContext
+                  .detected_years ??
+                realEstateYears,
+
+              counts: {
+                facts:
+                  fastContext
+                    .facts
+                    ?.length ??
+                  0,
+
+                source_documents:
+                  fastContext
+                    .source_documents
+                    ?.length ??
+                  0,
+
+                mentions: 0,
+                relations: 0,
+                cross_checks: 0,
+              },
+            },
+          };
+        }
+      }
+    }
+  }
 
   /*
    * Fast-path для factual declaration-list
