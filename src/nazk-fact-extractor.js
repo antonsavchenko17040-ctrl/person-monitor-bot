@@ -58,27 +58,46 @@ function fullName(data) {
     .join(" ") || null;
 }
 
+function incomeSourceItem(item) {
+  const nested =
+    Array.isArray(item?.sources)
+      ? item.sources.find(
+          (source) =>
+            source &&
+            typeof source === "object",
+        )
+      : null;
+
+  return nested ?? item ?? {};
+}
+
 function sourceName(item) {
+  const source =
+    incomeSourceItem(item);
+
   return (
-    clean(item?.source_ua_company_name) ||
-    clean(item?.source_ukr_company_name) ||
-    clean(item?.source_ua_company_code) ||
-    clean(item?.source_ukr_fullname) ||
-    clean(item?.source_ua_lastname) ||
-    clean(item?.source_eng_company_name) ||
-    clean(item?.source_eng_fullname) ||
+    clean(source?.source_ua_company_name) ||
+    clean(source?.source_ukr_company_name) ||
+    clean(source?.source_ua_company_code) ||
+    clean(source?.source_ukr_fullname) ||
+    clean(source?.source_ua_lastname) ||
+    clean(source?.source_eng_company_name) ||
+    clean(source?.source_eng_fullname) ||
     null
   );
 }
 
 export function extractIncomeSourceDetails(item) {
+  const source =
+    incomeSourceItem(item);
+
   const companyName =
-    clean(item?.source_ua_company_name) ||
-    clean(item?.source_ukr_company_name) ||
+    clean(source?.source_ua_company_name) ||
+    clean(source?.source_ukr_company_name) ||
     null;
 
   const rawEdrpou =
-    clean(item?.source_ua_company_code);
+    clean(source?.source_ua_company_code);
 
   const edrpouDigits =
     String(rawEdrpou ?? "")
@@ -90,20 +109,20 @@ export function extractIncomeSourceDetails(item) {
       : null;
 
   const foreignCompanyName =
-    clean(item?.source_eng_company_name);
+    clean(source?.source_eng_company_name);
 
   const foreignCompanyCode =
-    clean(item?.source_eng_company_code);
+    clean(source?.source_eng_company_code);
 
   const explicitPersonName =
-    clean(item?.source_ukr_fullname) ||
-    clean(item?.source_eng_fullname);
+    clean(source?.source_ukr_fullname) ||
+    clean(source?.source_eng_fullname);
 
   const assembledPersonName =
     [
-      clean(item?.source_ua_lastname),
-      clean(item?.source_ua_firstname),
-      clean(item?.source_ua_middlename),
+      clean(source?.source_ua_lastname),
+      clean(source?.source_ua_firstname),
+      clean(source?.source_ua_middlename),
     ]
       .filter(Boolean)
       .join(" ");
@@ -183,6 +202,49 @@ function buildActorMap(payload) {
   }
 
   return actors;
+}
+
+function resolveIncomeActor(
+  item,
+  actors,
+) {
+  const direct =
+    clean(item?.person);
+
+  if (direct) {
+    return resolveActor(
+      direct,
+      actors,
+    );
+  }
+
+  const refs =
+    Array.isArray(
+      item?.person_who_care,
+    )
+      ? item.person_who_care
+          .map(
+            (entry) =>
+              clean(
+                entry?.person,
+              ),
+          )
+          .filter(Boolean)
+      : [];
+
+  const uniqueRefs =
+    [...new Set(refs)];
+
+  if (
+    uniqueRefs.length !== 1
+  ) {
+    return null;
+  }
+
+  return resolveActor(
+    uniqueRefs[0],
+    actors,
+  );
 }
 
 function resolveActor(ref, actors) {
@@ -734,8 +796,8 @@ export function extractNazkFacts(
 
           valueJson: {
             person:
-              resolveActor(
-                item.person,
+              resolveIncomeActor(
+                item,
                 actors,
               ),
 

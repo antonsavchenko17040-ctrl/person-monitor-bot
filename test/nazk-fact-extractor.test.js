@@ -212,3 +212,169 @@ test("does not copy tax numbers into facts", () => {
     false,
   );
 });
+
+test(
+  "extracts real NACP income owner and nested source schema",
+  () => {
+    const realIncomePayload = {
+      declaration_year: 2024,
+
+      data: {
+        step_1: {
+          data: {
+            firstname: "Володимир",
+            lastname: "Зеленський",
+            middlename: "Олександрович",
+          },
+        },
+
+        step_2: {
+          data: [
+            {
+              id: "family-1",
+              firstname: "Олена",
+              lastname: "Зеленська",
+              subjectRelation:
+                "дружина",
+            },
+          ],
+        },
+
+        step_11: {
+          data: [
+            {
+              iteration:
+                "income-declarant",
+
+              objectType:
+                "Заробітна плата",
+
+              sizeIncome:
+                "336000",
+
+              person_who_care: [
+                {
+                  person: "1",
+                },
+              ],
+
+              sources: [
+                {
+                  incomeSource: "j",
+
+                  source_ua_company_code:
+                    "00037256",
+
+                  source_ua_company_name:
+                    "ДЕРЖАВНЕ УПРАВЛІННЯ СПРАВАМИ",
+                },
+              ],
+            },
+
+            {
+              iteration:
+                "income-family",
+
+              objectType:
+                "Дохід від оренди",
+
+              sizeIncome:
+                "100000",
+
+              person_who_care: [
+                {
+                  person:
+                    "family-1",
+                },
+              ],
+
+              sources: [
+                {
+                  incomeSource: "j",
+
+                  source_ua_company_code:
+                    "12345678",
+
+                  source_ua_company_name:
+                    "ТЕСТОВА КОМПАНІЯ",
+                },
+              ],
+            },
+          ],
+        },
+      },
+    };
+
+    const facts =
+      extractNazkFacts(
+        realIncomePayload,
+        {
+          documentGuid:
+            "real-income-doc",
+        },
+      );
+
+    const incomes =
+      facts.filter(
+        (fact) =>
+          fact.factType ===
+          "income",
+      );
+
+    assert.equal(
+      incomes.length,
+      2,
+    );
+
+    assert.equal(
+      incomes[0].valueJson
+        .person.role,
+      "declarant",
+    );
+
+    assert.equal(
+      incomes[0].valueJson
+        .person.ref,
+      "1",
+    );
+
+    assert.equal(
+      incomes[0].valueJson
+        .source,
+      "ДЕРЖАВНЕ УПРАВЛІННЯ СПРАВАМИ",
+    );
+
+    assert.equal(
+      incomes[0].valueJson
+        .source_details
+        .source_type,
+      "organization",
+    );
+
+    assert.equal(
+      incomes[0].valueJson
+        .source_details
+        .company_name,
+      "ДЕРЖАВНЕ УПРАВЛІННЯ СПРАВАМИ",
+    );
+
+    assert.equal(
+      incomes[0].valueJson
+        .source_details
+        .edrpou,
+      "00037256",
+    );
+
+    assert.equal(
+      incomes[1].valueJson
+        .person.role,
+      "family",
+    );
+
+    assert.equal(
+      incomes[1].valueJson
+        .person.ref,
+      "family-1",
+    );
+  },
+);
