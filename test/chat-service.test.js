@@ -4227,6 +4227,386 @@ test(
 );
 
 test(
+  "uses employment preflight without loading full subject knowledge",
+  async () => {
+    let knowledgeCalls = 0;
+    let subjectCalls = 0;
+    let employmentCalls = 0;
+    let retrieverCalls = 0;
+    let modelCalls = 0;
+
+    const fakeClient = {
+      responses: {
+        async create() {
+          modelCalls += 1;
+
+          throw new Error(
+            "MODEL_SHOULD_NOT_BE_CALLED"
+          );
+        },
+      },
+    };
+
+    const result =
+      await createSubjectChatResponse({
+        subjectId:
+          "subject-1",
+
+        message:
+          "Яка посада була у 2025 році?",
+
+        client:
+          fakeClient,
+
+        model:
+          "test-model",
+
+        subjectLoader:
+          async (subjectId) => {
+            subjectCalls += 1;
+
+            assert.equal(
+              subjectId,
+              "subject-1",
+            );
+
+            return {
+              id:
+                "subject-1",
+
+              entity_id:
+                "entity-1",
+
+              full_name:
+                "Тестова Особа",
+            };
+          },
+
+        employmentContextLoader:
+          async (
+            entityId,
+            year
+          ) => {
+            employmentCalls += 1;
+
+            assert.equal(
+              entityId,
+              "entity-1",
+            );
+
+            assert.equal(
+              year,
+              2025,
+            );
+
+            return {
+              detected_years:
+                [2025],
+
+              analytics: {
+                yearly: [
+                  {
+                    year:
+                      2025,
+
+                    sourceDocumentId:
+                      "doc-2025",
+                  },
+                ],
+              },
+
+              facts: [
+                {
+                  fact_type:
+                    "employment",
+
+                  source_document_id:
+                    "doc-2025",
+
+                  metadata: {
+                    declaration_year:
+                      2025,
+                  },
+
+                  value_text:
+                    "ТЕСТОВА ПОСАДА",
+
+                  value_json: {
+                    person: {
+                      role:
+                        "declarant",
+                    },
+
+                    position:
+                      "ТЕСТОВА ПОСАДА",
+
+                    workplace:
+                      "ТЕСТОВА УСТАНОВА",
+
+                    responsible_position_exact:
+                      "Тестова категорія",
+                  },
+                },
+              ],
+
+              source_documents: [
+                {
+                  id:
+                    "doc-2025",
+
+                  url:
+                    "https://example.test/declaration-2025",
+                },
+              ],
+            };
+          },
+
+        knowledgeLoader:
+          async () => {
+            knowledgeCalls += 1;
+
+            throw new Error(
+              "FULL_KNOWLEDGE_SHOULD_NOT_LOAD"
+            );
+          },
+
+        retriever:
+          () => {
+            retrieverCalls += 1;
+
+            throw new Error(
+              "RETRIEVER_SHOULD_NOT_RUN"
+            );
+          },
+      });
+
+    assert.equal(
+      result.model,
+      "person-monitor-facts",
+    );
+
+    assert.equal(
+      result.retrieval.version,
+      "deterministic-employment-v1",
+    );
+
+    assert.deepEqual(
+      result.retrieval
+        .detected_years,
+      [2025],
+    );
+
+    assert.equal(
+      result.retrieval
+        .counts.facts,
+      1,
+    );
+
+    assert.match(
+      result.answer,
+      /ТЕСТОВА ПОСАДА/,
+    );
+
+    assert.match(
+      result.answer,
+      /ТЕСТОВА УСТАНОВА/,
+    );
+
+    assert.match(
+      result.answer,
+      /declaration-2025/,
+    );
+
+    assert.equal(
+      subjectCalls,
+      1,
+    );
+
+    assert.equal(
+      employmentCalls,
+      1,
+    );
+
+    assert.equal(
+      knowledgeCalls,
+      0,
+    );
+
+    assert.equal(
+      retrieverCalls,
+      0,
+    );
+
+    assert.equal(
+      modelCalls,
+      0,
+    );
+  },
+);
+
+test(
+  "falls back to full knowledge pipeline for analytical employment question",
+  async () => {
+    let knowledgeCalls = 0;
+    let subjectCalls = 0;
+    let employmentCalls = 0;
+    let retrieverCalls = 0;
+    let modelCalls = 0;
+
+    const fakeClient = {
+      responses: {
+        async create() {
+          modelCalls += 1;
+
+          return {
+            output_text:
+              "Аналітична відповідь",
+          };
+        },
+      },
+    };
+
+    const fakeKnowledge = {
+      subject: {
+        full_name:
+          "Тестова Особа",
+      },
+    };
+
+    const fakeContext = {
+      retrieval_version:
+        "subject-retrieval-v1",
+
+      detected_years:
+        [2025],
+
+      counts: {
+        facts: 1,
+        relations: 0,
+        mentions: 0,
+        cross_checks: 0,
+        source_documents: 0,
+      },
+
+      subject:
+        fakeKnowledge.subject,
+
+      facts: [
+        {
+          fact_type:
+            "employment",
+
+          metadata: {
+            declaration_year:
+              2025,
+          },
+
+          value_text:
+            "ТЕСТОВА ПОСАДА",
+        },
+      ],
+
+      relations: [],
+      mentions: [],
+      cross_checks: [],
+      source_documents: [],
+
+      analytics: {
+        yearly: [],
+        transitions: [],
+      },
+    };
+
+    const result =
+      await createSubjectChatResponse({
+        subjectId:
+          "subject-1",
+
+        message:
+          "Проаналізуй посаду у 2025 році та оціни зміни",
+
+        client:
+          fakeClient,
+
+        model:
+          "test-model",
+
+        subjectLoader:
+          async () => {
+            subjectCalls += 1;
+
+            throw new Error(
+              "SUBJECT_PREFLIGHT_SHOULD_NOT_RUN"
+            );
+          },
+
+        employmentContextLoader:
+          async () => {
+            employmentCalls += 1;
+
+            throw new Error(
+              "EMPLOYMENT_PREFLIGHT_SHOULD_NOT_RUN"
+            );
+          },
+
+        knowledgeLoader:
+          async () => {
+            knowledgeCalls += 1;
+
+            return fakeKnowledge;
+          },
+
+        retriever:
+          () => {
+            retrieverCalls += 1;
+
+            return fakeContext;
+          },
+      });
+
+    assert.equal(
+      result.answer,
+      "Аналітична відповідь",
+    );
+
+    assert.equal(
+      result.model,
+      "test-model",
+    );
+
+    assert.equal(
+      result.retrieval.version,
+      "subject-retrieval-v1",
+    );
+
+    assert.equal(
+      subjectCalls,
+      0,
+    );
+
+    assert.equal(
+      employmentCalls,
+      0,
+    );
+
+    assert.equal(
+      knowledgeCalls,
+      1,
+    );
+
+    assert.equal(
+      retrieverCalls,
+      1,
+    );
+
+    assert.equal(
+      modelCalls,
+      1,
+    );
+  },
+);
+
+test(
   "calls Responses API through injected client",
   async () => {
     let capturedRequest = null;

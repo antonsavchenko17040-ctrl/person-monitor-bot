@@ -1,6 +1,11 @@
 import {
+  loadDeterministicEmploymentContext,
   loadSubjectKnowledge,
 } from "./chat-context.js";
+
+import {
+  getSubject,
+} from "./store.js";
 
 import {
   retrieveSubjectContext,
@@ -4920,6 +4925,10 @@ export async function createSubjectChatResponse({
   retrievalOptions,
   knowledgeLoader =
     loadSubjectKnowledge,
+  subjectLoader =
+    getSubject,
+  employmentContextLoader =
+    loadDeterministicEmploymentContext,
   retriever =
     retrieveSubjectContext,
 }) {
@@ -4933,6 +4942,112 @@ export async function createSubjectChatResponse({
     );
   }
 
+  const contextualQuestion =
+    resolveContextualQuestion(
+      message,
+      history
+    );
+
+  /*
+   * Fast-path для простого
+   * employment-запиту за одним роком.
+   *
+   * Не завантажуємо весь knowledge graph,
+   * 971 facts, analytics, relations,
+   * mentions та cross-checks.
+   */
+  if (
+    isEmploymentListQuestion(
+      contextualQuestion
+    )
+  ) {
+    const years =
+      [
+        ...new Set(
+          String(
+            contextualQuestion ??
+            ""
+          ).match(
+            /\b(?:19|20)\d{2}\b/g
+          ) ?? []
+        ),
+      ]
+        .map(Number)
+        .filter(
+          Number.isInteger
+        );
+
+    if (years.length === 1) {
+      const subject =
+        await subjectLoader(
+          subjectId
+        );
+
+      if (!subject) {
+        throw new Error(
+          "SUBJECT_NOT_FOUND",
+        );
+      }
+
+      const entityId =
+        subject.entity_id ??
+        subject.id;
+
+      const fastContext =
+        await employmentContextLoader(
+          entityId,
+          years[0]
+        );
+
+      if (fastContext) {
+        const fastAnswer =
+          buildDeterministicEmploymentAnswer(
+            contextualQuestion,
+            fastContext,
+            fastContext.facts
+          );
+
+        if (fastAnswer) {
+          return {
+            answer:
+              fastAnswer,
+
+            model:
+              "person-monitor-facts",
+
+            retrieval: {
+              version:
+                "deterministic-employment-v1",
+
+              detected_years:
+                fastContext
+                  .detected_years ??
+                years,
+
+              counts: {
+                facts:
+                  fastContext
+                    .facts
+                    ?.length ??
+                  0,
+
+                source_documents:
+                  fastContext
+                    .source_documents
+                    ?.length ??
+                  0,
+
+                mentions: 0,
+                relations: 0,
+                cross_checks: 0,
+              },
+            },
+          };
+        }
+      }
+    }
+  }
+
   const knowledge =
     await knowledgeLoader(
       subjectId,
@@ -4943,12 +5058,6 @@ export async function createSubjectChatResponse({
       "SUBJECT_NOT_FOUND",
     );
   }
-
-  const contextualQuestion =
-    resolveContextualQuestion(
-      message,
-      history
-    );
 
   const context =
     retriever(
