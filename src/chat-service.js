@@ -326,6 +326,404 @@ function factYear(fact) {
     : null;
 }
 
+function compactRealEstateRight(
+  right
+) {
+  const actor =
+    right?.actor ??
+    {};
+
+  return compactObject({
+    role:
+      actor.role,
+
+    name:
+      actor.role ===
+        "declarant"
+        ? null
+        : actor.name,
+
+    relation:
+      actor.relation,
+
+    ownership_type:
+      right
+        ?.ownership_type,
+
+    other_ownership:
+      right
+        ?.other_ownership,
+
+    share_percent:
+      right
+        ?.share_percent,
+
+    third_party_kind:
+      right
+        ?.third_party_kind,
+
+    third_party_name:
+      right
+        ?.third_party_name,
+
+    third_party_edrpou:
+      right
+        ?.third_party_edrpou,
+
+    third_party_foreign_code:
+      right
+        ?.third_party_foreign_code,
+  });
+}
+
+function compactRealEstateFact(
+  fact
+) {
+  const value =
+    fact?.value_json ??
+    {};
+
+  return compactObject({
+    fact_type:
+      "real_estate",
+
+    year:
+      factYear(fact),
+
+    object_type:
+      value.object_type ??
+      fact?.value_text,
+
+    other_object_type:
+      value.other_object_type,
+
+    area:
+      value.total_area ??
+      fact?.value_number,
+
+    unit:
+      fact?.unit,
+
+    country:
+      value.country,
+
+    region:
+      value.region,
+
+    district:
+      value.district,
+
+    city:
+      value.city,
+
+    acquisition_date:
+      value.acquisition_date,
+
+    rights:
+      Array.isArray(
+        value.rights
+      )
+        ? value.rights
+            .map(
+              compactRealEstateRight
+            )
+        : [],
+
+    source_document_id:
+      fact
+        ?.source_document_id,
+  });
+}
+
+function compactRelationForModel(
+  relation
+) {
+  return compactObject({
+    relation_type:
+      relation
+        ?.relation_type,
+
+    relation_scope:
+      relation
+        ?.relation_scope,
+
+    from_entity_type:
+      relation
+        ?.from_entity_type,
+
+    from_name:
+      relation?.from_name,
+
+    to_entity_type:
+      relation
+        ?.to_entity_type,
+
+    to_name:
+      relation?.to_name,
+
+    valid_from:
+      relation?.valid_from,
+
+    valid_to:
+      relation?.valid_to,
+
+    confidence:
+      relation?.confidence,
+
+    verification_status:
+      relation
+        ?.verification_status,
+
+    source_document_id:
+      relation
+        ?.source_document_id,
+  });
+}
+
+function compactMentionForModel(
+  mention
+) {
+  return compactObject({
+    provider:
+      mention?.provider,
+
+    source_type:
+      mention?.source_type,
+
+    title:
+      mention?.title,
+
+    url:
+      mention?.url,
+
+    published_at:
+      mention?.published_at,
+
+    snippet:
+      cleanText(
+        mention?.snippet ??
+        mention?.description ??
+        mention?.text ??
+        "",
+        500
+      ),
+  });
+}
+
+function compactCrossCheckForModel(
+  check
+) {
+  return compactObject({
+    check_type:
+      check?.check_type,
+
+    rule_code:
+      check?.rule_code,
+
+    result:
+      check?.result,
+
+    score:
+      check?.score,
+
+    left_source_document_id:
+      check
+        ?.left_source_document_id,
+
+    right_source_document_id:
+      check
+        ?.right_source_document_id,
+  });
+}
+
+function selectWithinJsonBudget(
+  items,
+  maxChars,
+  mapper = (item) => item
+) {
+  if (
+    !Array.isArray(items) ||
+    maxChars <= 0
+  ) {
+    return [];
+  }
+
+  const selected = [];
+  let usedChars = 2;
+
+  for (const rawItem of items) {
+    const item =
+      compactObject(
+        mapper(rawItem)
+      );
+
+    if (!item) {
+      continue;
+    }
+
+    const itemChars =
+      JSON.stringify(
+        item
+      ).length +
+      (
+        selected.length
+          ? 1
+          : 0
+      );
+
+    /*
+     * Не додаємо один гігантський
+     * елемент, який сам може
+     * переповнити контекст.
+     */
+    if (
+      itemChars >
+      maxChars
+    ) {
+      continue;
+    }
+
+    if (
+      usedChars +
+      itemChars >
+      maxChars
+    ) {
+      continue;
+    }
+
+    selected.push(
+      item
+    );
+
+    usedChars +=
+      itemChars;
+  }
+
+  return selected;
+}
+
+function modelContextNeeds(
+  question
+) {
+  const q =
+    String(question ?? "")
+      .toLowerCase();
+
+  return {
+    relations:
+      /зв['’]?яз|пов['’]?язан|правовлас|трет\S*\s+особ|власник\S*\s+(?:компан|організа)|контрагент/.test(
+        q
+      ),
+
+    mentions:
+      /новин|медіа|публікац|статт|згадк/.test(
+        q
+      ),
+
+    crossChecks:
+      /cross.?check|крос|ризик|аномал|підозр|невідповід|перевір/.test(
+        q
+      ),
+
+    analytics:
+      /порівн|змін|динамік|різниц|відсот|процент|скільки|сума|загаль|дохід|доход|готів/.test(
+        q
+      ),
+  };
+}
+
+function assetFactHasRole(
+  fact,
+  role
+) {
+  const rights =
+    fact?.value_json
+      ?.rights;
+
+  if (!Array.isArray(rights)) {
+    return false;
+  }
+
+  return rights.some(
+    (right) =>
+      right?.actor?.role ===
+      role
+  );
+}
+
+function scopeModelFactsForQuestion(
+  facts,
+  question
+) {
+  const items =
+    Array.isArray(facts)
+      ? facts
+      : [];
+
+  const q =
+    String(question ?? "")
+      .toLowerCase();
+
+  let factType = null;
+
+  if (
+    /нерухом|квартир|будин|земл|гараж|приміщ|машиномісц|паркомісц/.test(
+      q
+    )
+  ) {
+    factType =
+      "real_estate";
+  } else if (
+    /авто|автомоб|машин|транспорт|vehicle/.test(
+      q
+    )
+  ) {
+    factType =
+      "vehicle";
+  }
+
+  if (!factType) {
+    return items;
+  }
+
+  let ownerRole = null;
+
+  if (
+    /декларант|суб['’]?єкт/.test(
+      q
+    )
+  ) {
+    ownerRole =
+      "declarant";
+  } else if (
+    /сім['’]?ї|членів сім|дружин|чоловік|дитин|родин/.test(
+      q
+    )
+  ) {
+    ownerRole =
+      "family";
+  }
+
+  if (!ownerRole) {
+    return items;
+  }
+
+  const scoped =
+    items.filter(
+      (fact) =>
+        fact?.fact_type ===
+          factType &&
+        assetFactHasRole(
+          fact,
+          ownerRole
+        )
+    );
+
+  return scoped.length
+    ? scoped
+    : items;
+}
+
 function compactFact(fact) {
   const year =
     factYear(fact);
@@ -384,6 +782,15 @@ function compactFact(fact) {
         details
           ?.foreign_company_code,
     });
+  }
+
+  if (
+    fact?.fact_type ===
+    "real_estate"
+  ) {
+    return compactRealEstateFact(
+      fact
+    );
   }
 
   return compactObject({
@@ -1128,6 +1535,379 @@ export function buildDeterministicIncomeDetailAnswer(
   return answer;
 }
 
+function isRealEstateListQuestion(
+  question
+) {
+  const q =
+    String(question ?? "")
+      .toLowerCase();
+
+  const hasDomain =
+    /нерухом|квартир|будин|земл|гараж|приміщ|машиномісц|паркомісц|дач/.test(
+      q
+    );
+
+  const hasListIntent =
+    /яку|яка|які|перелік|список|назви|мав|мала|мали|має|належ|об['’]?єкт/.test(
+      q
+    );
+
+  const hasComparisonIntent =
+    /порівн|змін|динамік|різниц/.test(
+      q
+    );
+
+  return Boolean(
+    hasDomain &&
+    hasListIntent &&
+    !hasComparisonIntent
+  );
+}
+
+function formatRealEstateNumber(
+  value
+) {
+  const number =
+    Number(value);
+
+  if (!Number.isFinite(number)) {
+    return null;
+  }
+
+  return number
+    .toLocaleString(
+      "uk-UA",
+      {
+        maximumFractionDigits:
+          2,
+      }
+    )
+    .replace(
+      /[\u00a0\u202f]/g,
+      " "
+    );
+}
+
+function uniqueTextValues(
+  values
+) {
+  return [
+    ...new Set(
+      values
+        .map(
+          (value) =>
+            String(
+              value ?? ""
+            ).trim()
+        )
+        .filter(Boolean)
+    ),
+  ];
+}
+
+export function buildDeterministicRealEstateAnswer(
+  question,
+  context
+) {
+  if (
+    !isRealEstateListQuestion(
+      question
+    )
+  ) {
+    return null;
+  }
+
+  const years =
+    (
+      context
+        ?.detected_years ??
+      []
+    )
+      .map(Number)
+      .filter(
+        Number.isInteger
+      );
+
+  if (years.length !== 1) {
+    return null;
+  }
+
+  const year =
+    years[0];
+
+  const q =
+    String(question ?? "")
+      .toLowerCase();
+
+  const asksHousehold =
+    /домогосподар|разом\s+(?:із|з)\s+сім/.test(
+      q
+    );
+
+  const asksFamily =
+    !asksHousehold &&
+    /сім['’]?ї|членів сім|дружин|чоловік|дитин|родин/.test(
+      q
+    );
+
+  const acceptedRoles =
+    asksHousehold
+      ? new Set([
+          "declarant",
+          "family",
+        ])
+      : asksFamily
+        ? new Set([
+            "family",
+          ])
+        : new Set([
+            "declarant",
+          ]);
+
+  const rows = [];
+
+  for (
+    const fact of
+    context?.facts ?? []
+  ) {
+    if (
+      fact?.fact_type !==
+        "real_estate" ||
+      factYear(fact) !==
+        year
+    ) {
+      continue;
+    }
+
+    const value =
+      fact.value_json ??
+      {};
+
+    const rights =
+      (
+        Array.isArray(
+          value.rights
+        )
+          ? value.rights
+          : []
+      ).filter(
+        (right) =>
+          acceptedRoles.has(
+            right?.actor?.role
+          )
+      );
+
+    if (!rights.length) {
+      continue;
+    }
+
+    const baseType =
+      String(
+        value.object_type ??
+        fact.value_text ??
+        "Об’єкт нерухомості"
+      ).trim();
+
+    const otherType =
+      String(
+        value.other_object_type ??
+        ""
+      ).trim();
+
+    const displayType =
+      otherType
+        ? (
+            baseType === "Інше"
+              ? otherType
+              : `${baseType} — ${otherType}`
+          )
+        : baseType;
+
+    const area =
+      formatRealEstateNumber(
+        value.total_area ??
+        fact.value_number
+      );
+
+    /*
+     * Використовуємо тільки
+     * текстові location-поля.
+     *
+     * Числові country-коди
+     * не декодуємо й не
+     * дозволяємо AI їх вгадувати.
+     */
+    const locationParts =
+      uniqueTextValues([
+        value.city,
+        value.district,
+        value.region,
+      ]);
+
+    const location =
+      locationParts.length
+        ? locationParts.join(", ")
+        : "не зазначено";
+
+    const rightDescriptions =
+      uniqueTextValues(
+        rights.map(
+          (right) => {
+            const ownership =
+              String(
+                right
+                  ?.ownership_type ??
+                "вид права не зазначено"
+              ).trim();
+
+            const other =
+              String(
+                right
+                  ?.other_ownership ??
+                ""
+              ).trim();
+
+            return other
+              ? `${ownership} (${other})`
+              : ownership;
+          }
+        )
+      );
+
+    const owners =
+      uniqueTextValues(
+        rights
+          .filter(
+            (right) =>
+              right?.actor?.role !==
+              "declarant"
+          )
+          .map(
+            (right) => {
+              const name =
+                right
+                  ?.actor
+                  ?.name;
+
+              const relation =
+                right
+                  ?.actor
+                  ?.relation;
+
+              if (!name) {
+                return "";
+              }
+
+              return relation
+                ? `${name} (${relation})`
+                : name;
+            }
+          )
+      );
+
+    rows.push({
+      type:
+        displayType,
+
+      area,
+
+      location,
+
+      rights:
+        rightDescriptions,
+
+      owners,
+
+      acquisitionDate:
+        value.acquisition_date ??
+        null,
+
+      sourceDocumentId:
+        fact
+          .source_document_id ??
+        null,
+    });
+  }
+
+  if (!rows.length) {
+    return null;
+  }
+
+  const scopeLabel =
+    asksHousehold
+      ? "домогосподарства"
+      : asksFamily
+        ? "членів сім’ї"
+        : "декларанта";
+
+  let answer =
+    `Нерухомість ${scopeLabel} за ${year} рік:\n\n`;
+
+  answer +=
+    rows
+      .map(
+        (row, index) => {
+          const lines = [
+            `${index + 1}. **${row.type}**`,
+            `   - Площа: ${
+              row.area
+                ? `${row.area} м²`
+                : "не зазначено"
+            }`,
+            `   - Місцезнаходження: ${row.location}`,
+            `   - Вид права: ${
+              row.rights.length
+                ? row.rights.join("; ")
+                : "не зазначено"
+            }`,
+            `   - Дата набуття: ${
+              row.acquisitionDate ??
+              "не зазначено"
+            }`,
+          ];
+
+          if (row.owners.length) {
+            lines.push(
+              `   - Особа: ${row.owners.join("; ")}`
+            );
+          }
+
+          return lines.join(
+            "\n"
+          );
+        }
+      )
+      .join(
+        "\n\n"
+      );
+
+  const yearlyAnalytics =
+    (
+      context
+        ?.analytics
+        ?.yearly ??
+      []
+    ).find(
+      (item) =>
+        Number(item?.year) ===
+        year
+    );
+
+  const source =
+    analyticsSourceForYear(
+      context,
+      yearlyAnalytics
+    );
+
+  if (source?.url) {
+    answer +=
+      `\n\nДжерело: ` +
+      `[декларація НАЗК за ${year} рік](${source.url})`;
+  }
+
+  return answer;
+}
+
 export function buildDeterministicAnalyticsAnswer(
   question,
   context
@@ -1519,26 +2299,76 @@ export function buildModelContext(
     });
   }
 
+  const modelNeeds =
+    modelContextNeeds(
+      question
+    );
+
+  const scopedFacts =
+    scopeModelFactsForQuestion(
+      context.facts ?? [],
+      question
+    );
+
   const selectedFacts =
-    analyticsOnly
-      ? []
-      : selectModelFacts(
-          context.facts ?? [],
-          detectedYears,
-          8,
-        );
+    selectModelFacts(
+      scopedFacts,
+      detectedYears,
+      16,
+    );
 
-  const selectedRelations =
-    (context.relations ?? [])
-      .slice(0, 10);
+  /*
+   * Загальний бюджет model-visible
+   * контексту.
+   *
+   * Це не token counter, а жорстке
+   * обмеження JSON-розміру до
+   * відправлення локальній моделі.
+   */
+  const modelFacts =
+    selectWithinJsonBudget(
+      selectedFacts,
+      4300,
+      compactFact
+    );
 
-  const selectedMentions =
-    (context.mentions ?? [])
-      .slice(0, 6);
+  const modelRelations =
+    selectWithinJsonBudget(
+      (context.relations ?? [])
+        .slice(0, 10),
+      modelNeeds.relations
+        ? 1400
+        : 0,
+      compactRelationForModel
+    );
 
-  const selectedCrossChecks =
-    (context.cross_checks ?? [])
-      .slice(0, 6);
+  const modelMentions =
+    selectWithinJsonBudget(
+      (context.mentions ?? [])
+        .slice(0, 6),
+      modelNeeds.mentions
+        ? 1400
+        : 0,
+      compactMentionForModel
+    );
+
+  const modelCrossChecks =
+    selectWithinJsonBudget(
+      (context.cross_checks ?? [])
+        .slice(0, 6),
+      modelNeeds.crossChecks
+        ? 1200
+        : 0,
+      compactCrossCheckForModel
+    );
+
+  const modelSourceDocuments =
+    selectWithinJsonBudget(
+      (context.source_documents ?? [])
+        .slice(0, 6),
+      1200,
+      compactSourceDocumentForModel
+    );
 
   const incomeDetail =
     isIncomeDetailQuestion(
@@ -1554,21 +2384,20 @@ export function buildModelContext(
     ...modelBaseContext,
 
     facts:
-      selectedFacts.map(
-        compactFact,
-      ),
+      modelFacts,
 
     relations:
-      selectedRelations,
+      modelRelations,
 
     mentions:
-      selectedMentions,
+      modelMentions,
 
     cross_checks:
-      selectedCrossChecks,
+      modelCrossChecks,
 
     ...(
-      incomeDetail
+      incomeDetail ||
+      !modelNeeds.analytics
         ? {}
         : {
             calculated_summary:
@@ -1581,24 +2410,20 @@ export function buildModelContext(
 
     model_context_counts: {
       facts:
-        selectedFacts.length,
+        modelFacts.length,
 
       relations:
-        selectedRelations.length,
+        modelRelations.length,
 
       mentions:
-        selectedMentions.length,
+        modelMentions.length,
 
       cross_checks:
-        selectedCrossChecks.length,
+        modelCrossChecks.length,
     },
 
     source_documents:
-      (context.source_documents ?? [])
-        .slice(0, 6)
-        .map(
-          compactSourceDocumentForModel
-        ),
+      modelSourceDocuments,
   };
 }
 
@@ -1612,6 +2437,24 @@ const ANALYTICS_INSTRUCTIONS = `
 - Відповідай природною мовою: факти, суми, зміни, висновок і, за потреби, джерела.
 - Не додавай сторонні пояснення про інші типи активів або показників, якщо користувач про них не запитував.
 `.trim();
+
+export function questionNeedsSourceTool(
+  question
+) {
+  const q =
+    String(question ?? "")
+      .toLowerCase();
+
+  return (
+    /raw[_\s-]?payload/.test(q) ||
+    /повн\S*\s+(?:документ|декларац|джерел)/.test(q) ||
+    /первинн\S*\s+(?:документ|джерел)/.test(q) ||
+    /оригінал\S*\s+(?:документ|декларац|джерел)/.test(q) ||
+    /покажи\s+(?:сам\S*\s+)?(?:документ|декларац|джерел)/.test(q) ||
+    /що\s+саме\s+(?:вказано|зазначено)\s+в\s+(?:документ|декларац)/.test(q) ||
+    /витягни\s+з\s+(?:документ|декларац)/.test(q)
+  );
+}
 
 export const SOURCE_DOCUMENT_TOOL = {
   type: "function",
@@ -1839,6 +2682,12 @@ export function buildResponsesRequest({
       modelContext,
     );
 
+  const needsSourceTool =
+    !analyticsOnly &&
+    questionNeedsSourceTool(
+      normalizedContextQuestion
+    );
+
   return {
     model,
 
@@ -1855,9 +2704,8 @@ export function buildResponsesRequest({
       ].join("\n\n"),
 
     ...(
-      analyticsOnly
-        ? {}
-        : {
+      needsSourceTool
+        ? {
             tools: [
               SOURCE_DOCUMENT_TOOL,
             ],
@@ -1865,6 +2713,7 @@ export function buildResponsesRequest({
             tool_choice:
               "auto",
           }
+        : {}
     ),
 
     input: [
@@ -1943,9 +2792,16 @@ export async function createSubjectChatResponse({
       context
     );
 
+  const deterministicRealEstateAnswer =
+    buildDeterministicRealEstateAnswer(
+      contextualQuestion,
+      context
+    );
+
   const deterministicAnswer =
     deterministicAnalyticsAnswer ??
-    deterministicIncomeDetailAnswer;
+    deterministicIncomeDetailAnswer ??
+    deterministicRealEstateAnswer;
 
   if (deterministicAnswer) {
     return {

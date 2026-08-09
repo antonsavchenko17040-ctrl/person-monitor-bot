@@ -4,9 +4,12 @@ import assert from "node:assert/strict";
 import {
   buildDeterministicAnalyticsAnswer,
   buildDeterministicIncomeDetailAnswer,
+  buildDeterministicRealEstateAnswer,
+  buildModelContext,
   buildResponsesRequest,
   createSubjectChatResponse,
   normalizeChatHistory,
+  questionNeedsSourceTool,
   resolveContextualQuestion,
 } from "../src/chat-service.js";
 
@@ -156,6 +159,550 @@ test(
     assert.doesNotMatch(
       resolved,
       /дохід/i,
+    );
+  },
+);
+
+test(
+  "compacts and scopes declarant real estate model context",
+  () => {
+    const context =
+      buildModelContext(
+        {
+          subject: {
+            full_name:
+              "Тестова Особа",
+          },
+
+          detected_years:
+            [2025],
+
+          facts: [
+            {
+              fact_type:
+                "real_estate",
+
+              value_text:
+                "Квартира",
+
+              value_number:
+                100,
+
+              unit:
+                "m2",
+
+              metadata: {
+                declaration_year:
+                  2025,
+
+                VERY_LARGE_METADATA:
+                  "SHOULD_NOT_REACH_MODEL",
+              },
+
+              value_json: {
+                object_type:
+                  "Квартира",
+
+                total_area:
+                  100,
+
+                region:
+                  "Київ",
+
+                acquisition_date:
+                  "01.01.2020",
+
+                VERY_LARGE_RAW_FIELD:
+                  "SHOULD_NOT_REACH_MODEL",
+
+                rights: [
+                  {
+                    actor: {
+                      role:
+                        "declarant",
+
+                      name:
+                        "Тестова Особа",
+
+                      relation:
+                        "декларант",
+                    },
+
+                    ownership_type:
+                      "Власність",
+                  },
+                ],
+              },
+
+              source_document_id:
+                "doc-1",
+            },
+
+            {
+              fact_type:
+                "real_estate",
+
+              value_text:
+                "Будинок",
+
+              value_number:
+                200,
+
+              unit:
+                "m2",
+
+              metadata: {
+                declaration_year:
+                  2025,
+              },
+
+              value_json: {
+                object_type:
+                  "Будинок",
+
+                total_area:
+                  200,
+
+                region:
+                  "Київ",
+
+                rights: [
+                  {
+                    actor: {
+                      role:
+                        "family",
+
+                      name:
+                        "Член сім'ї",
+                    },
+
+                    ownership_type:
+                      "Власність",
+                  },
+                ],
+              },
+            },
+          ],
+
+          relations: [
+            {
+              relation_type:
+                "BIG_RELATION_SHOULD_NOT_APPEAR",
+            },
+          ],
+
+          mentions: [
+            {
+              title:
+                "BIG_MENTION_SHOULD_NOT_APPEAR",
+            },
+          ],
+
+          cross_checks: [
+            {
+              check_type:
+                "BIG_CROSSCHECK_SHOULD_NOT_APPEAR",
+            },
+          ],
+
+          source_documents: [
+            {
+              id:
+                "doc-1",
+
+              url:
+                "https://example.test/doc-1",
+            },
+          ],
+
+          analytics: null,
+
+          counts: {},
+        },
+
+        "Яку нерухомість декларант мав у 2025 році?"
+      );
+
+    const serialized =
+      JSON.stringify(
+        context
+      );
+
+    assert.equal(
+      context.facts.length,
+      1,
+    );
+
+    assert.equal(
+      context.facts[0]
+        .object_type,
+      "Квартира",
+    );
+
+    assert.equal(
+      context.facts[0]
+        .area,
+      100,
+    );
+
+    assert.equal(
+      context.facts[0]
+        .rights[0]
+        .role,
+      "declarant",
+    );
+
+    assert.doesNotMatch(
+      serialized,
+      /SHOULD_NOT_REACH_MODEL/,
+    );
+
+    assert.doesNotMatch(
+      serialized,
+      /BIG_RELATION_SHOULD_NOT_APPEAR/,
+    );
+
+    assert.doesNotMatch(
+      serialized,
+      /BIG_MENTION_SHOULD_NOT_APPEAR/,
+    );
+
+    assert.doesNotMatch(
+      serialized,
+      /BIG_CROSSCHECK_SHOULD_NOT_APPEAR/,
+    );
+  },
+);
+
+test(
+  "keeps compact relations for explicit relation question",
+  () => {
+    const context =
+      buildModelContext(
+        {
+          subject: {
+            full_name:
+              "Тестова Особа",
+          },
+
+          detected_years:
+            [],
+
+          facts: [],
+
+          relations: [
+            {
+              relation_type:
+                "employed_by",
+
+              relation_scope:
+                "direct",
+
+              from_name:
+                "Тестова Особа",
+
+              from_entity_type:
+                "person",
+
+              to_name:
+                "Тестова Організація",
+
+              to_entity_type:
+                "organization",
+
+              metadata: {
+                HUGE_INTERNAL:
+                  "DO_NOT_INCLUDE",
+              },
+            },
+          ],
+
+          mentions: [],
+          cross_checks: [],
+          source_documents: [],
+          analytics: null,
+          counts: {},
+        },
+
+        "Які зв'язки має ця особа?"
+      );
+
+    const serialized =
+      JSON.stringify(
+        context
+      );
+
+    assert.equal(
+      context.relations.length,
+      1,
+    );
+
+    assert.match(
+      serialized,
+      /employed_by/,
+    );
+
+    assert.match(
+      serialized,
+      /Тестова Організація/,
+    );
+
+    assert.doesNotMatch(
+      serialized,
+      /DO_NOT_INCLUDE/,
+    );
+  },
+);
+
+test(
+  "does not attach source tool to ordinary analytical question",
+  () => {
+    assert.equal(
+      questionNeedsSourceTool(
+        "Яку нерухомість декларант мав у 2025 році?"
+      ),
+      false,
+    );
+  },
+);
+
+test(
+  "attaches source tool when full source is explicitly requested",
+  () => {
+    assert.equal(
+      questionNeedsSourceTool(
+        "Покажи повний документ декларації за 2025 рік"
+      ),
+      true,
+    );
+  },
+);
+
+test(
+  "builds grounded deterministic declarant real estate list",
+  () => {
+    const answer =
+      buildDeterministicRealEstateAnswer(
+        "Яку нерухомість декларант мав у 2025 році?",
+        {
+          detected_years:
+            [2025],
+
+          facts: [
+            {
+              fact_type:
+                "real_estate",
+
+              value_text:
+                "Квартира",
+
+              value_number:
+                91.9,
+
+              unit:
+                "m2",
+
+              source_document_id:
+                "doc-2025",
+
+              metadata: {
+                declaration_year:
+                  2025,
+              },
+
+              value_json: {
+                object_type:
+                  "Квартира",
+
+                total_area:
+                  91.9,
+
+                country:
+                  "40",
+
+                region:
+                  null,
+
+                city:
+                  null,
+
+                acquisition_date:
+                  "20.11.2014",
+
+                rights: [
+                  {
+                    actor: {
+                      role:
+                        "declarant",
+                    },
+
+                    ownership_type:
+                      "Інше право користування",
+
+                    other_ownership:
+                      "Право користування на підставі юридичного права Лісхолд",
+                  },
+                ],
+              },
+            },
+
+            {
+              fact_type:
+                "real_estate",
+
+              value_text:
+                "Інше",
+
+              value_number:
+                4011.1,
+
+              unit:
+                "m2",
+
+              source_document_id:
+                "doc-2025",
+
+              metadata: {
+                declaration_year:
+                  2025,
+              },
+
+              value_json: {
+                object_type:
+                  "Інше",
+
+                other_object_type:
+                  "Державна дача",
+
+                total_area:
+                  4011.1,
+
+                region:
+                  "Київ",
+
+                acquisition_date:
+                  "01.07.2020",
+
+                rights: [
+                  {
+                    actor: {
+                      role:
+                        "declarant",
+                    },
+
+                    ownership_type:
+                      "Інше право користування",
+
+                    other_ownership:
+                      "проживання та користування",
+                  },
+                ],
+              },
+            },
+
+            {
+              fact_type:
+                "real_estate",
+
+              value_text:
+                "Будинок",
+
+              value_number:
+                200,
+
+              unit:
+                "m2",
+
+              metadata: {
+                declaration_year:
+                  2025,
+              },
+
+              value_json: {
+                object_type:
+                  "Будинок",
+
+                total_area:
+                  200,
+
+                region:
+                  "Київ",
+
+                rights: [
+                  {
+                    actor: {
+                      role:
+                        "family",
+
+                      name:
+                        "Член сім’ї",
+                    },
+
+                    ownership_type:
+                      "Власність",
+                  },
+                ],
+              },
+            },
+          ],
+
+          analytics: {
+            yearly: [
+              {
+                year:
+                  2025,
+
+                sourceDocumentId:
+                  "doc-2025",
+              },
+            ],
+          },
+
+          source_documents: [
+            {
+              id:
+                "doc-2025",
+
+              url:
+                "https://example.test/declaration-2025",
+            },
+          ],
+        }
+      );
+
+    assert.match(
+      answer,
+      /91,9 м²/,
+    );
+
+    assert.match(
+      answer,
+      /Місцезнаходження: не зазначено/,
+    );
+
+    assert.match(
+      answer,
+      /Лісхолд/,
+    );
+
+    assert.match(
+      answer,
+      /01\.07\.2020/,
+    );
+
+    assert.match(
+      answer,
+      /4[\s\u00a0\u202f]011,1 м²/,
+    );
+
+    assert.doesNotMatch(
+      answer,
+      /Член сім’ї/,
+    );
+
+    assert.doesNotMatch(
+      answer,
+      /country|Україна/,
     );
   },
 );
@@ -492,20 +1039,13 @@ test(
     );
 
     assert.equal(
-      Array.isArray(
-        request.tools,
-      ),
-      true,
-    );
-
-    assert.equal(
-      request.tools.length,
-      1,
+      request.tools,
+      undefined,
     );
 
     assert.equal(
       request.tool_choice,
-      "auto",
+      undefined,
     );
 
     assert.doesNotMatch(
