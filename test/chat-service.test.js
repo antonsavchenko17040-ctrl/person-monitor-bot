@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  buildDeterministicAnalyticsAnswer,
+  buildDeterministicIncomeDetailAnswer,
   buildResponsesRequest,
   createSubjectChatResponse,
   normalizeChatHistory,
@@ -245,6 +247,449 @@ test(
   },
 );
 
+
+test(
+  "uses calculated summary for single-year total income question",
+  () => {
+    const request =
+      buildResponsesRequest({
+        question:
+          "Який дохід у 2025 році?",
+
+        model:
+          "test-model",
+
+        context: {
+          detected_years:
+            [2025],
+
+          facts: [
+            {
+              fact_type:
+                "income",
+
+              value_text:
+                "PARTIAL_SINGLE_YEAR_FACT",
+            },
+          ],
+
+          analytics: {
+            yearly: [
+              {
+                year: 2025,
+
+                incomeDeclarantUah:
+                  7118608,
+              },
+            ],
+
+            transitions: [],
+          },
+
+          relations: [],
+          mentions: [],
+          cross_checks: [],
+          source_documents: [],
+        },
+      });
+
+    const serialized =
+      JSON.stringify(request);
+
+    assert.match(
+      serialized,
+      /7118608/,
+    );
+
+    assert.doesNotMatch(
+      serialized,
+      /PARTIAL_SINGLE_YEAR_FACT/,
+    );
+
+    assert.equal(
+      request.tools,
+      undefined,
+    );
+
+    assert.equal(
+      request.tool_choice,
+      undefined,
+    );
+
+    assert.doesNotMatch(
+      serialized,
+      /model_context_counts/,
+    );
+  },
+);
+
+test(
+  "keeps income facts for source-detail question",
+  () => {
+    const request =
+      buildResponsesRequest({
+        question:
+          "Які джерела доходу були у 2025 році?",
+
+        model:
+          "test-model",
+
+        context: {
+          detected_years:
+            [2025],
+
+          facts: [
+            {
+              fact_type:
+                "income",
+
+              value_text:
+                "DETAIL_INCOME_FACT",
+            },
+          ],
+
+          analytics: {
+            yearly: [
+              {
+                year: 2025,
+
+                incomeDeclarantUah:
+                  7118608,
+              },
+            ],
+
+            transitions: [],
+          },
+
+          relations: [],
+          mentions: [],
+          cross_checks: [],
+          source_documents: [],
+        },
+      });
+
+    const serialized =
+      JSON.stringify(request);
+
+    assert.match(
+      serialized,
+      /DETAIL_INCOME_FACT/,
+    );
+
+    assert.equal(
+      Array.isArray(
+        request.tools,
+      ),
+      true,
+    );
+
+    assert.equal(
+      request.tools.length,
+      1,
+    );
+
+    assert.equal(
+      request.tool_choice,
+      "auto",
+    );
+
+    assert.doesNotMatch(
+      serialized,
+      /calculated_summary/,
+    );
+  },
+);
+
+test(
+  "compacts model-visible source document metadata",
+  () => {
+    const request =
+      buildResponsesRequest({
+        question:
+          "Які джерела доходу були у 2025 році?",
+
+        model:
+          "test-model",
+
+        context: {
+          detected_years:
+            [2025],
+
+          facts: [
+            {
+              fact_type:
+                "income",
+
+              value_text:
+                "заробітна плата",
+            },
+          ],
+
+          analytics: {
+            yearly: [
+              {
+                year:
+                  2025,
+
+                incomeDeclarantUah:
+                  7118608,
+              },
+            ],
+
+            transitions: [],
+          },
+
+          relations: [],
+          mentions: [],
+          cross_checks: [],
+
+          source_documents: [
+            {
+              id:
+                "doc-1",
+
+              source_type:
+                "nazk-declaration",
+
+              source_name:
+                "НАЗК",
+
+              url:
+                "https://example.test/doc-1",
+
+              title:
+                "Декларація",
+
+              metadata: {
+                VERY_LARGE_METADATA:
+                  "MUST_NOT_REACH_MODEL",
+              },
+
+              raw_payload: {
+                PUBLIC_RAW_DATA:
+                  "MUST_NOT_REACH_MODEL_DIRECTLY",
+              },
+            },
+          ],
+        },
+      });
+
+    const serialized =
+      JSON.stringify(request);
+
+    assert.doesNotMatch(
+      serialized,
+      /VERY_LARGE_METADATA/,
+    );
+
+    assert.doesNotMatch(
+      serialized,
+      /PUBLIC_RAW_DATA/,
+    );
+
+    assert.match(
+      serialized,
+      /raw_payload_available/,
+    );
+
+    assert.match(
+      serialized,
+      /https:\/\/example\.test\/doc-1/,
+    );
+  },
+);
+
+test(
+  "builds deterministic declarant income source list",
+  () => {
+    const answer =
+      buildDeterministicIncomeDetailAnswer(
+        "Які джерела доходу були у 2025 році?",
+        {
+          detected_years:
+            [2025],
+
+          facts: [
+            {
+              fact_type:
+                "income",
+
+              value_text:
+                "Заробітна плата",
+
+              value_number:
+                336000,
+
+              unit:
+                "UAH",
+
+              metadata: {
+                declaration_year:
+                  2025,
+              },
+
+              value_json: {
+                amount:
+                  336000,
+
+                income_type:
+                  "Заробітна плата",
+
+                source:
+                  "ДЕРЖАВНЕ УПРАВЛІННЯ СПРАВАМИ",
+
+                person: {
+                  role:
+                    "declarant",
+                },
+              },
+            },
+
+            {
+              fact_type:
+                "income",
+
+              value_text:
+                "Проценти",
+
+              value_number:
+                89062,
+
+              unit:
+                "UAH",
+
+              metadata: {
+                declaration_year:
+                  2025,
+              },
+
+              value_json: {
+                amount:
+                  89062,
+
+                income_type:
+                  "Проценти",
+
+                source:
+                  "FAMILY BANK",
+
+                person: {
+                  role:
+                    "family_member",
+                },
+              },
+            },
+          ],
+
+          analytics: {
+            yearly: [
+              {
+                year:
+                  2025,
+
+                sourceDocumentId:
+                  "doc-2025",
+
+                incomeDeclarantUah:
+                  336000,
+              },
+            ],
+          },
+
+          source_documents: [
+            {
+              id:
+                "doc-2025",
+
+              url:
+                "https://example.test/declaration-2025",
+            },
+          ],
+        }
+      );
+
+    assert.match(
+      answer,
+      /336 000 UAH/,
+    );
+
+    assert.match(
+      answer,
+      /ДЕРЖАВНЕ УПРАВЛІННЯ СПРАВАМИ/,
+    );
+
+    assert.doesNotMatch(
+      answer,
+      /FAMILY BANK/,
+    );
+
+    assert.match(
+      answer,
+      /Загальна сума доходу декларанта/,
+    );
+
+    assert.match(
+      answer,
+      /declaration-2025/,
+    );
+  },
+);
+
+test(
+  "builds deterministic income answer without model speculation",
+  () => {
+    const answer =
+      buildDeterministicAnalyticsAnswer(
+        "Який дохід у 2025 році?",
+        {
+          detected_years:
+            [2025],
+
+          analytics: {
+            yearly: [
+              {
+                year:
+                  2025,
+
+                sourceDocumentId:
+                  "doc-2025",
+
+                incomeDeclarantUah:
+                  7118608,
+              },
+            ],
+
+            transitions: [],
+          },
+
+          source_documents: [
+            {
+              id:
+                "doc-2025",
+
+              url:
+                "https://example.test/declaration-2025",
+            },
+          ],
+        }
+      );
+
+    assert.match(
+      answer,
+      /7 118 608 грн/,
+    );
+
+    assert.match(
+      answer,
+      /declaration-2025/,
+    );
+
+    assert.doesNotMatch(
+      answer,
+      /витрат|підтримк|звичайному розумінні/i,
+    );
+  },
+);
 
 test(
   "calls Responses API through injected client",

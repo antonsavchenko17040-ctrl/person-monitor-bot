@@ -526,26 +526,662 @@ function shouldUseAnalyticsOnly(
   const hasIncome =
     /дохід|доход/.test(q);
 
-  const hasAggregateIntent =
-    /порівн|змін|різниц|відсот|процент|скільки|сума|загаль/.test(
-      q,
-    );
-
-  const hasEnoughYears =
-    years.length >= 2;
-
   const hasAnalytics =
     Array.isArray(
       context?.analytics?.yearly,
     ) &&
     context.analytics.yearly.length > 0;
 
+  const hasRequestedYear =
+    years.length >= 1;
+
+  const hasAggregateIntent =
+    /порівн|змін|різниц|відсот|процент|скільки|сума|загаль/.test(
+      q,
+    );
+
+  const hasSingleYearTotalIntent =
+    /який\s+(?:був\s+|становив\s+)?дохід/.test(
+      q,
+    );
+
+  const hasDetailIntent =
+    /джерел|вид|тип|категор|структур|розбив|від кого|хто плат|перелік/.test(
+      q,
+    );
+
   return Boolean(
     hasIncome &&
-    hasAggregateIntent &&
-    hasEnoughYears &&
-    hasAnalytics
+    hasAnalytics &&
+    hasRequestedYear &&
+    !hasDetailIntent &&
+    (
+      hasAggregateIntent ||
+      hasSingleYearTotalIntent
+    )
   );
+}
+
+function formatAnalyticsAmount(
+  value
+) {
+  const number =
+    Number(value);
+
+  if (!Number.isFinite(number)) {
+    return null;
+  }
+
+  return Math.round(number)
+    .toLocaleString("uk-UA")
+    .replace(
+      /[\u00a0\u202f]/g,
+      " "
+    );
+}
+
+function formatAnalyticsPercent(
+  value
+) {
+  const number =
+    Number(value);
+
+  if (!Number.isFinite(number)) {
+    return null;
+  }
+
+  return number
+    .toLocaleString(
+      "uk-UA",
+      {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      }
+    )
+    .replace(
+      /[\u00a0\u202f]/g,
+      " "
+    );
+}
+
+function analyticsSourceForYear(
+  context,
+  yearlyItem
+) {
+  const sourceDocumentId =
+    yearlyItem
+      ?.sourceDocumentId;
+
+  if (!sourceDocumentId) {
+    return null;
+  }
+
+  return (
+    context
+      ?.source_documents ??
+    []
+  ).find(
+    (document) =>
+      String(document.id) ===
+      String(sourceDocumentId)
+  ) ?? null;
+}
+
+function formatIncomeFactAmount(
+  value
+) {
+  const number =
+    Number(value);
+
+  if (!Number.isFinite(number)) {
+    return null;
+  }
+
+  return number
+    .toLocaleString(
+      "uk-UA",
+      {
+        maximumFractionDigits: 2,
+      }
+    )
+    .replace(
+      /[\u00a0\u202f]/g,
+      " "
+    );
+}
+
+function incomeFactOwnerRole(
+  fact
+) {
+  return (
+    fact?.value_json
+      ?.person
+      ?.role ??
+    null
+  );
+}
+
+export function buildDeterministicIncomeDetailAnswer(
+  question,
+  context
+) {
+  if (
+    !isIncomeDetailQuestion(
+      question
+    )
+  ) {
+    return null;
+  }
+
+  const q =
+    String(question ?? "")
+      .toLowerCase();
+
+  const asksFamily =
+    /сім['’]?ї|сімейн|членів сім|домогосподар|родин/.test(
+      q
+    );
+
+  /*
+   * Поки сімейний detail-запит
+   * залишаємо AI-шляху.
+   *
+   * Для звичайного питання
+   * про доходи суб'єкта
+   * використовуємо лише
+   * income-факти декларанта.
+   */
+  if (asksFamily) {
+    return null;
+  }
+
+  const years =
+    (
+      context
+        ?.detected_years ??
+      []
+    )
+      .map(Number)
+      .filter(
+        Number.isInteger
+      );
+
+  if (years.length !== 1) {
+    return null;
+  }
+
+  const year =
+    years[0];
+
+  const incomeFacts =
+    (
+      context?.facts ??
+      []
+    ).filter(
+      (fact) =>
+        fact?.fact_type ===
+          "income" &&
+        factYear(fact) ===
+          year &&
+        incomeFactOwnerRole(
+          fact
+        ) ===
+          "declarant"
+    );
+
+  if (!incomeFacts.length) {
+    return null;
+  }
+
+  const grouped =
+    new Map();
+
+  for (const fact of incomeFacts) {
+    const value =
+      fact.value_json ??
+      {};
+
+    const details =
+      value.source_details ??
+      {};
+
+    const type =
+      String(
+        value.income_type ??
+        fact.value_text ??
+        "Інший дохід"
+      ).trim();
+
+    const source =
+      String(
+        value.source ??
+        details.name ??
+        "Джерело не зазначено"
+      ).trim();
+
+    const currency =
+      String(
+        fact.unit ??
+        value.currency ??
+        "UAH"
+      ).trim();
+
+    const amount =
+      Number(
+        value.amount ??
+        fact.value_number
+      );
+
+    if (!Number.isFinite(amount)) {
+      continue;
+    }
+
+    const key =
+      JSON.stringify([
+        type,
+        source,
+        currency,
+      ]);
+
+    const current =
+      grouped.get(key) ?? {
+        type,
+        source,
+        currency,
+        amount: 0,
+      };
+
+    current.amount +=
+      amount;
+
+    grouped.set(
+      key,
+      current
+    );
+  }
+
+  const rows =
+    [
+      ...grouped.values(),
+    ].sort(
+      (a, b) =>
+        b.amount -
+        a.amount
+    );
+
+  if (!rows.length) {
+    return null;
+  }
+
+  const lines =
+    rows.map(
+      (row) => {
+        const amount =
+          formatIncomeFactAmount(
+            row.amount
+          );
+
+        return (
+          `- **${row.type}** — ` +
+          `${amount} ${row.currency}; ` +
+          `джерело: ${row.source}`
+        );
+      }
+    );
+
+  const uahTotal =
+    rows
+      .filter(
+        (row) =>
+          row.currency ===
+          "UAH"
+      )
+      .reduce(
+        (sum, row) =>
+          sum +
+          row.amount,
+        0
+      );
+
+  let answer =
+    `Джерела доходу декларанта за ${year} рік:\n\n` +
+    lines.join("\n");
+
+  if (
+    Number.isFinite(uahTotal) &&
+    uahTotal > 0
+  ) {
+    answer +=
+      `\n\n**Загальна сума доходу декларанта:** ` +
+      `${formatIncomeFactAmount(uahTotal)} грн.`;
+  }
+
+  const yearlyAnalytics =
+    (
+      context
+        ?.analytics
+        ?.yearly ??
+      []
+    ).find(
+      (item) =>
+        Number(item?.year) ===
+        year
+    );
+
+  const source =
+    analyticsSourceForYear(
+      context,
+      yearlyAnalytics
+    );
+
+  if (source?.url) {
+    answer +=
+      `\n\nДжерело: ` +
+      `[декларація НАЗК за ${year} рік](${source.url})`;
+  }
+
+  return answer;
+}
+
+export function buildDeterministicAnalyticsAnswer(
+  question,
+  context
+) {
+  if (
+    !shouldUseAnalyticsOnly(
+      question,
+      context
+    )
+  ) {
+    return null;
+  }
+
+  const q =
+    String(question ?? "")
+      .toLowerCase();
+
+  const requestedYears =
+    new Set(
+      (
+        context
+          ?.detected_years ??
+        []
+      )
+        .map(Number)
+        .filter(
+          Number.isInteger
+        )
+    );
+
+  const yearly =
+    (
+      context
+        ?.analytics
+        ?.yearly ??
+      []
+    )
+      .filter(
+        (item) =>
+          !requestedYears.size ||
+          requestedYears.has(
+            Number(item?.year)
+          )
+      )
+      .sort(
+        (a, b) =>
+          Number(a.year) -
+          Number(b.year)
+      );
+
+  if (!yearly.length) {
+    return null;
+  }
+
+  const wantsHousehold =
+    /сім['’]?ї|сімейн|домогосподар|родин/.test(
+      q
+    );
+
+  const incomeField =
+    wantsHousehold
+      ? "incomeHouseholdUah"
+      : "incomeDeclarantUah";
+
+  const incomeLabel =
+    wantsHousehold
+      ? "дохід домогосподарства"
+      : "дохід декларанта";
+
+  const usable =
+    yearly
+      .map(
+        (item) => ({
+          item,
+          amount:
+            formatAnalyticsAmount(
+              item?.[
+                incomeField
+              ]
+            ),
+        })
+      )
+      .filter(
+        (entry) =>
+          entry.amount != null
+      );
+
+  if (!usable.length) {
+    return null;
+  }
+
+  if (usable.length === 1) {
+    const {
+      item,
+      amount,
+    } = usable[0];
+
+    const year =
+      Number(item.year);
+
+    const source =
+      analyticsSourceForYear(
+        context,
+        item
+      );
+
+    let answer =
+      `За ${year} рік ${incomeLabel} становив **${amount} грн**.`;
+
+    if (source?.url) {
+      answer +=
+        `\n\nДжерело: [декларація НАЗК за ${year} рік](${source.url})`;
+    }
+
+    return answer;
+  }
+
+  const lines =
+    usable.map(
+      ({ item, amount }) =>
+        `- **${item.year}:** ${amount} грн`
+    );
+
+  let answer =
+    `${incomeLabel[0].toUpperCase()}${incomeLabel.slice(1)} за запитані роки:\n\n` +
+    lines.join("\n");
+
+  if (
+    !wantsHousehold &&
+    usable.length === 2
+  ) {
+    const fromYear =
+      Number(
+        usable[0].item.year
+      );
+
+    const toYear =
+      Number(
+        usable[1].item.year
+      );
+
+    const transition =
+      (
+        context
+          ?.analytics
+          ?.transitions ??
+        []
+      ).find(
+        (item) =>
+          Number(
+            item?.fromYear
+          ) === fromYear &&
+          Number(
+            item?.toYear
+          ) === toYear
+      );
+
+    const delta =
+      formatAnalyticsAmount(
+        transition
+          ?.incomeDelta
+      );
+
+    const percent =
+      formatAnalyticsPercent(
+        transition
+          ?.incomeDeltaPercent
+      );
+
+    if (delta != null) {
+      const deltaNumber =
+        Number(
+          transition
+            ?.incomeDelta
+        );
+
+      const sign =
+        deltaNumber > 0
+          ? "+"
+          : "";
+
+      answer +=
+        `\n\n**Зміна:** ${sign}${delta} грн`;
+
+      if (percent != null) {
+        const percentNumber =
+          Number(
+            transition
+              ?.incomeDeltaPercent
+          );
+
+        const percentSign =
+          percentNumber > 0
+            ? "+"
+            : "";
+
+        answer +=
+          ` (${percentSign}${percent}%)`;
+      }
+
+      answer += ".";
+    }
+  }
+
+  const sources =
+    usable
+      .map(
+        ({ item }) => ({
+          year:
+            Number(item.year),
+
+          source:
+            analyticsSourceForYear(
+              context,
+              item
+            ),
+        })
+      )
+      .filter(
+        ({ source }) =>
+          source?.url
+      );
+
+  if (sources.length) {
+    answer +=
+      "\n\nДжерела:";
+
+    for (
+      const {
+        year,
+        source,
+      }
+      of sources
+    ) {
+      answer +=
+        `\n- [декларація НАЗК за ${year} рік](${source.url})`;
+    }
+  }
+
+  return answer;
+}
+
+function isIncomeDetailQuestion(
+  question
+) {
+  const q =
+    String(question ?? "")
+      .toLowerCase();
+
+  return (
+    /дохід|доход/.test(q) &&
+    /джерел|вид|тип|категор|структур|розбив|від кого|хто плат|перелік/.test(
+      q
+    )
+  );
+}
+
+function compactSourceDocumentForModel(
+  document
+) {
+  if (!document) {
+    return null;
+  }
+
+  const rawPayload =
+    document.raw_payload;
+
+  return compactObject({
+    id:
+      document.id,
+
+    source_type:
+      document.source_type,
+
+    source_name:
+      document.source_name,
+
+    external_id:
+      document.external_id,
+
+    url:
+      document.url,
+
+    title:
+      document.title,
+
+    published_at:
+      document.published_at,
+
+    raw_payload_available:
+      rawPayload != null,
+
+    raw_payload_chars:
+      rawPayload == null
+        ? 0
+        : JSON.stringify(
+            rawPayload
+          ).length,
+  });
 }
 
 export function buildModelContext(
@@ -565,6 +1201,61 @@ export function buildModelContext(
       question,
       context,
     );
+
+  if (analyticsOnly) {
+    return compactObject({
+      subject:
+        compactObject({
+          full_name:
+            context.subject
+              ?.full_name,
+
+          organization:
+            context.subject
+              ?.organization,
+
+          position:
+            context.subject
+              ?.position,
+
+          city:
+            context.subject
+              ?.city,
+        }),
+
+      detected_years:
+        detectedYears,
+
+      calculated_summary:
+        compactAnalytics(
+          context.analytics,
+          detectedYears,
+        ),
+
+      source_documents:
+        (context.source_documents ?? [])
+          .slice(0, 2)
+          .map(
+            (document) =>
+              compactObject({
+                id:
+                  document.id,
+
+                title:
+                  document.title,
+
+                url:
+                  document.url,
+
+                source_type:
+                  document.source_type,
+
+                published_at:
+                  document.published_at,
+              }),
+          ),
+    });
+  }
 
   const selectedFacts =
     analyticsOnly
@@ -586,6 +1277,11 @@ export function buildModelContext(
   const selectedCrossChecks =
     (context.cross_checks ?? [])
       .slice(0, 6);
+
+  const incomeDetail =
+    isIncomeDetailQuestion(
+      question
+    );
 
   const {
     analytics: _analytics,
@@ -609,11 +1305,17 @@ export function buildModelContext(
     cross_checks:
       selectedCrossChecks,
 
-    calculated_summary:
-      compactAnalytics(
-        context.analytics,
-        detectedYears,
-      ),
+    ...(
+      incomeDetail
+        ? {}
+        : {
+            calculated_summary:
+              compactAnalytics(
+                context.analytics,
+                detectedYears,
+              ),
+          }
+    ),
 
     model_context_counts: {
       facts:
@@ -631,27 +1333,10 @@ export function buildModelContext(
 
     source_documents:
       (context.source_documents ?? [])
-        .slice(0, 8)
-        .map((document) => {
-          const {
-            raw_payload,
-            ...source
-          } = document;
-
-          return {
-            ...source,
-
-            raw_payload_available:
-              raw_payload != null,
-
-            raw_payload_chars:
-              raw_payload == null
-                ? 0
-                : JSON.stringify(
-                    raw_payload,
-                  ).length,
-          };
-        }),
+        .slice(0, 6)
+        .map(
+          compactSourceDocumentForModel
+        ),
   };
 }
 
@@ -866,6 +1551,12 @@ export function buildResponsesRequest({
   const normalizedHistory =
     normalizeChatHistory(history);
 
+  const analyticsOnly =
+    shouldUseAnalyticsOnly(
+      normalizedQuestion,
+      context,
+    );
+
   const modelContext =
     buildModelContext(
       context,
@@ -892,11 +1583,18 @@ export function buildResponsesRequest({
         ANALYTICS_INSTRUCTIONS,
       ].join("\n\n"),
 
-    tools: [
-      SOURCE_DOCUMENT_TOOL,
-    ],
+    ...(
+      analyticsOnly
+        ? {}
+        : {
+            tools: [
+              SOURCE_DOCUMENT_TOOL,
+            ],
 
-    tool_choice: "auto",
+            tool_choice:
+              "auto",
+          }
+    ),
 
     input: [
       ...normalizedHistory,
@@ -955,6 +1653,45 @@ export async function createSubjectChatResponse({
       message,
       retrievalOptions,
     );
+
+  const deterministicAnalyticsAnswer =
+    buildDeterministicAnalyticsAnswer(
+      message,
+      context
+    );
+
+  const deterministicIncomeDetailAnswer =
+    buildDeterministicIncomeDetailAnswer(
+      message,
+      context
+    );
+
+  const deterministicAnswer =
+    deterministicAnalyticsAnswer ??
+    deterministicIncomeDetailAnswer;
+
+  if (deterministicAnswer) {
+    return {
+      answer:
+        deterministicAnswer,
+
+      model:
+        deterministicAnalyticsAnswer
+          ? "person-monitor-analytics"
+          : "person-monitor-facts",
+
+      retrieval: {
+        version:
+          context.retrieval_version,
+
+        detected_years:
+          context.detected_years,
+
+        counts:
+          context.counts,
+      },
+    };
+  }
 
   const request =
     buildResponsesRequest({
