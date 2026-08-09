@@ -836,23 +836,23 @@ export function buildDeterministicIncomeDetailAnswer(
     String(question ?? "")
       .toLowerCase();
 
-  const asksFamily =
-    /сім['’]?ї|сімейн|членів сім|домогосподар|родин/.test(
+  const asksHousehold =
+    /домогосподар|сукупн|разом\s+(?:із|з)\s+сім/.test(
       q
     );
 
-  /*
-   * Поки сімейний detail-запит
-   * залишаємо AI-шляху.
-   *
-   * Для звичайного питання
-   * про доходи суб'єкта
-   * використовуємо лише
-   * income-факти декларанта.
-   */
-  if (asksFamily) {
-    return null;
-  }
+  const asksFamily =
+    !asksHousehold &&
+    /сім['’]?ї|сімейн|членів сім|родин|дружин|чоловік|дитин/.test(
+      q
+    );
+
+  const incomeScope =
+    asksHousehold
+      ? "household"
+      : asksFamily
+        ? "family"
+        : "declarant";
 
   const years =
     (
@@ -877,15 +877,43 @@ export function buildDeterministicIncomeDetailAnswer(
       context?.facts ??
       []
     ).filter(
-      (fact) =>
-        fact?.fact_type ===
-          "income" &&
-        factYear(fact) ===
-          year &&
-        incomeFactOwnerRole(
-          fact
-        ) ===
+      (fact) => {
+        if (
+          fact?.fact_type !==
+            "income" ||
+          factYear(fact) !==
+            year
+        ) {
+          return false;
+        }
+
+        const role =
+          incomeFactOwnerRole(
+            fact
+          );
+
+        if (
+          incomeScope ===
           "declarant"
+        ) {
+          return (
+            role ===
+            "declarant"
+          );
+        }
+
+        if (
+          incomeScope ===
+          "family"
+        ) {
+          return (
+            role !==
+            "declarant"
+          );
+        }
+
+        return true;
+      }
     );
 
   if (!incomeFacts.length) {
@@ -935,8 +963,30 @@ export function buildDeterministicIncomeDetailAnswer(
       continue;
     }
 
+    const person =
+      value.person ??
+      {};
+
+    const owner =
+      person.role ===
+        "declarant"
+        ? "Декларант"
+        : String(
+            person.name ??
+            "Член сім’ї"
+          ).trim();
+
+    const relation =
+      String(
+        person.relationship ??
+        person.relation ??
+        ""
+      ).trim();
+
     const key =
       JSON.stringify([
+        owner,
+        relation,
         type,
         source,
         currency,
@@ -944,6 +994,8 @@ export function buildDeterministicIncomeDetailAnswer(
 
     const current =
       grouped.get(key) ?? {
+        owner,
+        relation,
         type,
         source,
         currency,
@@ -980,8 +1032,23 @@ export function buildDeterministicIncomeDetailAnswer(
             row.amount
           );
 
+        const ownerPrefix =
+          incomeScope ===
+            "declarant"
+            ? ""
+            : (
+                `**${row.owner}` +
+                (
+                  row.relation
+                    ? ` (${row.relation})`
+                    : ""
+                ) +
+                `** · `
+              );
+
         return (
-          `- **${row.type}** — ` +
+          `- ${ownerPrefix}` +
+          `**${row.type}** — ` +
           `${amount} ${row.currency}; ` +
           `джерело: ${row.source}`
         );
@@ -1002,16 +1069,35 @@ export function buildDeterministicIncomeDetailAnswer(
         0
       );
 
+  const heading =
+    incomeScope ===
+      "family"
+      ? `Джерела доходу членів сім’ї за ${year} рік:`
+      : incomeScope ===
+          "household"
+        ? `Джерела доходу домогосподарства за ${year} рік:`
+        : `Джерела доходу декларанта за ${year} рік:`;
+
   let answer =
-    `Джерела доходу декларанта за ${year} рік:\n\n` +
+    heading +
+    "\n\n" +
     lines.join("\n");
 
   if (
     Number.isFinite(uahTotal) &&
     uahTotal > 0
   ) {
+    const totalLabel =
+      incomeScope ===
+        "family"
+        ? "Загальна сума доходу членів сім’ї"
+        : incomeScope ===
+            "household"
+          ? "Загальна сума доходу домогосподарства"
+          : "Загальна сума доходу декларанта";
+
     answer +=
-      `\n\n**Загальна сума доходу декларанта:** ` +
+      `\n\n**${totalLabel}:** ` +
       `${formatIncomeFactAmount(uahTotal)} грн.`;
   }
 
@@ -1097,19 +1183,22 @@ export function buildDeterministicAnalyticsAnswer(
   }
 
   const wantsHousehold =
-    /сім['’]?ї|сімейн|домогосподар|родин/.test(
+    /домогосподар|сукупн|разом\s+(?:із|з)\s+сім/.test(
       q
     );
 
-  const incomeField =
-    wantsHousehold
-      ? "incomeHouseholdUah"
-      : "incomeDeclarantUah";
+  const wantsFamily =
+    !wantsHousehold &&
+    /сім['’]?ї|сімейн|членів сім|родин|дружин|чоловік|дитин/.test(
+      q
+    );
 
   const incomeLabel =
     wantsHousehold
       ? "дохід домогосподарства"
-      : "дохід декларанта";
+      : wantsFamily
+        ? "дохід членів сім’ї"
+        : "дохід декларанта";
 
   const usable =
     yearly
@@ -1118,9 +1207,22 @@ export function buildDeterministicAnalyticsAnswer(
           item,
           amount:
             formatAnalyticsAmount(
-              item?.[
-                incomeField
-              ]
+              wantsHousehold
+                ? item
+                    ?.incomeHouseholdUah
+                : wantsFamily
+                  ? (
+                      Number(
+                        item
+                          ?.incomeHouseholdUah
+                      ) -
+                      Number(
+                        item
+                          ?.incomeDeclarantUah
+                      )
+                    )
+                  : item
+                      ?.incomeDeclarantUah
             ),
         })
       )
@@ -1171,6 +1273,7 @@ export function buildDeterministicAnalyticsAnswer(
 
   if (
     !wantsHousehold &&
+    !wantsFamily &&
     usable.length === 2
   ) {
     const fromYear =

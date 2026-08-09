@@ -615,6 +615,237 @@ test(
 );
 
 test(
+  "builds deterministic family income source list",
+  () => {
+    const answer =
+      buildDeterministicIncomeDetailAnswer(
+        "Які джерела доходу сім'ї були у 2025 році?",
+        {
+          detected_years:
+            [2025],
+
+          facts: [
+            {
+              fact_type:
+                "income",
+
+              value_text:
+                "Заробітна плата",
+
+              value_number:
+                336000,
+
+              unit:
+                "UAH",
+
+              metadata: {
+                declaration_year:
+                  2025,
+              },
+
+              value_json: {
+                amount:
+                  336000,
+
+                income_type:
+                  "Заробітна плата",
+
+                source:
+                  "DECLARANT SOURCE",
+
+                person: {
+                  role:
+                    "declarant",
+                },
+              },
+            },
+
+            {
+              fact_type:
+                "income",
+
+              value_text:
+                "Проценти",
+
+              value_number:
+                89062,
+
+              unit:
+                "UAH",
+
+              metadata: {
+                declaration_year:
+                  2025,
+              },
+
+              value_json: {
+                amount:
+                  89062,
+
+                income_type:
+                  "Проценти",
+
+                source:
+                  "FAMILY BANK",
+
+                person: {
+                  role:
+                    "family",
+
+                  name:
+                    "Тестова Особа",
+
+                  relationship:
+                    "дружина",
+                },
+              },
+            },
+          ],
+
+          analytics: {
+            yearly: [
+              {
+                year:
+                  2025,
+
+                sourceDocumentId:
+                  "doc-2025",
+
+                incomeDeclarantUah:
+                  336000,
+
+                incomeHouseholdUah:
+                  425062,
+              },
+            ],
+          },
+
+          source_documents: [
+            {
+              id:
+                "doc-2025",
+
+              url:
+                "https://example.test/declaration-2025",
+            },
+          ],
+        }
+      );
+
+    assert.match(
+      answer,
+      /Тестова Особа/,
+    );
+
+    assert.match(
+      answer,
+      /дружина/,
+    );
+
+    assert.match(
+      answer,
+      /89 062 UAH/,
+    );
+
+    assert.match(
+      answer,
+      /FAMILY BANK/,
+    );
+
+    assert.match(
+      answer,
+      /Загальна сума доходу членів сім’ї/,
+    );
+
+    assert.doesNotMatch(
+      answer,
+      /DECLARANT SOURCE/,
+    );
+  },
+);
+
+test(
+  "distinguishes family income from household income",
+  () => {
+    const family =
+      buildDeterministicAnalyticsAnswer(
+        "Який дохід сім'ї у 2025 році?",
+        {
+          detected_years:
+            [2025],
+
+          analytics: {
+            yearly: [
+              {
+                year:
+                  2025,
+
+                incomeDeclarantUah:
+                  7118608,
+
+                incomeHouseholdUah:
+                  15805828,
+              },
+            ],
+
+            transitions: [],
+          },
+
+          source_documents: [],
+        }
+      );
+
+    const household =
+      buildDeterministicAnalyticsAnswer(
+        "Який дохід домогосподарства у 2025 році?",
+        {
+          detected_years:
+            [2025],
+
+          analytics: {
+            yearly: [
+              {
+                year:
+                  2025,
+
+                incomeDeclarantUah:
+                  7118608,
+
+                incomeHouseholdUah:
+                  15805828,
+              },
+            ],
+
+            transitions: [],
+          },
+
+          source_documents: [],
+        }
+      );
+
+    assert.match(
+      family,
+      /8 687 220 грн/,
+    );
+
+    assert.match(
+      family,
+      /дохід членів сім’ї/,
+    );
+
+    assert.match(
+      household,
+      /15 805 828 грн/,
+    );
+
+    assert.match(
+      household,
+      /дохід домогосподарства/,
+    );
+  },
+);
+
+test(
   "builds deterministic declarant income source list",
   () => {
     const answer =
