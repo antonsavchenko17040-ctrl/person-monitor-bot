@@ -58,7 +58,7 @@ V1 summary формується детерміновано з analytics/findings
 ### declarations
 `available_years`, `items`.
 
-Кожен item: `year`, `source_document_id`, `document_guid`, `document_type`, `published_at`, `source_url`, `canonical`.
+Кожен item: `year`, `source_document_id`, `document_guid`, `registry`, `published_at`, `source_url`, `canonical`.
 
 Для одного року рівно одна декларація може бути `canonical: true`.
 

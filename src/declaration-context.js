@@ -1,5 +1,58 @@
 import { db } from "./db.js";
 
+export async function loadDeclarationYears(
+  entityId,
+  options = {},
+) {
+  const sql =
+    options.sql ?? db();
+
+  if (!entityId) {
+    return [];
+  }
+
+  const rows =
+    await sql`
+      SELECT DISTINCT
+        (
+          f.value_json
+          ->> 'declaration_year'
+        )::int AS year
+
+      FROM facts f
+
+      WHERE
+        f.entity_id =
+          ${entityId}
+
+        AND f.fact_type =
+          'declaration_submission'
+
+        AND (
+          f.value_json
+          ->> 'declaration_year'
+        ) ~ '^[0-9]{4}$'
+
+      ORDER BY year DESC
+    `;
+
+  return rows
+    .map(
+      (row) =>
+        row?.year,
+    )
+    .filter(
+      (value) =>
+        value !== null &&
+        value !== undefined &&
+        String(value).trim() !== "",
+    )
+    .map(Number)
+    .filter(
+      Number.isInteger,
+    );
+}
+
 export async function loadDeterministicDeclarationContext(
   entityId,
   year,
