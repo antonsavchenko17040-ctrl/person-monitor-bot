@@ -168,7 +168,25 @@ V1 relation types:
 ### analytics
 `metrics`, `transitions`, `findings`.
 
+Analytics version: `report-analytics-v1`.
+Rules version: `report-rules-v1`.
+
+Year metric містить: `year`, `income_declarant_uah`, `income_household_uah`, `cash_declarant_by_currency`, `cash_household_by_currency`, `real_estate_items`, `vehicle_items`, `relation_count`, `career`, `statement_type`, `evidence`.
+
+Transition формується лише між сусідніми роками та містить математичні дельти доходу, UAH cash, кількості записів нерухомості/транспорту і нормалізований career transition.
+
 Finding: `rule_code`, `domain`, `result`, `severity`, `score`, `message`, `details`, `statement_type`, `evidence`.
+
+V1 rules:
+- `PM_CASH_UAH_GROWTH_RATIO_V1`
+- `PM_INCOME_CHANGE_50_V1`
+- `PM_REAL_ESTATE_COUNT_CHANGE_V1`
+- `PM_VEHICLE_COUNT_CHANGE_V1`
+- `PM_CAREER_CHANGE_V1`
+
+Валютні значення не змішуються і не конвертуються. Cash rule використовує лише UAH.
+
+Кількість real estate / vehicle означає кількість канонічних source records відповідного року, а не доведену кількість унікальних фізичних об’єктів між роками.
 
 `heuristic_signal` не є доказом правопорушення.
 

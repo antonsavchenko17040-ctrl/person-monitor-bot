@@ -41,6 +41,12 @@ import {
 export const REPORT_MODEL_SCHEMA_VERSION =
   "report-model-v1";
 
+export const REPORT_ANALYTICS_VERSION =
+  "report-analytics-v1";
+
+export const REPORT_RULES_VERSION =
+  "report-rules-v1";
+
 export const REPORT_MODEL_LIMITATIONS = [
   "Відкриті джерела можуть бути неповними.",
   "Відсутність запису не доводить відсутність факту.",
@@ -2287,6 +2293,7 @@ function isReportPersonType(value) {
 
 export function buildThirdPartyPeopleSection({
   relations = null,
+  analytics = null,
 } = {}) {
   const items = [];
 
@@ -2408,6 +2415,726 @@ export function buildThirdPartyPeopleSection({
 }
 
 
+function reportNumber(value) {
+  const result =
+    Number(value);
+
+  return Number.isFinite(result)
+    ? result
+    : 0;
+}
+
+
+function reportRound(
+  value,
+  digits = 2,
+) {
+  const power =
+    10 ** digits;
+
+  return (
+    Math.round(
+      reportNumber(value) *
+      power,
+    ) / power
+  );
+}
+
+
+function reportPercentDelta(
+  previous,
+  current,
+) {
+  const before =
+    reportNumber(previous);
+
+  const after =
+    reportNumber(current);
+
+  if (before === 0) {
+    return null;
+  }
+
+  return reportRound(
+    (
+      (
+        after -
+        before
+      ) /
+      Math.abs(before)
+    ) *
+    100,
+  );
+}
+
+
+function reportEvidence(
+  ...groups
+) {
+  const result = [];
+  const seen = new Set();
+
+  for (
+    const item of
+    groups
+      .flat(Infinity)
+      .filter(Boolean)
+  ) {
+    const normalized = {
+      source_document_id:
+        item.source_document_id ??
+        null,
+
+      provider:
+        item.provider ??
+        null,
+
+      url:
+        item.url ??
+        null,
+
+      observed_at:
+        item.observed_at ??
+        null,
+
+      statement_type:
+        item.statement_type ??
+        "source_fact",
+    };
+
+    const key =
+      JSON.stringify(
+        normalized,
+      );
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    result.push(normalized);
+  }
+
+  return result;
+}
+
+
+export function buildReportAnalyticsSection({
+  availableYears = [],
+  income = null,
+  cashAssets = null,
+  realEstate = null,
+  vehicles = null,
+  career = null,
+  relations = null,
+} = {}) {
+  const years =
+    normalizeYears(
+      availableYears,
+    ).sort(
+      (a, b) =>
+        a - b,
+    );
+
+  const byYear =
+    (rows) =>
+      new Map(
+        (
+          Array.isArray(rows)
+            ? rows
+            : []
+        ).map(
+          (row) => [
+            Number(row.year),
+            row,
+          ],
+        ),
+      );
+
+  const incomeByYear =
+    byYear(
+      income?.yearly,
+    );
+
+  const cashByYear =
+    byYear(
+      cashAssets?.yearly,
+    );
+
+  const realEstateByYear =
+    byYear(
+      realEstate?.yearly,
+    );
+
+  const vehicleByYear =
+    byYear(
+      vehicles?.yearly,
+    );
+
+  const careerByYear =
+    byYear(
+      career?.items,
+    );
+
+  const relationItems =
+    Array.isArray(
+      relations?.items,
+    )
+      ? relations.items
+      : [];
+
+  const careerTransitions =
+    Array.isArray(
+      career?.transitions,
+    )
+      ? career.transitions
+      : [];
+
+  const metrics =
+    years.map(
+      (year) => {
+        const incomeRow =
+          incomeByYear.get(year);
+
+        const cashRow =
+          cashByYear.get(year);
+
+        const realEstateRow =
+          realEstateByYear.get(year);
+
+        const vehicleRow =
+          vehicleByYear.get(year);
+
+        const careerRow =
+          careerByYear.get(year);
+
+        const yearRelations =
+          relationItems.filter(
+            (item) =>
+              Number(
+                item.year,
+              ) === year,
+          );
+
+        return {
+          year,
+
+          income_declarant_uah:
+            reportNumber(
+              incomeRow
+                ?.declarant_uah,
+            ),
+
+          income_household_uah:
+            reportNumber(
+              incomeRow
+                ?.household_uah,
+            ),
+
+          cash_declarant_by_currency: {
+            ...(
+              cashRow
+                ?.declarant_by_currency ??
+              {}
+            ),
+          },
+
+          cash_household_by_currency: {
+            ...(
+              cashRow
+                ?.household_by_currency ??
+              {}
+            ),
+          },
+
+          real_estate_items:
+            realEstateRow
+              ?.items
+              ?.length ?? 0,
+
+          vehicle_items:
+            vehicleRow
+              ?.items
+              ?.length ?? 0,
+
+          relation_count:
+            yearRelations.length,
+
+          career: {
+            organization:
+              careerRow
+                ?.organization ??
+              null,
+
+            position:
+              careerRow
+                ?.position ??
+              null,
+          },
+
+          statement_type:
+            "calculation",
+
+          evidence:
+            reportEvidence(
+              incomeRow?.evidence,
+              cashRow?.evidence,
+
+              (
+                realEstateRow
+                  ?.items ??
+                []
+              ).map(
+                (item) =>
+                  item.evidence,
+              ),
+
+              (
+                vehicleRow
+                  ?.items ??
+                []
+              ).map(
+                (item) =>
+                  item.evidence,
+              ),
+
+              careerRow?.evidence,
+
+              yearRelations.map(
+                (item) =>
+                  item.evidence,
+              ),
+            ),
+        };
+      },
+    );
+
+  const transitions = [];
+  const findings = [];
+
+  for (
+    let index = 1;
+    index < metrics.length;
+    index += 1
+  ) {
+    const previous =
+      metrics[index - 1];
+
+    const current =
+      metrics[index];
+
+    const yearGap =
+      current.year -
+      previous.year;
+
+    if (yearGap !== 1) {
+      continue;
+    }
+
+    const careerTransition =
+      careerTransitions.find(
+        (item) =>
+          Number(
+            item.from_year,
+          ) ===
+            previous.year &&
+          Number(
+            item.to_year,
+          ) ===
+            current.year,
+      );
+
+    const incomeDelta =
+      reportRound(
+        current
+          .income_declarant_uah -
+        previous
+          .income_declarant_uah,
+      );
+
+    const incomeDeltaPercent =
+      reportPercentDelta(
+        previous
+          .income_declarant_uah,
+
+        current
+          .income_declarant_uah,
+      );
+
+    const previousCashUah =
+      reportNumber(
+        previous
+          .cash_declarant_by_currency
+          ?.UAH,
+      );
+
+    const currentCashUah =
+      reportNumber(
+        current
+          .cash_declarant_by_currency
+          ?.UAH,
+      );
+
+    const cashUahDelta =
+      reportRound(
+        currentCashUah -
+        previousCashUah,
+      );
+
+    const realEstateDelta =
+      current
+        .real_estate_items -
+      previous
+        .real_estate_items;
+
+    const vehicleDelta =
+      current
+        .vehicle_items -
+      previous
+        .vehicle_items;
+
+    const evidence =
+      reportEvidence(
+        previous.evidence,
+        current.evidence,
+      );
+
+    const transition = {
+      from_year:
+        previous.year,
+
+      to_year:
+        current.year,
+
+      year_gap:
+        yearGap,
+
+      income_delta_uah:
+        incomeDelta,
+
+      income_delta_percent:
+        incomeDeltaPercent,
+
+      cash_uah_delta:
+        cashUahDelta,
+
+      real_estate_count_delta:
+        realEstateDelta,
+
+      vehicle_count_delta:
+        vehicleDelta,
+
+      organization_changed:
+        careerTransition
+          ?.organization_changed ??
+        null,
+
+      position_changed:
+        careerTransition
+          ?.position_changed ??
+        null,
+
+      statement_type:
+        "calculation",
+
+      evidence,
+    };
+
+    transitions.push(
+      transition,
+    );
+
+    if (
+      cashUahDelta > 0 &&
+      current
+        .income_declarant_uah >
+        0
+    ) {
+      const ratio =
+        cashUahDelta /
+        current
+          .income_declarant_uah;
+
+      if (ratio >= 0.75) {
+        findings.push({
+          rule_code:
+            "PM_CASH_UAH_GROWTH_RATIO_V1",
+
+          domain:
+            "financial_dynamics",
+
+          result:
+            "review",
+
+          severity:
+            "review",
+
+          score:
+            Math.min(
+              100,
+              Math.round(
+                50 +
+                ratio * 25,
+              ),
+            ),
+
+          message:
+            "Приріст задекларованих грошових активів у UAH є значним порівняно із задекларованим доходом за цей рік.",
+
+          details: {
+            from_year:
+              previous.year,
+
+            to_year:
+              current.year,
+
+            cash_uah_delta:
+              cashUahDelta,
+
+            current_income_uah:
+              current
+                .income_declarant_uah,
+
+            ratio:
+              reportRound(
+                ratio,
+                4,
+              ),
+          },
+
+          statement_type:
+            "heuristic_signal",
+
+          evidence,
+        });
+      }
+    }
+
+    if (
+      incomeDeltaPercent !==
+        null &&
+      Math.abs(
+        incomeDeltaPercent,
+      ) >= 50
+    ) {
+      findings.push({
+        rule_code:
+          "PM_INCOME_CHANGE_50_V1",
+
+        domain:
+          "financial_dynamics",
+
+        result:
+          "change",
+
+        severity:
+          "info",
+
+        score:
+          Math.min(
+            100,
+            Math.round(
+              50 +
+              Math.abs(
+                incomeDeltaPercent,
+              ) / 2,
+            ),
+          ),
+
+        message:
+          "Задекларований дохід декларанта змінився на 50% або більше порівняно з попереднім роком.",
+
+        details: {
+          from_year:
+            previous.year,
+
+          to_year:
+            current.year,
+
+          income_delta_uah:
+            incomeDelta,
+
+          income_delta_percent:
+            incomeDeltaPercent,
+        },
+
+        statement_type:
+          "heuristic_signal",
+
+        evidence,
+      });
+    }
+
+    if (
+      realEstateDelta !== 0
+    ) {
+      findings.push({
+        rule_code:
+          "PM_REAL_ESTATE_COUNT_CHANGE_V1",
+
+        domain:
+          "asset_dynamics",
+
+        result:
+          "change",
+
+        severity:
+          "info",
+
+        score:
+          Math.min(
+            100,
+            50 +
+            Math.abs(
+              realEstateDelta,
+            ) * 10,
+          ),
+
+        message:
+          "Змінилася кількість задекларованих записів нерухомості.",
+
+        details: {
+          from_year:
+            previous.year,
+
+          to_year:
+            current.year,
+
+          count_delta:
+            realEstateDelta,
+
+          previous_count:
+            previous
+              .real_estate_items,
+
+          current_count:
+            current
+              .real_estate_items,
+        },
+
+        statement_type:
+          "heuristic_signal",
+
+        evidence,
+      });
+    }
+
+    if (
+      vehicleDelta !== 0
+    ) {
+      findings.push({
+        rule_code:
+          "PM_VEHICLE_COUNT_CHANGE_V1",
+
+        domain:
+          "asset_dynamics",
+
+        result:
+          "change",
+
+        severity:
+          "info",
+
+        score:
+          Math.min(
+            100,
+            50 +
+            Math.abs(
+              vehicleDelta,
+            ) * 10,
+          ),
+
+        message:
+          "Змінилася кількість задекларованих записів транспортних засобів.",
+
+        details: {
+          from_year:
+            previous.year,
+
+          to_year:
+            current.year,
+
+          count_delta:
+            vehicleDelta,
+
+          previous_count:
+            previous
+              .vehicle_items,
+
+          current_count:
+            current
+              .vehicle_items,
+        },
+
+        statement_type:
+          "heuristic_signal",
+
+        evidence,
+      });
+    }
+
+    if (
+      careerTransition &&
+      (
+        careerTransition
+          .organization_changed ===
+          true ||
+        careerTransition
+          .position_changed ===
+          true
+      )
+    ) {
+      findings.push({
+        rule_code:
+          "PM_CAREER_CHANGE_V1",
+
+        domain:
+          "career_dynamics",
+
+        result:
+          "change",
+
+        severity:
+          "info",
+
+        score:
+          50,
+
+        message:
+          "Між сусідніми деклараційними роками зафіксовано зміну посади або місця роботи.",
+
+        details: {
+          from_year:
+            previous.year,
+
+          to_year:
+            current.year,
+
+          organization_changed:
+            careerTransition
+              .organization_changed,
+
+          position_changed:
+            careerTransition
+              .position_changed,
+        },
+
+        statement_type:
+          "heuristic_signal",
+
+        evidence,
+      });
+    }
+  }
+
+  return {
+    metrics,
+    transitions,
+    findings,
+  };
+}
+
+
 export function buildSubjectReportModelPayload({
   subject,
   generatedAt = new Date(),
@@ -2519,6 +3246,29 @@ export function buildSubjectReportModelPayload({
         : {},
   };
 
+  const analyticsSection = {
+    metrics:
+      Array.isArray(
+        analytics?.metrics,
+      )
+        ? analytics.metrics
+        : [],
+
+    transitions:
+      Array.isArray(
+        analytics?.transitions,
+      )
+        ? analytics.transitions
+        : [],
+
+    findings:
+      Array.isArray(
+        analytics?.findings,
+      )
+        ? analytics.findings
+        : [],
+  };
+
   return {
     schema_version:
       REPORT_MODEL_SCHEMA_VERSION,
@@ -2531,7 +3281,8 @@ export function buildSubjectReportModelPayload({
       schema_version:
         REPORT_MODEL_SCHEMA_VERSION,
 
-      analytics_version: null,
+      analytics_version:
+        REPORT_ANALYTICS_VERSION,
 
       period: {
         from_year:
@@ -2591,11 +3342,8 @@ export function buildSubjectReportModelPayload({
     relations:
       relationsSection,
 
-    analytics: {
-      metrics: [],
-      transitions: [],
-      findings: [],
-    },
+    analytics:
+      analyticsSection,
 
     mentions: {
       total: null,
@@ -2610,8 +3358,11 @@ export function buildSubjectReportModelPayload({
       report_model_version:
         REPORT_MODEL_SCHEMA_VERSION,
 
-      analytics_version: null,
-      rules_version: null,
+      analytics_version:
+        REPORT_ANALYTICS_VERSION,
+
+      rules_version:
+        REPORT_RULES_VERSION,
 
       notes: [],
 
@@ -2921,6 +3672,17 @@ export async function buildSubjectReportModel(
     ),
   };
 
+  const reportAnalytics =
+    buildReportAnalyticsSection({
+      availableYears,
+      income,
+      cashAssets,
+      realEstate,
+      vehicles,
+      career,
+      relations,
+    });
+
   return buildSubjectReportModelPayload({
     subject,
 
@@ -2939,5 +3701,8 @@ export async function buildSubjectReportModel(
       relatedPeopleCombined,
 
     relations,
+
+    analytics:
+      reportAnalytics,
   });
 }
