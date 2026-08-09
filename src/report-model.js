@@ -24,6 +24,11 @@ import {
   loadDeterministicEmploymentContext,
 } from "./employment-context.js";
 
+
+import {
+  loadDeterministicFamilyContext,
+} from "./family-context.js";
+
 import {
   getSubject,
 } from "./store.js";
@@ -1788,6 +1793,169 @@ export function buildCareerSection({
 }
 
 
+export function buildRelatedPeopleSection({
+  familyContexts = [],
+} = {}) {
+  const items = [];
+
+  for (
+    const context of
+    (
+      Array.isArray(familyContexts)
+        ? familyContexts
+        : []
+    ).filter(Boolean)
+  ) {
+    const detectedYear =
+      normalizeYears(
+        context?.detected_years,
+      )[0] ?? null;
+
+    const canonicalSourceId =
+      context?.analytics?.yearly
+        ?.[0]?.sourceDocumentId ??
+      null;
+
+    const sourceDocument =
+      (
+        context?.source_documents ??
+        []
+      ).find(
+        (item) =>
+          String(item?.id ?? "") ===
+          String(canonicalSourceId ?? ""),
+      );
+
+    const sourceUrl =
+      cleanValue(
+        sourceDocument?.url,
+      );
+
+    for (
+      const fact of
+      context?.facts ?? []
+    ) {
+      if (
+        fact?.fact_type !==
+        "family_member"
+      ) {
+        continue;
+      }
+
+      const value =
+        fact.value_json ?? {};
+
+      const year =
+        Number(
+          fact?.metadata
+            ?.declaration_year ??
+          detectedYear,
+        );
+
+      if (!Number.isInteger(year)) {
+        continue;
+      }
+
+      const fullName =
+        cleanValue(
+          value.name ??
+          fact.value_text,
+        );
+
+      if (!fullName) {
+        continue;
+      }
+
+      const sourceDocumentId =
+        fact.source_document_id ??
+        canonicalSourceId ??
+        null;
+
+      items.push({
+        entity_id:
+          null,
+
+        full_name:
+          fullName,
+
+        relation_type:
+          "family_member",
+
+        role:
+          "family",
+
+        relationship:
+          cleanValue(
+            value.relation,
+          ),
+
+        years: [
+          year,
+        ],
+
+        identity_status:
+          "source_observation",
+
+        review_required:
+          true,
+
+        source_identity: {
+          source_system:
+            "nazk",
+
+          source_person_ref:
+            cleanValue(
+              value.person_ref,
+            ),
+        },
+
+        statement_type:
+          "source_fact",
+
+        evidence:
+          sourceDocumentId !== null ||
+          sourceUrl
+            ? [{
+                source_document_id:
+                  sourceDocumentId,
+                provider:
+                  null,
+                url:
+                  sourceUrl,
+                observed_at:
+                  null,
+                statement_type:
+                  "source_fact",
+              }]
+            : [],
+      });
+    }
+  }
+
+  items.sort(
+    (a, b) =>
+      Number(
+        b.years?.[0] ?? 0,
+      ) -
+      Number(
+        a.years?.[0] ?? 0,
+      ) ||
+      String(
+        a.full_name ?? "",
+      ).localeCompare(
+        String(
+          b.full_name ?? "",
+        ),
+        "uk",
+      ),
+  );
+
+  return {
+    items,
+  };
+}
+
+
 export function buildSubjectReportModelPayload({
   subject,
   generatedAt = new Date(),
@@ -1797,6 +1965,7 @@ export function buildSubjectReportModelPayload({
   realEstate = null,
   vehicles = null,
   career = null,
+  relatedPeople = null,
 } = {}) {
   if (!subject) {
     return null;
@@ -1872,6 +2041,15 @@ export function buildSubjectReportModelPayload({
         : [],
   };
 
+  const relatedPeopleSection = {
+    items:
+      Array.isArray(
+        relatedPeople?.items,
+      )
+        ? relatedPeople.items
+        : [],
+  };
+
   return {
     schema_version:
       REPORT_MODEL_SCHEMA_VERSION,
@@ -1926,9 +2104,8 @@ export function buildSubjectReportModelPayload({
     career:
       careerSection,
 
-    related_people: {
-      items: [],
-    },
+    related_people:
+      relatedPeopleSection,
 
     income:
       incomeSection,
@@ -2055,6 +2232,30 @@ export async function buildSubjectReportModel(
     buildCareerSection({
       contexts:
         employmentContexts,
+    });
+
+  const familyContextLoader =
+    options.familyContextLoader ??
+    loadDeterministicFamilyContext;
+
+  const familyOptions =
+    options.familyOptions ?? {};
+
+  const familyContexts =
+    await Promise.all(
+      availableYears.map(
+        (year) =>
+          familyContextLoader(
+            subject.entity_id,
+            year,
+            familyOptions,
+          ),
+      ),
+    );
+
+  const relatedPeople =
+    buildRelatedPeopleSection({
+      familyContexts,
     });
 
   const singleYearIncomeLoader =
@@ -2199,5 +2400,6 @@ export async function buildSubjectReportModel(
     realEstate,
     vehicles,
     career,
+    relatedPeople,
   });
 }

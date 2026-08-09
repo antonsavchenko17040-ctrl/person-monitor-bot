@@ -76,9 +76,15 @@ V1 формує transition лише між сусідніми роками. По
 ### related_people
 `items`.
 
-Person item: `entity_id`, `full_name`, `relation_type`, `role`, `years`, `identity_status`, `review_required`, `evidence`.
+Person item: `entity_id`, `full_name`, `relation_type`, `role`, `relationship`, `years`, `identity_status`, `review_required`, `source_identity`, `statement_type`, `evidence`.
 
 V1 relation types: `family_member`, `third_party_rightsholder`.
+
+Family facts із декларації спочатку зберігаються як `source_observation`. `entity_id` залишається `null`, доки окремий identity layer не підтвердить конкретну сутність.
+
+`source_identity.source_person_ref` є source-specific tracking signal і не вважається глобальним ідентифікатором людини.
+
+Report Model не об’єднує family observations між роками лише за ПІБ, родинним зв’язком або `source_person_ref`.
 
 ### income
 `yearly`, `sources`.
