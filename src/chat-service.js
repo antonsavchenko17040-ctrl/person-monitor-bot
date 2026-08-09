@@ -5048,6 +5048,87 @@ export async function createSubjectChatResponse({
     }
   }
 
+  /*
+   * Fast-path для поточної картки
+   * суб'єкта Person Monitor.
+   *
+   * Працює лише без конкретного року,
+   * щоб не підміняти історичні дані
+   * поточним профілем.
+   */
+  if (
+    isSubjectProfileQuestion(
+      contextualQuestion
+    )
+  ) {
+    const profileYears =
+      [
+        ...new Set(
+          String(
+            contextualQuestion ??
+            ""
+          ).match(
+            /\b(?:19|20)\d{2}\b/g
+          ) ?? []
+        ),
+      ]
+        .map(Number)
+        .filter(
+          Number.isInteger
+        );
+
+    if (
+      profileYears.length === 0
+    ) {
+      const subject =
+        await subjectLoader(
+          subjectId
+        );
+
+      if (!subject) {
+        throw new Error(
+          "SUBJECT_NOT_FOUND",
+        );
+      }
+
+      const profileAnswer =
+        buildDeterministicSubjectProfileAnswer(
+          contextualQuestion,
+          {
+            subject,
+          },
+          {
+            detected_years: [],
+          }
+        );
+
+      if (profileAnswer) {
+        return {
+          answer:
+            profileAnswer,
+
+          model:
+            "person-monitor-facts",
+
+          retrieval: {
+            version:
+              "deterministic-subject-profile-v1",
+
+            detected_years: [],
+
+            counts: {
+              facts: 0,
+              source_documents: 0,
+              mentions: 0,
+              relations: 0,
+              cross_checks: 0,
+            },
+          },
+        };
+      }
+    }
+  }
+
   const knowledge =
     await knowledgeLoader(
       subjectId,
