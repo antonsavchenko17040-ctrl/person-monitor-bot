@@ -378,3 +378,87 @@ test(
     );
   },
 );
+
+test(
+  "resolves declarant as income source from incomeSource actor reference",
+  () => {
+    const payload = {
+      declaration_year: 2019,
+
+      data: {
+        step_1: {
+          data: {
+            firstname: "Володимир",
+            lastname: "Зеленський",
+            middlename: "Олександрович",
+          },
+        },
+
+        step_11: {
+          data: [
+            {
+              iteration:
+                "entrepreneur-income",
+
+              objectType:
+                "Дохід від зайняття підприємницькою діяльністю",
+
+              sizeIncome:
+                "1053250",
+
+              incomeSource: "1",
+
+              person_who_care: [
+                {
+                  person: "1",
+                },
+              ],
+            },
+          ],
+        },
+      },
+    };
+
+    const facts =
+      extractNazkFacts(
+        payload,
+        {
+          documentGuid:
+            "self-source-doc",
+        },
+      );
+
+    const income =
+      facts.find(
+        (fact) =>
+          fact.factType ===
+          "income",
+      );
+
+    assert.equal(
+      income.valueJson
+        .person.role,
+      "declarant",
+    );
+
+    assert.equal(
+      income.valueJson
+        .source,
+      "Зеленський Володимир Олександрович",
+    );
+
+    assert.equal(
+      income.valueJson
+        .source_details
+        .source_type,
+      "person",
+    );
+
+    assert.equal(
+      income.valueJson
+        .source_details
+        .person_name,
+      "Зеленський Володимир Олександрович",
+    );
+  },
+);

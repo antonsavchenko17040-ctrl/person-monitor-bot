@@ -71,9 +71,49 @@ function incomeSourceItem(item) {
   return nested ?? item ?? {};
 }
 
-function sourceName(item) {
+function incomeSourceActor(
+  item,
+  actors,
+) {
+  if (!(actors instanceof Map)) {
+    return null;
+  }
+
   const source =
     incomeSourceItem(item);
+
+  const ref =
+    clean(source?.incomeSource);
+
+  if (!ref) {
+    return null;
+  }
+
+  const actor =
+    actors.get(ref);
+
+  if (
+    actor?.role !== "declarant" &&
+    actor?.role !== "family"
+  ) {
+    return null;
+  }
+
+  return actor;
+}
+
+function sourceName(
+  item,
+  actors = null,
+) {
+  const source =
+    incomeSourceItem(item);
+
+  const sourceActor =
+    incomeSourceActor(
+      item,
+      actors,
+    );
 
   return (
     clean(source?.source_ua_company_name) ||
@@ -83,13 +123,23 @@ function sourceName(item) {
     clean(source?.source_ua_lastname) ||
     clean(source?.source_eng_company_name) ||
     clean(source?.source_eng_fullname) ||
+    sourceActor?.name ||
     null
   );
 }
 
-export function extractIncomeSourceDetails(item) {
+export function extractIncomeSourceDetails(
+  item,
+  actors = null,
+) {
   const source =
     incomeSourceItem(item);
+
+  const sourceActor =
+    incomeSourceActor(
+      item,
+      actors,
+    );
 
   const companyName =
     clean(source?.source_ua_company_name) ||
@@ -130,6 +180,7 @@ export function extractIncomeSourceDetails(item) {
   const personName =
     explicitPersonName ||
     assembledPersonName ||
+    sourceActor?.name ||
     null;
 
   const hasOrganization =
@@ -812,11 +863,15 @@ export function extractNazkFacts(
             amount,
 
             source:
-              sourceName(item),
+              sourceName(
+                item,
+                actors,
+              ),
 
             source_details:
               extractIncomeSourceDetails(
                 item,
+                actors,
               ),
           },
         }),
