@@ -81,6 +81,12 @@ V1 relation types: `family_member`, `third_party_rightsholder`.
 
 Year item: `year`, `declarant_uah`, `family_uah`, `household_uah`, `source_document_id`, `statement_type`, `evidence`.
 
+Source item: `year`, `recipient_role`, `recipient_name`, `recipient_relationship`, `income_type`, `other_income_type`, `amount`, `currency`, `source`, `source_details`, `source_document_id`, `statement_type`, `evidence`.
+
+`source_details` містить лише безпечні нормалізовані поля: `source_type`, `company_name`, `edrpou`, `foreign_company_name`, `foreign_company_code`, `person_name`.
+
+`income.sources` зберігає атомарні source facts. Записи не об’єднуються автоматично лише за текстовою назвою `source`, оскільки однакова назва не є достатнім ідентифікатором джерела.
+
 `family_uah = household_uah - declarant_uah`.
 Aggregate V1 використовує UAH; інші валюти не конвертуються неявно.
 

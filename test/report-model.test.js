@@ -5,6 +5,7 @@ import {
   REPORT_MODEL_LIMITATIONS,
   REPORT_MODEL_SCHEMA_VERSION,
   buildDeclarationSection,
+  buildIncomeSection,
   buildSubjectReportModel,
   buildSubjectReportModelPayload,
 } from "../src/report-model.js";
@@ -304,6 +305,39 @@ test(
           declarationYearsLoader:
             async () => [2025, 2024],
 
+          incomeDetailContextLoader:
+            async () => null,
+
+          multiYearIncomeAnalyticsContextLoader:
+            async (_entityId, years) => ({
+              source_documents:
+                years.map(
+                  (year) => ({
+                    id: `doc-${year}`,
+                    url: `https://example.test/${year}`,
+                  }),
+                ),
+
+              analytics: {
+                yearly:
+                  years.map(
+                    (year) => ({
+                      year,
+                      sourceDocumentId:
+                        `doc-${year}`,
+                      incomeDeclarantUah:
+                        year === 2025
+                          ? 250
+                          : 100,
+                      incomeHouseholdUah:
+                        year === 2025
+                          ? 400
+                          : 160,
+                    }),
+                  ),
+              },
+            }),
+
           declarationContextLoader:
             async (_entityId, year) => ({
               analytics: {
@@ -346,6 +380,412 @@ test(
         from_year: 2024,
         to_year: 2025,
       },
+    );
+
+    assert.deepEqual(
+      report.income.yearly.map(
+        (item) => item.year,
+      ),
+      [2025, 2024],
+    );
+
+    assert.equal(
+      report.income.yearly[0]
+        .family_uah,
+      150,
+    );
+  },
+);
+
+test(
+  "income section maps canonical UAH aggregates",
+  () => {
+    const income =
+      buildIncomeSection({
+        context: {
+          source_documents: [
+            {
+              id: "doc-2024",
+              url:
+                "https://example.test/2024",
+            },
+            {
+              id: "doc-2025",
+              url:
+                "https://example.test/2025",
+            },
+          ],
+
+          analytics: {
+            yearly: [
+              {
+                year: 2024,
+                sourceDocumentId:
+                  "doc-2024",
+                incomeDeclarantUah:
+                  100,
+                incomeHouseholdUah:
+                  160,
+              },
+              {
+                year: 2025,
+                sourceDocumentId:
+                  "doc-2025",
+                incomeDeclarantUah:
+                  250,
+                incomeHouseholdUah:
+                  400,
+              },
+            ],
+          },
+        },
+      });
+
+    assert.deepEqual(
+      income.yearly.map(
+        (item) => item.year,
+      ),
+      [2025, 2024],
+    );
+
+    assert.equal(
+      income.yearly[0]
+        .declarant_uah,
+      250,
+    );
+
+    assert.equal(
+      income.yearly[0]
+        .family_uah,
+      150,
+    );
+
+    assert.equal(
+      income.yearly[0]
+        .household_uah,
+      400,
+    );
+
+    assert.equal(
+      income.yearly[0]
+        .statement_type,
+      "calculation",
+    );
+
+    assert.equal(
+      income.yearly[0]
+        .evidence[0].url,
+      "https://example.test/2025",
+    );
+
+    assert.deepEqual(
+      income.sources,
+      [],
+    );
+  },
+);
+
+test(
+  "report model uses single-year income loader for one declaration year",
+  async () => {
+    let requestedYear = null;
+
+    const report =
+      await buildSubjectReportModel(
+        SUBJECT.id,
+        {
+          subjectLoader:
+            async () => SUBJECT,
+
+          declarationYearsLoader:
+            async () => [2025],
+
+          declarationContextLoader:
+            async (_entityId, year) => ({
+              analytics: {
+                yearly: [{
+                  year,
+                  sourceDocumentId:
+                    `doc-${year}`,
+                }],
+              },
+
+              source_documents: [{
+                id: `doc-${year}`,
+                url:
+                  `https://example.test/${year}`,
+              }],
+
+              facts: [],
+            }),
+
+          incomeDetailContextLoader:
+            async (_entityId, year) => ({
+              detected_years: [
+                year,
+              ],
+
+              source_documents: [{
+                id:
+                  `doc-${year}`,
+
+                url:
+                  `https://example.test/${year}`,
+              }],
+
+              facts: [{
+                id:
+                  `income-${year}`,
+
+                fact_type:
+                  "income",
+
+                source_document_id:
+                  `doc-${year}`,
+
+                value_number:
+                  100,
+
+                unit:
+                  "UAH",
+
+                metadata: {
+                  declaration_year:
+                    year,
+                },
+
+                value_json: {
+                  person: {
+                    role:
+                      "declarant",
+
+                    name:
+                      "Тестова Особа",
+                  },
+
+                  income_type:
+                    "Заробітна плата",
+
+                  amount:
+                    100,
+
+                  source:
+                    "Тестова організація",
+
+                  source_details: {
+                    source_type:
+                      "organization",
+
+                    company_name:
+                      "Тестова організація",
+
+                    edrpou:
+                      "12345678",
+
+                    tax_number:
+                      "MUST_NOT_LEAK",
+                  },
+                },
+              }],
+            }),
+
+          incomeAnalyticsContextLoader:
+            async (_entityId, year) => {
+              requestedYear = year;
+
+              return {
+                source_documents: [{
+                  id: `doc-${year}`,
+                  url:
+                    `https://example.test/${year}`,
+                }],
+
+                analytics: {
+                  yearly: [{
+                    year,
+                    sourceDocumentId:
+                      `doc-${year}`,
+                    incomeDeclarantUah:
+                      100,
+                    incomeHouseholdUah:
+                      150,
+                  }],
+                },
+              };
+            },
+
+          multiYearIncomeAnalyticsContextLoader:
+            async () => {
+              throw new Error(
+                "multi-year loader must not be called",
+              );
+            },
+        },
+      );
+
+    assert.equal(
+      requestedYear,
+      2025,
+    );
+
+    assert.equal(
+      report.income.yearly.length,
+      1,
+    );
+
+    assert.equal(
+      report.income.yearly[0]
+        .declarant_uah,
+      100,
+    );
+
+    assert.equal(
+      report.income.yearly[0]
+        .family_uah,
+      50,
+    );
+
+    assert.equal(
+      report.income.yearly[0]
+        .household_uah,
+      150,
+    );
+
+    assert.equal(
+      report.income.sources.length,
+      1,
+    );
+
+    assert.equal(
+      report.income.sources[0]
+        .recipient_role,
+      "declarant",
+    );
+
+    assert.equal(
+      report.income.sources[0]
+        .income_type,
+      "Заробітна плата",
+    );
+
+    assert.equal(
+      report.income.sources[0]
+        .amount,
+      100,
+    );
+
+    assert.equal(
+      report.income.sources[0]
+        .currency,
+      "UAH",
+    );
+
+    assert.equal(
+      report.income.sources[0]
+        .source,
+      "Тестова організація",
+    );
+
+    assert.equal(
+      report.income.sources[0]
+        .statement_type,
+      "source_fact",
+    );
+
+    assert.equal(
+      report.income.sources[0]
+        .source_details
+        .edrpou,
+      "12345678",
+    );
+
+    assert.equal(
+      report.income.sources[0]
+        .source_details
+        .tax_number,
+      undefined,
+    );
+  },
+);
+
+test(
+  "income sources are not merged by source name alone",
+  () => {
+    const income =
+      buildIncomeSection({
+        detailContexts: [{
+          detected_years: [
+            2025,
+          ],
+
+          facts: [
+            {
+              id: "income-person",
+              fact_type: "income",
+              source_document_id:
+                "doc-2025",
+              value_number: 100,
+              unit: "UAH",
+              value_json: {
+                person: {
+                  role: "declarant",
+                },
+                income_type:
+                  "Інше",
+                source:
+                  "Однакова назва",
+                source_details: {
+                  source_type:
+                    "person",
+                  person_name:
+                    "Однакова назва",
+                },
+              },
+            },
+            {
+              id: "income-organization",
+              fact_type: "income",
+              source_document_id:
+                "doc-2025",
+              value_number: 200,
+              unit: "UAH",
+              value_json: {
+                person: {
+                  role: "declarant",
+                },
+                income_type:
+                  "Інше",
+                source:
+                  "Однакова назва",
+                source_details: {
+                  source_type:
+                    "organization",
+                  company_name:
+                    "Однакова назва",
+                },
+              },
+            },
+          ],
+        }],
+      });
+
+    assert.equal(
+      income.sources.length,
+      2,
+    );
+
+    assert.deepEqual(
+      income.sources
+        .map(
+          (item) =>
+            item.source_details
+              .source_type,
+        )
+        .sort(),
+      [
+        "organization",
+        "person",
+      ],
     );
   },
 );
