@@ -103,13 +103,25 @@ const payload = {
       data: [
         {
           iteration: "cash-1",
-          person: "1",
+
           objectType:
             "Готівкові кошти",
+
           sizeAssets:
             "250000",
+
           assetsCurrency:
             "UAH",
+
+          rights: [
+            {
+              rightBelongs:
+                "family-1",
+
+              ownershipType:
+                "Власність",
+            },
+          ],
         },
       ],
     },
@@ -184,6 +196,165 @@ test("maps family owner correctly", () => {
     50.5,
   );
 });
+
+test(
+  "maps cash owner from rights when person is absent",
+  () => {
+    const facts =
+      extractNazkFacts(
+        payload,
+        {
+          documentGuid:
+            "doc-guid",
+        },
+      );
+
+    const cash =
+      facts.find(
+        (fact) =>
+          fact.factType ===
+          "cash_asset",
+      );
+
+    assert.equal(
+      cash.valueJson
+        .person.ref,
+      "family-1",
+    );
+
+    assert.equal(
+      cash.valueJson
+        .person.role,
+      "family",
+    );
+
+    assert.equal(
+      cash.valueJson
+        .person.name,
+      "Прізвище Ім'я",
+    );
+
+    assert.equal(
+      cash.valueJson
+        .rights.length,
+      1,
+    );
+
+    assert.equal(
+      cash.valueJson
+        .rights[0]
+        .belongs_ref,
+      "family-1",
+    );
+
+    assert.equal(
+      cash.valueJson
+        .rights[0]
+        .ownership_type,
+      "Власність",
+    );
+  },
+);
+
+test(
+  "keeps joint cash ownership in rights without inventing one owner",
+  () => {
+    const jointPayload =
+      structuredClone(
+        payload
+      );
+
+    jointPayload
+      .data
+      .step_12
+      .data = [
+        {
+          iteration:
+            "cash-joint-1",
+
+          objectType:
+            "Готівкові кошти",
+
+          sizeAssets:
+            "100000",
+
+          assetsCurrency:
+            "UAH",
+
+          rights: [
+            {
+              rightBelongs:
+                "1",
+
+              ownershipType:
+                "Спільна сумісна власність",
+            },
+
+            {
+              rightBelongs:
+                "family-1",
+
+              ownershipType:
+                "Спільна сумісна власність",
+            },
+          ],
+        },
+      ];
+
+    const facts =
+      extractNazkFacts(
+        jointPayload,
+        {
+          documentGuid:
+            "doc-guid-joint",
+        },
+      );
+
+    const cash =
+      facts.find(
+        (fact) =>
+          fact.factType ===
+          "cash_asset",
+      );
+
+    assert.equal(
+      cash.valueJson.person,
+      null,
+    );
+
+    assert.equal(
+      cash.valueJson
+        .rights.length,
+      2,
+    );
+
+    assert.deepEqual(
+      cash.valueJson
+        .rights
+        .map(
+          (right) =>
+            right.actor.role
+        ),
+      [
+        "declarant",
+        "family",
+      ],
+    );
+
+    assert.deepEqual(
+      cash.valueJson
+        .rights
+        .map(
+          (right) =>
+            right.ownership_type
+        ),
+      [
+        "Спільна сумісна власність",
+        "Спільна сумісна власність",
+      ],
+    );
+  },
+);
 
 test("does not copy tax numbers into facts", () => {
   const facts =

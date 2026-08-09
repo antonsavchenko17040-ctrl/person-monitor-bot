@@ -472,6 +472,41 @@ function reduceRights(rights, actors) {
   });
 }
 
+function resolveSingleRightActor(
+  rights,
+  actors
+) {
+  if (!Array.isArray(rights)) {
+    return null;
+  }
+
+  const refs =
+    rights
+      .map(
+        (right) =>
+          clean(
+            right?.rightBelongs
+          )
+      )
+      .filter(Boolean);
+
+  const uniqueRefs =
+    [
+      ...new Set(refs),
+    ];
+
+  if (
+    uniqueRefs.length !== 1
+  ) {
+    return null;
+  }
+
+  return resolveActor(
+    uniqueRefs[0],
+    actors
+  );
+}
+
 function itemRef(item, index) {
   return (
     clean(item?.iteration) ||
@@ -897,6 +932,22 @@ export function extractNazkFacts(
           item.assetsCurrency,
         );
 
+      const rights =
+        reduceRights(
+          item.rights,
+          actors,
+        );
+
+      const person =
+        resolveActor(
+          item.person,
+          actors,
+        ) ||
+        resolveSingleRightActor(
+          item.rights,
+          actors,
+        );
+
       facts.push(
         makeFact({
           documentGuid,
@@ -916,11 +967,9 @@ export function extractNazkFacts(
           unit: currency,
 
           valueJson: {
-            person:
-              resolveActor(
-                item.person,
-                actors,
-              ),
+            person,
+
+            rights,
 
             asset_type:
               clean(item.objectType),
