@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   buildDeterministicAnalyticsAnswer,
+  buildDeterministicCashAssetAnswer,
   buildDeterministicIncomeDetailAnswer,
   buildDeterministicRealEstateAnswer,
   buildDeterministicVehicleAnswer,
@@ -783,6 +784,623 @@ test(
         "Покажи повний документ декларації за 2025 рік"
       ),
       true,
+    );
+  },
+);
+
+test(
+  "builds deterministic declarant cash asset list",
+  () => {
+    const answer =
+      buildDeterministicCashAssetAnswer(
+        "Які грошові активи має декларант у 2025 році?",
+        {
+          detected_years:
+            [2025],
+
+          facts: [
+            {
+              fact_type:
+                "cash_asset",
+
+              metadata: {
+                declaration_year:
+                  2025,
+              },
+
+              value_json: {
+                asset_type:
+                  "Кошти, розміщені на банківських рахунках",
+
+                amount:
+                  100000,
+
+                currency:
+                  "UAH",
+
+                organization_name:
+                  "ТЕСТОВИЙ БАНК",
+
+                person: {
+                  role:
+                    "declarant",
+
+                  name:
+                    "Тестовий Декларант",
+
+                  relation:
+                    "декларант",
+                },
+
+                rights: [
+                  {
+                    actor: {
+                      role:
+                        "declarant",
+
+                      name:
+                        "Тестовий Декларант",
+
+                      relation:
+                        "декларант",
+                    },
+
+                    ownership_type:
+                      "Власність",
+                  },
+                ],
+              },
+            },
+
+            {
+              fact_type:
+                "cash_asset",
+
+              metadata: {
+                declaration_year:
+                  2025,
+              },
+
+              value_json: {
+                asset_type:
+                  "Готівкові кошти",
+
+                amount:
+                  50000,
+
+                currency:
+                  "USD",
+
+                person: {
+                  role:
+                    "family",
+
+                  name:
+                    "Тестова Дружина",
+
+                  relation:
+                    "дружина",
+                },
+
+                rights: [
+                  {
+                    actor: {
+                      role:
+                        "family",
+
+                      name:
+                        "Тестова Дружина",
+
+                      relation:
+                        "дружина",
+                    },
+
+                    ownership_type:
+                      "Власність",
+                  },
+                ],
+              },
+            },
+          ],
+
+          source_documents: [],
+
+          analytics: {
+            yearly: [],
+          },
+        }
+      );
+
+    assert.match(
+      answer,
+      /100 000 UAH/,
+    );
+
+    assert.match(
+      answer,
+      /ТЕСТОВИЙ БАНК/,
+    );
+
+    assert.match(
+      answer,
+      /Власність/,
+    );
+
+    assert.doesNotMatch(
+      answer,
+      /50 000 USD/,
+    );
+  },
+);
+
+test(
+  "builds deterministic family cash asset list",
+  () => {
+    const answer =
+      buildDeterministicCashAssetAnswer(
+        "Які кошти членів сім’ї були задекларовані у 2025 році?",
+        {
+          detected_years:
+            [2025],
+
+          facts: [
+            {
+              fact_type:
+                "cash_asset",
+
+              metadata: {
+                declaration_year:
+                  2025,
+              },
+
+              value_json: {
+                asset_type:
+                  "Готівкові кошти",
+
+                amount:
+                  595000,
+
+                currency:
+                  "USD",
+
+                person: {
+                  role:
+                    "declarant",
+
+                  name:
+                    "Декларант",
+                },
+
+                rights: [
+                  {
+                    actor: {
+                      role:
+                        "declarant",
+
+                      name:
+                        "Декларант",
+                    },
+
+                    ownership_type:
+                      "Власність",
+                  },
+                ],
+              },
+            },
+
+            {
+              fact_type:
+                "cash_asset",
+
+              metadata: {
+                declaration_year:
+                  2025,
+              },
+
+              value_json: {
+                asset_type:
+                  "Кошти, розміщені на банківських рахунках",
+
+                amount:
+                  15032,
+
+                currency:
+                  "EUR",
+
+                organization_name:
+                  "СІМЕЙНИЙ БАНК",
+
+                person: {
+                  role:
+                    "family",
+
+                  name:
+                    "Тестова Дружина",
+
+                  relation:
+                    "дружина",
+                },
+
+                rights: [
+                  {
+                    actor: {
+                      role:
+                        "family",
+
+                      name:
+                        "Тестова Дружина",
+
+                      relation:
+                        "дружина",
+                    },
+
+                    ownership_type:
+                      "Власність",
+                  },
+                ],
+              },
+            },
+          ],
+
+          source_documents: [],
+
+          analytics: {
+            yearly: [],
+          },
+        }
+      );
+
+    assert.match(
+      answer,
+      /15 032 EUR/,
+    );
+
+    assert.match(
+      answer,
+      /Тестова Дружина \(дружина\)/,
+    );
+
+    assert.match(
+      answer,
+      /СІМЕЙНИЙ БАНК/,
+    );
+
+    assert.doesNotMatch(
+      answer,
+      /595 000 USD/,
+    );
+  },
+);
+
+test(
+  "keeps joint cash ownership in deterministic household answer",
+  () => {
+    const answer =
+      buildDeterministicCashAssetAnswer(
+        "Які грошові активи декларанта і членів сім’ї були у 2020 році?",
+        {
+          detected_years:
+            [2020],
+
+          facts: [
+            {
+              fact_type:
+                "cash_asset",
+
+              metadata: {
+                declaration_year:
+                  2020,
+              },
+
+              value_json: {
+                asset_type:
+                  "Готівкові кошти",
+
+                amount:
+                  615000,
+
+                currency:
+                  "USD",
+
+                person:
+                  null,
+
+                rights: [
+                  {
+                    actor: {
+                      ref:
+                        "1",
+
+                      role:
+                        "declarant",
+
+                      name:
+                        "Тестовий Декларант",
+
+                      relation:
+                        "декларант",
+                    },
+
+                    ownership_type:
+                      "Спільна сумісна власність",
+                  },
+
+                  {
+                    actor: {
+                      ref:
+                        "family-1",
+
+                      role:
+                        "family",
+
+                      name:
+                        "Тестова Дружина",
+
+                      relation:
+                        "дружина",
+                    },
+
+                    ownership_type:
+                      "Спільна сумісна власність",
+                  },
+                ],
+              },
+            },
+          ],
+
+          source_documents: [],
+
+          analytics: {
+            yearly: [],
+          },
+        }
+      );
+
+    assert.match(
+      answer,
+      /615 000 USD/,
+    );
+
+    assert.match(
+      answer,
+      /Спільна сумісна власність/,
+    );
+
+    assert.match(
+      answer,
+      /Тестовий Декларант \(декларант\)/,
+    );
+
+    assert.match(
+      answer,
+      /Тестова Дружина \(дружина\)/,
+    );
+  },
+);
+
+test(
+  "deduplicates copied cash facts while using full fact set",
+  () => {
+    const duplicate = {
+      fact_type:
+        "cash_asset",
+
+      metadata: {
+        declaration_year:
+          2020,
+
+        item_ref:
+          "cash-shared-1",
+      },
+
+      value_json: {
+        asset_type:
+          "Готівкові кошти",
+
+        amount:
+          615000,
+
+        currency:
+          "USD",
+
+        person:
+          null,
+
+        rights: [
+          {
+            actor: {
+              ref:
+                "1",
+
+              role:
+                "declarant",
+
+              name:
+                "Тестовий Декларант",
+            },
+
+            ownership_type:
+              "Спільна сумісна власність",
+          },
+
+          {
+            actor: {
+              ref:
+                "family-1",
+
+              role:
+                "family",
+
+              name:
+                "Тестова Дружина",
+
+              relation:
+                "дружина",
+            },
+
+            ownership_type:
+              "Спільна сумісна власність",
+          },
+        ],
+      },
+    };
+
+    const another = {
+      fact_type:
+        "cash_asset",
+
+      metadata: {
+        declaration_year:
+          2020,
+
+        item_ref:
+          "cash-unique-2",
+      },
+
+      value_json: {
+        asset_type:
+          "Готівкові кошти",
+
+        amount:
+          100000,
+
+        currency:
+          "UAH",
+
+        person: {
+          ref:
+            "1",
+
+          role:
+            "declarant",
+
+          name:
+            "Тестовий Декларант",
+        },
+
+        rights: [
+          {
+            actor: {
+              ref:
+                "1",
+
+              role:
+                "declarant",
+
+              name:
+                "Тестовий Декларант",
+            },
+
+            ownership_type:
+              "Власність",
+          },
+        ],
+      },
+    };
+
+    const answer =
+      buildDeterministicCashAssetAnswer(
+        "Які грошові активи декларанта і членів сім’ї були у 2020 році?",
+        {
+          detected_years:
+            [2020],
+
+          /*
+           * Імітуємо урізаний retrieval:
+           * тут є лише один факт.
+           */
+          facts: [
+            duplicate,
+          ],
+
+          source_documents: [],
+
+          analytics: {
+            yearly: [],
+          },
+        },
+
+        /*
+         * Повний knowledge-набір:
+         * duplicate є двічі з двох
+         * source documents.
+         */
+        [
+          {
+            ...duplicate,
+
+            source_document_id:
+              "doc-a",
+          },
+
+          {
+            ...duplicate,
+
+            source_document_id:
+              "doc-b",
+          },
+
+          another,
+        ]
+      );
+
+    const usdMatches =
+      answer.match(
+        /615 000 USD/g
+      ) ?? [];
+
+    assert.equal(
+      usdMatches.length,
+      1,
+    );
+
+    assert.match(
+      answer,
+      /100 000 UAH/,
+    );
+  },
+);
+
+test(
+  "keeps analytical cash question on AI path",
+  () => {
+    const answer =
+      buildDeterministicCashAssetAnswer(
+        "Проаналізуй динаміку грошових активів у 2024 та 2025 роках",
+        {
+          detected_years:
+            [2024, 2025],
+
+          facts: [
+            {
+              fact_type:
+                "cash_asset",
+
+              metadata: {
+                declaration_year:
+                  2025,
+              },
+
+              value_json: {
+                amount:
+                  100000,
+
+                currency:
+                  "UAH",
+
+                person: {
+                  role:
+                    "declarant",
+                },
+              },
+            },
+          ],
+        }
+      );
+
+    assert.equal(
+      answer,
+      null,
     );
   },
 );

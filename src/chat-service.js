@@ -2460,6 +2460,454 @@ export function buildDeterministicVehicleAnswer(
   return answer;
 }
 
+function isCashAssetListQuestion(
+  question
+) {
+  const q =
+    String(question ?? "")
+      .toLowerCase();
+
+  const hasDomain =
+    /готів|грошов[а-яіїєґ’']*\s+(?:актив|кошт)|банківськ[а-яіїєґ’']*\s+рахунк|кошти|cash/.test(
+      q
+    );
+
+  const hasListIntent =
+    /які|який|перелік|список|покажи|має|мав|мала|задеклар|належ|волод/.test(
+      q
+    );
+
+  const hasAnalyticalIntent =
+    /аналіз|проаналіз|оцін|ризик|аномал|невідповід|що\s+означ|виснов|чому|поясн|порівн|динамік|змін|різниц/.test(
+      q
+    );
+
+  return Boolean(
+    hasDomain &&
+    hasListIntent &&
+    !hasAnalyticalIntent
+  );
+}
+
+export function buildDeterministicCashAssetAnswer(
+  question,
+  context,
+  allFacts = null
+) {
+  if (
+    !isCashAssetListQuestion(
+      question
+    )
+  ) {
+    return null;
+  }
+
+  const years =
+    (
+      context
+        ?.detected_years ??
+      []
+    )
+      .map(Number)
+      .filter(
+        Number.isInteger
+      );
+
+  if (years.length !== 1) {
+    return null;
+  }
+
+  const year =
+    years[0];
+
+  const q =
+    String(question ?? "")
+      .toLowerCase();
+
+  const asksHousehold =
+    /домогосподар|разом\s+(?:із|з)\s+сім/.test(
+      q
+    ) ||
+    (
+      /декларант/.test(q) &&
+      /сім['’]?ї|членів\s+сім|дружин|чоловік|дитин/.test(
+        q
+      )
+    );
+
+  const asksFamily =
+    !asksHousehold &&
+    /сім['’]?ї|членів\s+сім|дружин|чоловік|дитин|родин/.test(
+      q
+    );
+
+  const acceptedRoles =
+    asksHousehold
+      ? new Set([
+          "declarant",
+          "family",
+        ])
+      : asksFamily
+        ? new Set([
+            "family",
+          ])
+        : new Set([
+            "declarant",
+          ]);
+
+  const rows = [];
+
+  const cashFacts =
+    Array.isArray(allFacts)
+      ? allFacts
+      : (
+          context?.facts ??
+          []
+        );
+
+  const seenFacts =
+    new Set();
+
+  for (
+    const fact of
+    cashFacts
+  ) {
+    if (
+      fact?.fact_type !==
+        "cash_asset" ||
+      factYear(fact) !==
+        year
+    ) {
+      continue;
+    }
+
+    const value =
+      fact.value_json ??
+      {};
+
+    /*
+     * Дедуплікуємо лише сильні
+     * cross-document копії.
+     *
+     * Однакової суми недостатньо:
+     * дві реальні позиції можуть
+     * мати однакову суму.
+     */
+    const itemRef =
+      String(
+        fact?.metadata
+          ?.item_ref ??
+        ""
+      ).trim();
+
+    const ownerRefs =
+      Array.isArray(
+        value.rights
+      )
+        ? value.rights
+            .map(
+              (right) =>
+                [
+                  right
+                    ?.actor
+                    ?.role ??
+                    "",
+
+                  right
+                    ?.actor
+                    ?.ref ??
+                    "",
+
+                  right
+                    ?.ownership_type ??
+                    "",
+                ].join("|")
+            )
+            .sort()
+        : [];
+
+    const personRef =
+      value.person
+        ? [
+            value.person.role ??
+              "",
+
+            value.person.ref ??
+              "",
+
+            value.person.name ??
+              "",
+          ].join("|")
+        : "";
+
+    const duplicateKey =
+      itemRef
+        ? JSON.stringify([
+            year,
+            itemRef,
+
+            String(
+              value.asset_type ??
+              fact.value_text ??
+              ""
+            ).trim(),
+
+            Number(
+              value.amount ??
+              fact.value_number
+            ),
+
+            String(
+              value.currency ??
+              fact.unit ??
+              ""
+            ).trim(),
+
+            String(
+              value.organization_name ??
+              ""
+            ).trim(),
+
+            personRef,
+            ownerRefs,
+          ])
+        : null;
+
+    if (
+      duplicateKey &&
+      seenFacts.has(
+        duplicateKey
+      )
+    ) {
+      continue;
+    }
+
+    if (duplicateKey) {
+      seenFacts.add(
+        duplicateKey
+      );
+    }
+
+    const person =
+      value.person ??
+      null;
+
+    const allRights =
+      Array.isArray(
+        value.rights
+      )
+        ? value.rights
+        : [];
+
+    const rights =
+      allRights.filter(
+        (right) =>
+          acceptedRoles.has(
+            right
+              ?.actor
+              ?.role
+          )
+      );
+
+    const personMatches =
+      acceptedRoles.has(
+        person?.role
+      );
+
+    if (
+      !personMatches &&
+      !rights.length
+    ) {
+      continue;
+    }
+
+    const amount =
+      formatIncomeFactAmount(
+        value.amount ??
+        fact.value_number
+      );
+
+    if (amount == null) {
+      continue;
+    }
+
+    const currency =
+      String(
+        value.currency ??
+        fact.unit ??
+        ""
+      ).trim() ||
+      "валюта не зазначена";
+
+    const type =
+      String(
+        value.asset_type ??
+        fact.value_text ??
+        "Грошовий актив"
+      ).trim();
+
+    const organization =
+      String(
+        value.organization_name ??
+        ""
+      ).trim();
+
+    const rightDescriptions =
+      uniqueTextValues(
+        rights.map(
+          (right) => {
+            const ownership =
+              String(
+                right
+                  ?.ownership_type ??
+                "вид права не зазначено"
+              ).trim();
+
+            const other =
+              String(
+                right
+                  ?.other_ownership ??
+                ""
+              ).trim();
+
+            return other
+              ? `${ownership} (${other})`
+              : ownership;
+          }
+        )
+      );
+
+    const people =
+      uniqueTextValues([
+        ...rights.map(
+          (right) => {
+            const actor =
+              right?.actor;
+
+            if (!actor?.name) {
+              return "";
+            }
+
+            const relation =
+              String(
+                actor.relation ??
+                ""
+              ).trim();
+
+            return relation
+              ? `${actor.name} (${relation})`
+              : actor.name;
+          }
+        ),
+
+        (
+          personMatches &&
+          person?.name
+        )
+          ? (
+              person.relation
+                ? `${person.name} (${person.relation})`
+                : person.name
+            )
+          : "",
+      ]);
+
+    rows.push({
+      type,
+      amount,
+      currency,
+      organization,
+      rights:
+        rightDescriptions,
+      people,
+    });
+  }
+
+  if (!rows.length) {
+    return null;
+  }
+
+  const scopeLabel =
+    asksHousehold
+      ? "домогосподарства"
+      : asksFamily
+        ? "членів сім’ї"
+        : "декларанта";
+
+  let answer =
+    `Грошові активи ${scopeLabel} за ${year} рік:\n\n`;
+
+  answer +=
+    rows
+      .map(
+        (row, index) => {
+          const lines = [
+            `${index + 1}. **${row.amount} ${row.currency}** — ${row.type}`,
+          ];
+
+          if (row.organization) {
+            lines.push(
+              `   - Установа/організація: ${row.organization}`
+            );
+          }
+
+          lines.push(
+            `   - Вид права: ${
+              row.rights.length
+                ? row.rights.join("; ")
+                : "не зазначено"
+            }`
+          );
+
+          if (
+            asksFamily ||
+            asksHousehold
+          ) {
+            lines.push(
+              `   - Особа: ${
+                row.people.length
+                  ? row.people.join("; ")
+                  : "не зазначено"
+              }`
+            );
+          }
+
+          return lines.join(
+            "\n"
+          );
+        }
+      )
+      .join(
+        "\n\n"
+      );
+
+  const yearlyAnalytics =
+    (
+      context
+        ?.analytics
+        ?.yearly ??
+      []
+    ).find(
+      (item) =>
+        Number(item?.year) ===
+        year
+    );
+
+  const source =
+    analyticsSourceForYear(
+      context,
+      yearlyAnalytics
+    );
+
+  if (source?.url) {
+    answer +=
+      `\n\nДжерело: ` +
+      `[декларація НАЗК за ${year} рік](${source.url})`;
+  }
+
+  return answer;
+}
+
 function isOrganizationRelationListQuestion(
   question
 ) {
@@ -3663,6 +4111,13 @@ export async function createSubjectChatResponse({
       context
     );
 
+  const deterministicCashAssetAnswer =
+    buildDeterministicCashAssetAnswer(
+      contextualQuestion,
+      context,
+      knowledge?.facts
+    );
+
   const deterministicOrganizationRelationsAnswer =
     buildDeterministicOrganizationRelationsAnswer(
       contextualQuestion,
@@ -3674,6 +4129,7 @@ export async function createSubjectChatResponse({
     deterministicIncomeDetailAnswer ??
     deterministicRealEstateAnswer ??
     deterministicVehicleAnswer ??
+    deterministicCashAssetAnswer ??
     deterministicOrganizationRelationsAnswer;
 
   if (deterministicAnswer) {
