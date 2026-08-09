@@ -150,7 +150,13 @@ Report Model не об’єднує vehicle items між роками. Cross-yea
 ### relations
 `items`, `counts`.
 
-Relation item: `relation_id`, `relation_type`, `from_entity_id`, `to_entity_id`, `label`, `year`, `confidence`, `verification_status`, `evidence`.
+Relation item: `relation_id`, `relation_type`, `relation_scope`, `from_entity_id`, `to_entity_id`, `from_entity_type`, `from_name`, `from_metadata`, `to_entity_type`, `to_name`, `to_metadata`, `label`, `year`, `confidence`, `verification_status`, `metadata`, `statement_type`, `evidence`.
+
+`counts` містить кількість relation items за `relation_type`.
+
+`relation_scope` розрізняє прямі (`direct`) та непрямі (`second_hop`) зв’язки.
+
+Endpoint metadata проходять whitelist і не переносять raw metadata автоматично.
 
 V1 relation types:
 `employed_by`, `declared_asset`, `income_from`, `family_member_observed`, `third_party_rightsholder`, `resolved_to`.

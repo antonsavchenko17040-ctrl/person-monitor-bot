@@ -29,6 +29,11 @@ import {
   loadDeterministicFamilyContext,
 } from "./family-context.js";
 
+
+import {
+  loadDeterministicRelationsContext,
+} from "./relations-context.js";
+
 import {
   getSubject,
 } from "./store.js";
@@ -1956,6 +1961,322 @@ export function buildRelatedPeopleSection({
 }
 
 
+const REPORT_RELATION_LABELS = {
+  employed_by:
+    "Місце роботи",
+
+  declared_asset:
+    "Задекларований об’єкт",
+
+  income_from:
+    "Джерело доходу",
+
+  family_member_observed:
+    "Член сім’ї",
+
+  third_party_rightsholder:
+    "Третя сторона / правовласник",
+
+  resolved_to:
+    "Ідентифіковано як",
+};
+
+
+function safeReportEntityMetadata(value) {
+  const source =
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value)
+      ? value
+      : {};
+
+  const allowed = [
+    "asset_kind",
+    "object_type",
+    "other_object_type",
+    "country",
+    "region",
+    "district",
+    "city",
+    "area",
+    "acquisition_date",
+    "brand",
+    "model",
+    "production_year",
+    "edrpou",
+  ];
+
+  return Object.fromEntries(
+    allowed
+      .filter(
+        (key) =>
+          source[key] !== null &&
+          source[key] !== undefined,
+      )
+      .map(
+        (key) => [
+          key,
+          source[key],
+        ],
+      ),
+  );
+}
+
+
+function safeReportRelationMetadata(value) {
+  const source =
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value)
+      ? value
+      : {};
+
+  const allowed = [
+    "declaration_year",
+    "asset_kind",
+    "relation",
+    "workplace",
+    "position",
+    "organization_name",
+    "organization_edrpou",
+    "total_income_uah",
+    "evidence_count",
+    "relation_semantics",
+    "third_party_kind",
+  ];
+
+  return Object.fromEntries(
+    allowed
+      .filter(
+        (key) =>
+          source[key] !== null &&
+          source[key] !== undefined,
+      )
+      .map(
+        (key) => [
+          key,
+          source[key],
+        ],
+      ),
+  );
+}
+
+
+export function buildRelationsSection({
+  contexts = [],
+} = {}) {
+  const items = [];
+
+  for (
+    const context of
+    (
+      Array.isArray(contexts)
+        ? contexts
+        : []
+    ).filter(Boolean)
+  ) {
+    const year =
+      normalizeYears(
+        context?.detected_years,
+      )[0] ?? null;
+
+    if (!Number.isInteger(year)) {
+      continue;
+    }
+
+    const canonicalSourceId =
+      context?.analytics?.yearly
+        ?.[0]?.sourceDocumentId ??
+      null;
+
+    const sourceDocument =
+      (
+        context?.source_documents ??
+        []
+      ).find(
+        (document) =>
+          String(
+            document?.id ?? "",
+          ) ===
+          String(
+            canonicalSourceId ?? "",
+          ),
+      );
+
+    const sourceUrl =
+      cleanValue(
+        sourceDocument?.url,
+      );
+
+    for (
+      const relation of
+      context?.relations ?? []
+    ) {
+      const relationId =
+        cleanValue(
+          relation?.id,
+        );
+
+      const relationType =
+        cleanValue(
+          relation?.relation_type,
+        );
+
+      const fromEntityId =
+        cleanValue(
+          relation?.from_entity_id,
+        );
+
+      const toEntityId =
+        cleanValue(
+          relation?.to_entity_id,
+        );
+
+      if (
+        !relationId ||
+        !relationType ||
+        !fromEntityId ||
+        !toEntityId
+      ) {
+        continue;
+      }
+
+      const sourceDocumentId =
+        relation.source_document_id ??
+        canonicalSourceId ??
+        null;
+
+      items.push({
+        relation_id:
+          relationId,
+
+        relation_type:
+          relationType,
+
+        relation_scope:
+          cleanValue(
+            relation.relation_scope,
+          ),
+
+        from_entity_id:
+          fromEntityId,
+
+        to_entity_id:
+          toEntityId,
+
+        from_entity_type:
+          cleanValue(
+            relation.from_entity_type,
+          ),
+
+        from_name:
+          cleanValue(
+            relation.from_name,
+          ),
+
+        from_metadata:
+          safeReportEntityMetadata(
+            relation.from_metadata,
+          ),
+
+        to_entity_type:
+          cleanValue(
+            relation.to_entity_type,
+          ),
+
+        to_name:
+          cleanValue(
+            relation.to_name,
+          ),
+
+        to_metadata:
+          safeReportEntityMetadata(
+            relation.to_metadata,
+          ),
+
+        label:
+          REPORT_RELATION_LABELS[
+            relationType
+          ] ??
+          relationType,
+
+        year,
+
+        confidence:
+          null,
+
+        verification_status:
+          null,
+
+        metadata:
+          safeReportRelationMetadata(
+            relation.metadata,
+          ),
+
+        statement_type:
+          "source_fact",
+
+        evidence:
+          sourceDocumentId !== null ||
+          sourceUrl
+            ? [{
+                source_document_id:
+                  sourceDocumentId,
+
+                provider:
+                  null,
+
+                url:
+                  sourceUrl,
+
+                observed_at:
+                  null,
+
+                statement_type:
+                  "source_fact",
+              }]
+            : [],
+      });
+    }
+  }
+
+  items.sort(
+    (a, b) =>
+      b.year - a.year ||
+      String(
+        a.relation_type,
+      ).localeCompare(
+        String(
+          b.relation_type,
+        ),
+      ) ||
+      String(
+        a.relation_id,
+      ).localeCompare(
+        String(
+          b.relation_id,
+        ),
+      ),
+  );
+
+  const counts = {};
+
+  for (const item of items) {
+    counts[item.relation_type] =
+      (
+        counts[
+          item.relation_type
+        ] ?? 0
+      ) + 1;
+  }
+
+  return {
+    items,
+    counts,
+  };
+}
+
+
 export function buildSubjectReportModelPayload({
   subject,
   generatedAt = new Date(),
@@ -1966,6 +2287,7 @@ export function buildSubjectReportModelPayload({
   vehicles = null,
   career = null,
   relatedPeople = null,
+  relations = null,
 } = {}) {
   if (!subject) {
     return null;
@@ -2050,6 +2372,22 @@ export function buildSubjectReportModelPayload({
         : [],
   };
 
+  const relationsSection = {
+    items:
+      Array.isArray(
+        relations?.items,
+      )
+        ? relations.items
+        : [],
+
+    counts:
+      relations?.counts &&
+      typeof relations.counts ===
+        "object"
+        ? relations.counts
+        : {},
+  };
+
   return {
     schema_version:
       REPORT_MODEL_SCHEMA_VERSION,
@@ -2119,10 +2457,8 @@ export function buildSubjectReportModelPayload({
     vehicles:
       vehicleSection,
 
-    relations: {
-      items: [],
-      counts: {},
-    },
+    relations:
+      relationsSection,
 
     analytics: {
       metrics: [],
@@ -2387,6 +2723,31 @@ export async function buildSubjectReportModel(
         vehicleContexts,
     });
 
+  const relationsContextLoader =
+    options.relationsContextLoader ??
+    loadDeterministicRelationsContext;
+
+  const relationsOptions =
+    options.relationsOptions ?? {};
+
+  const relationContexts =
+    await Promise.all(
+      availableYears.map(
+        (year) =>
+          relationsContextLoader(
+            subject.entity_id,
+            year,
+            relationsOptions,
+          ),
+      ),
+    );
+
+  const relations =
+    buildRelationsSection({
+      contexts:
+        relationContexts,
+    });
+
   return buildSubjectReportModelPayload({
     subject,
 
@@ -2401,5 +2762,6 @@ export async function buildSubjectReportModel(
     vehicles,
     career,
     relatedPeople,
+    relations,
   });
 }

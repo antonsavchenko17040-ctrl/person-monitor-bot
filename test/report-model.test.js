@@ -314,6 +314,9 @@ test(
           familyContextLoader:
             async () => null,
 
+          relationsContextLoader:
+            async () => null,
+
           incomeDetailContextLoader:
             async () => null,
 
@@ -922,6 +925,9 @@ test(
             async () => null,
 
           familyContextLoader:
+            async () => null,
+
+          relationsContextLoader:
             async () => null,
 
           incomeDetailContextLoader:
