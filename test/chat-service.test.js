@@ -9,6 +9,7 @@ import {
   buildDeterministicFamilyMemberAnswer,
   buildDeterministicIncomeDetailAnswer,
   buildDeterministicRealEstateAnswer,
+  buildDeterministicSubjectProfileAnswer,
   buildDeterministicVehicleAnswer,
   buildDeterministicOrganizationRelationsAnswer,
   buildModelContext,
@@ -792,6 +793,126 @@ test(
 );
 
 test(
+  "builds deterministic subject profile from Person Monitor subject card",
+  () => {
+    const answer =
+      buildDeterministicSubjectProfileAnswer(
+        "Покажи основну інформацію про суб’єкта",
+        {
+          subject: {
+            full_name:
+              "Тестовий Суб’єкт",
+
+            organization:
+              "Тестова Організація",
+
+            position:
+              "Тестова Посада",
+
+            city:
+              "Київ",
+          },
+        },
+        {
+          detected_years: [],
+        }
+      );
+
+    assert.match(
+      answer,
+      /Картка суб’єкта Person Monitor/,
+    );
+
+    assert.match(
+      answer,
+      /\*\*ПІБ:\*\* Тестовий Суб’єкт/,
+    );
+
+    assert.match(
+      answer,
+      /\*\*Організація:\*\* Тестова Організація/,
+    );
+
+    assert.match(
+      answer,
+      /\*\*Посада:\*\* Тестова Посада/,
+    );
+
+    assert.match(
+      answer,
+      /\*\*Місто:\*\* Київ/,
+    );
+  },
+);
+
+test(
+  "does not use current subject profile for year-specific question",
+  () => {
+    const answer =
+      buildDeterministicSubjectProfileAnswer(
+        "Яка посада була у 2025 році?",
+        {
+          subject: {
+            full_name:
+              "Тестовий Суб’єкт",
+
+            organization:
+              "Поточна Організація",
+
+            position:
+              "Поточна Посада",
+
+            city:
+              "Київ",
+          },
+        },
+        {
+          detected_years:
+            [2025],
+        }
+      );
+
+    assert.equal(
+      answer,
+      null,
+    );
+  },
+);
+
+test(
+  "keeps analytical profile question on AI path",
+  () => {
+    const answer =
+      buildDeterministicSubjectProfileAnswer(
+        "Проаналізуй профіль суб’єкта та оціни ризики",
+        {
+          subject: {
+            full_name:
+              "Тестовий Суб’єкт",
+
+            organization:
+              "Тестова Організація",
+
+            position:
+              "Тестова Посада",
+
+            city:
+              "Київ",
+          },
+        },
+        {
+          detected_years: [],
+        }
+      );
+
+    assert.equal(
+      answer,
+      null,
+    );
+  },
+);
+
+test(
   "builds deterministic declaration submission list for one year",
   () => {
     const answer =
@@ -1298,6 +1419,88 @@ test(
     assert.doesNotMatch(
       answer,
       /ПОСАДА ЧЛЕНА СІМ’Ї/,
+    );
+
+    assert.match(
+      answer,
+      /https:\/\/example\.test\/declaration-2025/,
+    );
+  },
+);
+
+test(
+  "recognizes feminine employment question wording",
+  () => {
+    const answer =
+      buildDeterministicEmploymentAnswer(
+        "Яка посада була у 2025 році?",
+        {
+          detected_years:
+            [2025],
+
+          analytics: {
+            yearly: [
+              {
+                year:
+                  2025,
+
+                sourceDocumentId:
+                  "doc-canonical",
+              },
+            ],
+          },
+
+          source_documents: [
+            {
+              id:
+                "doc-canonical",
+
+              url:
+                "https://example.test/declaration-2025",
+            },
+          ],
+        },
+
+        [
+          {
+            fact_type:
+              "employment",
+
+            source_document_id:
+              "doc-canonical",
+
+            metadata: {
+              declaration_year:
+                2025,
+            },
+
+            value_text:
+              "ТЕСТОВА ПОСАДА",
+
+            value_json: {
+              person: {
+                role:
+                  "declarant",
+              },
+
+              position:
+                "ТЕСТОВА ПОСАДА",
+
+              workplace:
+                "ТЕСТОВА ОРГАНІЗАЦІЯ",
+            },
+          },
+        ]
+      );
+
+    assert.match(
+      answer,
+      /Посада та місце роботи декларанта за 2025 рік/,
+    );
+
+    assert.match(
+      answer,
+      /ТЕСТОВА ПОСАДА/,
     );
 
     assert.match(

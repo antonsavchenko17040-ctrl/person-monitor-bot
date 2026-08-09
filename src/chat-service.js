@@ -2908,6 +2908,138 @@ export function buildDeterministicCashAssetAnswer(
   return answer;
 }
 
+function isSubjectProfileQuestion(
+  question
+) {
+  const q =
+    String(question ?? "")
+      .toLowerCase();
+
+  const hasProfileDomain =
+    /хто\s+(?:це|такий|така)|профіл|картк|основн[а-яіїєґ’']*\s+інформац|відомост|дані\s+про\s+(?:суб['’]?єкт|особ)|де\s+працює|яка\s+посада|яке\s+місце\s+роботи|з\s+якого\s+міста|місто/.test(
+      q
+    );
+
+  const hasAnalyticalIntent =
+    /аналіз|проаналіз|ризик|аномал|порівн|динамік|змін|виснов|оцін|чому/.test(
+      q
+    );
+
+  return Boolean(
+    hasProfileDomain &&
+    !hasAnalyticalIntent
+  );
+}
+
+export function buildDeterministicSubjectProfileAnswer(
+  question,
+  knowledge,
+  context = null
+) {
+  if (
+    !isSubjectProfileQuestion(
+      question
+    )
+  ) {
+    return null;
+  }
+
+  /*
+   * Профіль — це поточна картка
+   * суб'єкта Person Monitor.
+   *
+   * Якщо користувач указав рік,
+   * не підміняємо історичні дані
+   * поточним профілем.
+   */
+  const detectedYears =
+    (
+      context
+        ?.detected_years ??
+      []
+    )
+      .map(Number)
+      .filter(
+        Number.isInteger
+      );
+
+  if (detectedYears.length) {
+    return null;
+  }
+
+  const subject =
+    knowledge?.subject ??
+    null;
+
+  if (!subject) {
+    return null;
+  }
+
+  const fullName =
+    String(
+      subject.full_name ??
+      ""
+    ).trim();
+
+  const organization =
+    String(
+      subject.organization ??
+      ""
+    ).trim();
+
+  const position =
+    String(
+      subject.position ??
+      ""
+    ).trim();
+
+  const city =
+    String(
+      subject.city ??
+      ""
+    ).trim();
+
+  if (
+    !fullName &&
+    !organization &&
+    !position &&
+    !city
+  ) {
+    return null;
+  }
+
+  const lines = [];
+
+  if (fullName) {
+    lines.push(
+      `- **ПІБ:** ${fullName}`
+    );
+  }
+
+  if (organization) {
+    lines.push(
+      `- **Організація:** ${organization}`
+    );
+  }
+
+  if (position) {
+    lines.push(
+      `- **Посада:** ${position}`
+    );
+  }
+
+  if (city) {
+    lines.push(
+      `- **Місто:** ${city}`
+    );
+  }
+
+  return (
+    `Картка суб’єкта Person Monitor:\n\n` +
+    lines.join("\n")
+  );
+}
+
 function isDeclarationSubmissionQuestion(
   question
 ) {
@@ -3208,7 +3340,7 @@ function isEmploymentListQuestion(
     );
 
   const hasListIntent =
-    /яку|який|яке|де|ким|хто|покажи|назви|назвати|мав|мала|обіймав|обіймала/.test(
+    /яку|яка|який|яке|де|ким|хто|покажи|назви|назвати|мав|мала|був|була|були|обіймав|обіймала/.test(
       q
     );
 
@@ -4877,6 +5009,13 @@ export async function createSubjectChatResponse({
       knowledge?.facts
     );
 
+  const deterministicSubjectProfileAnswer =
+    buildDeterministicSubjectProfileAnswer(
+      contextualQuestion,
+      knowledge,
+      context
+    );
+
   const deterministicOrganizationRelationsAnswer =
     buildDeterministicOrganizationRelationsAnswer(
       contextualQuestion,
@@ -4892,6 +5031,7 @@ export async function createSubjectChatResponse({
     deterministicFamilyMemberAnswer ??
     deterministicEmploymentAnswer ??
     deterministicDeclarationSubmissionAnswer ??
+    deterministicSubjectProfileAnswer ??
     deterministicOrganizationRelationsAnswer;
 
   if (deterministicAnswer) {
