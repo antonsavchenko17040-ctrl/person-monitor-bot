@@ -1,0 +1,462 @@
+import {
+  loadSubjectKnowledge,
+} from "./chat-context.js";
+
+import {
+  retrieveSubjectContext,
+} from "./chat-retrieval.js";
+
+export const CHAT_SERVICE_LIMITS = {
+  messageChars: 4000,
+  historyMessages: 12,
+  historyChars: 4000,
+  outputTokens: 1400,
+};
+
+export const CHAT_INSTRUCTIONS = `
+Ти — аналітичний AI-асистент системи Person Monitor.
+
+Працюй насамперед із даними, які передані тобі в контексті Person Monitor.
+
+Правила:
+1. Відповідай українською мовою, якщо користувач прямо не попросив іншу.
+2. Не вигадуй факти, яких немає в переданому контексті.
+3. Чітко розрізняй:
+   - структуровані факти;
+   - аналітичні метрики;
+   - зв'язки між сутностями;
+   - згадки у відкритих джерелах;
+   - cross-checks.
+4. Згадка у джерелі сама по собі не означає підтверджений факт.
+5. Cross-check є аналітичним сигналом або евристикою, а не доказом порушення.
+6. Не роби висновок про тотожність двох осіб лише через однаковий ПІБ.
+7. Якщо даних недостатньо для відповіді — прямо скажи, яких саме даних бракує.
+8. Якщо у source_documents є URL, використовуй їх як першоджерела при поясненні фактів.
+9. Не вигадуй посилання, назви документів, суми, дати або зв'язки.
+10. Для порівняння років спирайся на факти та analytics відповідних років.
+11. Якщо дані суперечать одне одному — покажи суперечність, а не приховуй її.
+12. Враховуй історію діалогу для розуміння наступних запитань, але не вважай попередню відповідь AI першоджерелом.
+`.trim();
+
+function cleanText(
+  value,
+  maxChars,
+) {
+  const text =
+    String(value ?? "")
+      .trim();
+
+  if (!text) {
+    return "";
+  }
+
+  return text.slice(
+    0,
+    maxChars,
+  );
+}
+
+export function normalizeChatHistory(
+  history = [],
+) {
+  if (!Array.isArray(history)) {
+    return [];
+  }
+
+  return history
+    .filter(
+      (item) =>
+        item &&
+        (
+          item.role === "user" ||
+          item.role === "assistant"
+        ),
+    )
+    .map((item) => ({
+      role: item.role,
+
+      content:
+        cleanText(
+          item.content,
+          CHAT_SERVICE_LIMITS
+            .historyChars,
+        ),
+    }))
+    .filter(
+      (item) =>
+        item.content.length > 0,
+    )
+    .slice(
+      -CHAT_SERVICE_LIMITS
+        .historyMessages,
+    );
+}
+
+export function buildModelContext(
+  context,
+) {
+  if (!context) {
+    return null;
+  }
+
+  return {
+    ...context,
+
+    source_documents:
+      (context.source_documents ?? [])
+        .map((document) => {
+          const {
+            raw_payload,
+            ...source
+          } = document;
+
+          return {
+            ...source,
+
+            raw_payload_available:
+              raw_payload != null,
+
+            raw_payload_chars:
+              raw_payload == null
+                ? 0
+                : JSON.stringify(
+                    raw_payload,
+                  ).length,
+          };
+        }),
+  };
+}
+
+export const SOURCE_DOCUMENT_TOOL = {
+  type: "function",
+
+  name: "get_source_document",
+
+  description:
+    "Отримати повний відкритий документ-джерело Person Monitor, включно з raw_payload. Використовуй лише коли компактного контексту недостатньо для точної відповіді.",
+
+  strict: true,
+
+  parameters: {
+    type: "object",
+
+    properties: {
+      source_document_id: {
+        type: "string",
+
+        description:
+          "ID документа з source_documents у контексті Person Monitor.",
+      },
+    },
+
+    required: [
+      "source_document_id",
+    ],
+
+    additionalProperties: false,
+  },
+};
+
+export function resolveSourceDocumentTool(
+  context,
+  argumentsJson,
+) {
+  let args;
+
+  try {
+    args =
+      typeof argumentsJson === "string"
+        ? JSON.parse(argumentsJson)
+        : argumentsJson;
+  } catch {
+    return {
+      ok: false,
+      error:
+        "INVALID_TOOL_ARGUMENTS",
+    };
+  }
+
+  const sourceDocumentId =
+    String(
+      args?.source_document_id ??
+      "",
+    ).trim();
+
+  if (!sourceDocumentId) {
+    return {
+      ok: false,
+      error:
+        "SOURCE_DOCUMENT_ID_REQUIRED",
+    };
+  }
+
+  const document =
+    (context?.source_documents ?? [])
+      .find(
+        (item) =>
+          item.id ===
+          sourceDocumentId,
+      );
+
+  if (!document) {
+    return {
+      ok: false,
+      error:
+        "SOURCE_DOCUMENT_NOT_AVAILABLE",
+    };
+  }
+
+  return {
+    ok: true,
+    source_document:
+      document,
+  };
+}
+
+export async function runResponsesWithTools({
+  client,
+  request,
+  context,
+  maxToolRounds = 2,
+}) {
+  let input = [
+    ...request.input,
+  ];
+
+  for (
+    let round = 0;
+    round <= maxToolRounds;
+    round += 1
+  ) {
+    const response =
+      await client.responses.create({
+        ...request,
+        input,
+      });
+
+    const calls =
+      (response.output ?? [])
+        .filter(
+          (item) =>
+            item.type ===
+              "function_call",
+        );
+
+    if (!calls.length) {
+      return response;
+    }
+
+    if (round >= maxToolRounds) {
+      throw new Error(
+        "CHAT_TOOL_ROUND_LIMIT",
+      );
+    }
+
+    const outputs =
+      calls.map((call) => {
+        let result;
+
+        if (
+          call.name ===
+          "get_source_document"
+        ) {
+          result =
+            resolveSourceDocumentTool(
+              context,
+              call.arguments,
+            );
+        } else {
+          result = {
+            ok: false,
+            error:
+              "UNKNOWN_TOOL",
+          };
+        }
+
+        return {
+          type:
+            "function_call_output",
+
+          call_id:
+            call.call_id,
+
+          output:
+            JSON.stringify(result),
+        };
+      });
+
+    input = [
+      ...input,
+      ...(response.output ?? []),
+      ...outputs,
+    ];
+  }
+
+  throw new Error(
+    "CHAT_TOOL_LOOP_FAILED",
+  );
+}
+
+export function buildResponsesRequest({
+  question,
+  history = [],
+  context,
+  model =
+    process.env.OPENAI_CHAT_MODEL ||
+    "gpt-5",
+}) {
+  const normalizedQuestion =
+    cleanText(
+      question,
+      CHAT_SERVICE_LIMITS
+        .messageChars,
+    );
+
+  if (!normalizedQuestion) {
+    throw new Error(
+      "CHAT_MESSAGE_REQUIRED",
+    );
+  }
+
+  if (!context) {
+    throw new Error(
+      "CHAT_CONTEXT_REQUIRED",
+    );
+  }
+
+  const normalizedHistory =
+    normalizeChatHistory(history);
+
+  const modelContext =
+    buildModelContext(
+      context,
+    );
+
+  const contextJson =
+    JSON.stringify(
+      modelContext,
+      null,
+      2,
+    );
+
+  return {
+    model,
+
+    store: false,
+
+    max_output_tokens:
+      CHAT_SERVICE_LIMITS
+        .outputTokens,
+
+    instructions:
+      CHAT_INSTRUCTIONS,
+
+    tools: [
+      SOURCE_DOCUMENT_TOOL,
+    ],
+
+    tool_choice: "auto",
+
+    input: [
+      ...normalizedHistory,
+
+      {
+        role: "user",
+
+        content: [
+          "Поточне питання користувача:",
+          normalizedQuestion,
+          "",
+          "Контекст Person Monitor:",
+          contextJson,
+        ].join("\n"),
+      },
+    ],
+  };
+}
+
+export async function createSubjectChatResponse({
+  subjectId,
+  message,
+  history = [],
+  client,
+  model,
+  retrievalOptions,
+  knowledgeLoader =
+    loadSubjectKnowledge,
+  retriever =
+    retrieveSubjectContext,
+}) {
+  if (
+    !client?.responses ||
+    typeof client.responses.create
+      !== "function"
+  ) {
+    throw new Error(
+      "OPENAI_CLIENT_REQUIRED",
+    );
+  }
+
+  const knowledge =
+    await knowledgeLoader(
+      subjectId,
+    );
+
+  if (!knowledge) {
+    throw new Error(
+      "SUBJECT_NOT_FOUND",
+    );
+  }
+
+  const context =
+    retriever(
+      knowledge,
+      message,
+      retrievalOptions,
+    );
+
+  const request =
+    buildResponsesRequest({
+      question: message,
+      history,
+      context,
+      model,
+    });
+
+  const response =
+    await runResponsesWithTools({
+      client,
+      request,
+      context,
+    });
+
+  const answer =
+    String(
+      response?.output_text ??
+      "",
+    ).trim();
+
+  if (!answer) {
+    throw new Error(
+      "EMPTY_AI_RESPONSE",
+    );
+  }
+
+  return {
+    answer,
+
+    model:
+      request.model,
+
+    retrieval: {
+      version:
+        context.retrieval_version,
+
+      detected_years:
+        context.detected_years,
+
+      counts:
+        context.counts,
+    },
+  };
+}

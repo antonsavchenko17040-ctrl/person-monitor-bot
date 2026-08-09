@@ -47,6 +47,7 @@
     "@neondatabase/serverless": "^1.1.0",
     "dejavu-fonts-ttf": "^2.37.3",
     "exceljs": "^4.4.0",
+    "openai": "^7.4.0",
     "pdfkit": "^0.17.2"
   }
 }

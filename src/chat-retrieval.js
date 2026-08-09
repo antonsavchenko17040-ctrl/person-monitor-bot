@@ -486,6 +486,92 @@ function crossCheckMatchesIntent(
   return false;
 }
 
+function relationMatchesIntent(
+  item,
+  hints,
+) {
+  if (!hasDomainIntent(hints)) {
+    return true;
+  }
+
+  const type =
+    String(
+      item?.relation_type ?? "",
+    )
+      .toLowerCase()
+      .trim();
+
+  const text =
+    normalize(searchableText(item));
+
+  if (
+    hints.income &&
+    type === "income_from"
+  ) {
+    return true;
+  }
+
+  if (
+    hints.family &&
+    type === "family_member_observed"
+  ) {
+    return true;
+  }
+
+  if (
+    hints.employment &&
+    type === "employed_by"
+  ) {
+    return true;
+  }
+
+  if (
+    hints.realEstate &&
+    type === "declared_asset" &&
+    /real.?estate|нерух|квартир|будин|земл|гараж|приміщ|машиномісце/.test(text)
+  ) {
+    return true;
+  }
+
+  if (
+    hints.vehicle &&
+    type === "declared_asset" &&
+    /vehicle|авто|автомоб|машин|транспорт/.test(text)
+  ) {
+    return true;
+  }
+
+  if (
+    hints.relations &&
+    type === "third_party_rightsholder"
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function relationMatchesYears(
+  item,
+  requestedYears,
+) {
+  if (!requestedYears.length) {
+    return true;
+  }
+
+  const availableYears =
+    itemYears(item);
+
+  if (!availableYears.size) {
+    return true;
+  }
+
+  return requestedYears.some(
+    (year) =>
+      availableYears.has(year),
+  );
+}
+
 function crossCheckMatchesYears(
   item,
   requestedYears,
@@ -537,6 +623,26 @@ function scoreItem(
       hints,
       kind,
     );
+
+  if (
+    kind === "relation" &&
+    !relationMatchesIntent(
+      item,
+      hints,
+    )
+  ) {
+    return -1;
+  }
+
+  if (
+    kind === "relation" &&
+    !relationMatchesYears(
+      item,
+      years,
+    )
+  ) {
+    return -1;
+  }
 
   if (
     kind === "cross_check" &&
