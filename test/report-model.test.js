@@ -7,6 +7,7 @@ import {
   buildDeclarationSection,
   buildIncomeSection,
   buildCashAssetsSection,
+  buildRealEstateSection,
   buildSubjectReportModel,
   buildSubjectReportModelPayload,
 } from "../src/report-model.js";
@@ -392,6 +393,89 @@ test(
               }],
             }),
 
+          realEstateContextLoader:
+            async (_entityId, year) => ({
+              detected_years: [
+                year,
+              ],
+
+              analytics: {
+                yearly: [{
+                  year,
+
+                  sourceDocumentId:
+                    `doc-${year}`,
+                }],
+              },
+
+              source_documents: [{
+                id:
+                  `doc-${year}`,
+
+                url:
+                  `https://example.test/${year}`,
+              }],
+
+              facts: [{
+                id:
+                  `property-${year}`,
+
+                fact_type:
+                  "real_estate",
+
+                source_document_id:
+                  `doc-${year}`,
+
+                value_number:
+                  year === 2025
+                    ? 120.5
+                    : 80,
+
+                unit:
+                  "m2",
+
+                metadata: {
+                  declaration_year:
+                    year,
+
+                  item_ref:
+                    `property-ref-${year}`,
+                },
+
+                value_json: {
+                  person:
+                    null,
+
+                  object_type:
+                    "Квартира",
+
+                  total_area:
+                    year === 2025
+                      ? 120.5
+                      : 80,
+
+                  country:
+                    "Україна",
+
+                  city:
+                    "Київ",
+
+                  acquisition_date:
+                    "01.01.2020",
+
+                  rights: [{
+                    actor: {
+                      role:
+                        "declarant",
+                    },
+
+                    ownership_type:
+                      "Власність",
+                  }],
+                },
+              }],
+            }),
+
           multiYearIncomeAnalyticsContextLoader:
             async (_entityId, years) => ({
               source_documents:
@@ -517,6 +601,50 @@ test(
         .items[0]
         .currency_raw,
       "USD (Долар США)",
+    );
+
+    assert.deepEqual(
+      report.real_estate.yearly.map(
+        (item) =>
+          item.year,
+      ),
+      [2025, 2024],
+    );
+
+    assert.equal(
+      report.real_estate.yearly[0]
+        .items.length,
+      1,
+    );
+
+    assert.equal(
+      report.real_estate.yearly[0]
+        .items[0]
+        .area,
+      120.5,
+    );
+
+    assert.equal(
+      report.real_estate.yearly[0]
+        .items[0]
+        .tracking_identity
+        .source_item_ref,
+      "property-ref-2025",
+    );
+
+    assert.equal(
+      report.real_estate.yearly[0]
+        .items[0]
+        .owner_role,
+      null,
+    );
+
+    assert.equal(
+      report.real_estate.yearly[0]
+        .items[0]
+        .rights[0]
+        .role,
+      "declarant",
     );
   },
 );
@@ -644,6 +772,9 @@ test(
             }),
 
           cashContextLoader:
+            async () => null,
+
+          realEstateContextLoader:
             async () => null,
 
           incomeDetailContextLoader:
@@ -1167,6 +1298,223 @@ test(
     assert.equal(
       euro?.currency_raw,
       "EUR (Євро)",
+    );
+  },
+);
+
+test(
+  "real estate keeps colliding signatures as separate source facts",
+  () => {
+    const section =
+      buildRealEstateSection({
+        contexts: [{
+          detected_years:
+            [2025],
+
+          analytics: {
+            yearly: [{
+              year:
+                2025,
+
+              sourceDocumentId:
+                "doc-2025",
+            }],
+          },
+
+          source_documents: [{
+            id:
+              "doc-2025",
+
+            url:
+              "https://example.test/2025",
+          }],
+
+          facts: [
+            {
+              id:
+                "property-a",
+
+              fact_type:
+                "real_estate",
+
+              source_document_id:
+                "doc-2025",
+
+              value_number:
+                91.9,
+
+              unit:
+                "m2",
+
+              metadata: {
+                declaration_year:
+                  2025,
+
+                item_ref:
+                  "item-a",
+              },
+
+              value_json: {
+                person:
+                  null,
+
+                object_type:
+                  "Квартира",
+
+                total_area:
+                  91.9,
+
+                country:
+                  "Україна",
+
+                city:
+                  "Київ",
+
+                acquisition_date:
+                  "20.11.2014",
+
+                cost:
+                  null,
+
+                rights: [{
+                  actor: {
+                    role:
+                      "declarant",
+                  },
+
+                  ownership_type:
+                    "Власність",
+
+                  share_percent:
+                    50,
+                }],
+              },
+            },
+
+            {
+              id:
+                "property-b",
+
+              fact_type:
+                "real_estate",
+
+              source_document_id:
+                "doc-2025",
+
+              value_number:
+                91.9,
+
+              unit:
+                "m2",
+
+              metadata: {
+                declaration_year:
+                  2025,
+
+                item_ref:
+                  "item-b",
+              },
+
+              value_json: {
+                person:
+                  null,
+
+                object_type:
+                  "Квартира",
+
+                total_area:
+                  91.9,
+
+                country:
+                  "Україна",
+
+                city:
+                  "Київ",
+
+                acquisition_date:
+                  "20.11.2014",
+
+                cost:
+                  null,
+
+                rights: [{
+                  actor: {
+                    role:
+                      "family",
+
+                    relation:
+                      "дружина",
+                  },
+
+                  ownership_type:
+                    "Власність",
+
+                  share_percent:
+                    50,
+                }],
+              },
+            },
+          ],
+        }],
+      });
+
+    assert.equal(
+      section.yearly.length,
+      1,
+    );
+
+    assert.equal(
+      section.yearly[0]
+        .items.length,
+      2,
+    );
+
+    const refs =
+      section.yearly[0]
+        .items
+        .map(
+          (item) =>
+            item
+              .tracking_identity
+              .source_item_ref,
+        )
+        .sort();
+
+    assert.deepEqual(
+      refs,
+      [
+        "item-a",
+        "item-b",
+      ],
+    );
+
+    assert.equal(
+      section.yearly[0]
+        .items[0]
+        .tracking_identity
+        .source_system,
+      "nazk",
+    );
+
+    assert.equal(
+      section.yearly[0]
+        .items[0]
+        .cost,
+      null,
+    );
+
+    assert.equal(
+      section.yearly[0]
+        .items[0]
+        .owner_role,
+      null,
+    );
+
+    assert.equal(
+      section.yearly[0]
+        .items[0]
+        .rights.length,
+      1,
     );
   },
 );

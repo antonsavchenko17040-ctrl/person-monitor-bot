@@ -11,6 +11,10 @@ import {
 } from "./cash-context.js";
 
 import {
+  loadDeterministicRealEstateContext,
+} from "./real-estate-context.js";
+
+import {
   getSubject,
 } from "./store.js";
 
@@ -535,7 +539,7 @@ function normalizeCurrency(
   return upper;
 }
 
-function safeCashRight(
+function safeAssetRight(
   right,
 ) {
   const actor =
@@ -894,7 +898,7 @@ export function buildCashAssetsSection({
               ? value.rights
               : []
           ).map(
-            safeCashRight,
+            safeAssetRight,
           ),
 
         source_document_id:
@@ -956,12 +960,333 @@ export function buildCashAssetsSection({
   };
 }
 
+export function buildRealEstateSection({
+  contexts = [],
+} = {}) {
+  const yearlyMap =
+    new Map();
+
+  for (
+    const context of
+    (
+      Array.isArray(contexts)
+        ? contexts
+        : []
+    ).filter(Boolean)
+  ) {
+    const detectedYear =
+      normalizeYears(
+        context
+          ?.detected_years,
+      )[0] ?? null;
+
+    const canonicalSourceId =
+      context
+        ?.analytics
+        ?.yearly
+        ?.[0]
+        ?.sourceDocumentId ??
+      null;
+
+    const sourceDocument =
+      (
+        context
+          ?.source_documents ??
+        []
+      ).find(
+        (candidate) =>
+          String(
+            candidate?.id ?? "",
+          ) ===
+          String(
+            canonicalSourceId ??
+            "",
+          ),
+      );
+
+    const sourceUrl =
+      cleanValue(
+        sourceDocument?.url,
+      );
+
+    for (
+      const fact of
+      context?.facts ?? []
+    ) {
+      if (
+        fact?.fact_type !==
+        "real_estate"
+      ) {
+        continue;
+      }
+
+      const value =
+        fact.value_json ?? {};
+
+      const year =
+        numericValue(
+          fact
+            ?.metadata
+            ?.declaration_year ??
+          detectedYear,
+        );
+
+      if (
+        !Number.isInteger(year)
+      ) {
+        continue;
+      }
+
+      if (!yearlyMap.has(year)) {
+        yearlyMap.set(
+          year,
+          {
+            year,
+
+            items: [],
+
+            evidence:
+              canonicalSourceId !== null ||
+              sourceUrl
+                ? [{
+                    source_document_id:
+                      canonicalSourceId,
+
+                    provider:
+                      null,
+
+                    url:
+                      sourceUrl,
+
+                    observed_at:
+                      null,
+
+                    statement_type:
+                      "source_fact",
+                  }]
+                : [],
+          },
+        );
+      }
+
+      const objectType =
+        cleanValue(
+          value.object_type ??
+          fact.value_text,
+        );
+
+      const area =
+        numericValue(
+          value.total_area ??
+          fact.value_number,
+        );
+
+      const acquisitionDate =
+        cleanValue(
+          value.acquisition_date,
+        );
+
+      const location = {
+        country:
+          cleanValue(
+            value.country,
+          ),
+
+        region:
+          cleanValue(
+            value.region,
+          ),
+
+        district:
+          cleanValue(
+            value.district,
+          ),
+
+        city:
+          cleanValue(
+            value.city,
+          ),
+      };
+
+      const person =
+        value.person &&
+        typeof value.person ===
+          "object"
+          ? value.person
+          : {};
+
+      const sourceDocumentId =
+        fact.source_document_id ??
+        canonicalSourceId ??
+        null;
+
+      const sourceItemRef =
+        cleanValue(
+          fact
+            ?.metadata
+            ?.item_ref,
+        );
+
+      yearlyMap
+        .get(year)
+        .items
+        .push({
+          object_type:
+            objectType,
+
+          other_object_type:
+            cleanValue(
+              value.other_object_type,
+            ),
+
+          area,
+
+          area_unit:
+            cleanValue(
+              fact.unit,
+            ),
+
+          location,
+
+          acquisition_date:
+            acquisitionDate,
+
+          cost:
+            numericValue(
+              value.cost,
+            ),
+
+          owner_role:
+            cleanValue(
+              person.role,
+            ),
+
+          owner_name:
+            cleanValue(
+              person.name,
+            ),
+
+          owner_relationship:
+            cleanValue(
+              person.relationship ??
+              person.relation,
+            ),
+
+          rights:
+            (
+              Array.isArray(
+                value.rights,
+              )
+                ? value.rights
+                : []
+            ).map(
+              safeAssetRight,
+            ),
+
+          tracking_identity: {
+            source_system:
+              "nazk",
+
+            source_item_ref:
+              sourceItemRef,
+
+            signature: {
+              object_type:
+                objectType,
+
+              area,
+
+              country:
+                location.country,
+
+              region:
+                location.region,
+
+              district:
+                location.district,
+
+              city:
+                location.city,
+
+              acquisition_date:
+                acquisitionDate,
+            },
+          },
+
+          source_document_id:
+            sourceDocumentId,
+
+          statement_type:
+            "source_fact",
+
+          evidence:
+            sourceDocumentId !== null ||
+            sourceUrl
+              ? [{
+                  source_document_id:
+                    sourceDocumentId,
+
+                  provider:
+                    null,
+
+                  url:
+                    sourceUrl,
+
+                  observed_at:
+                    null,
+
+                  statement_type:
+                    "source_fact",
+                }]
+              : [],
+        });
+    }
+  }
+
+  const yearly =
+    [
+      ...yearlyMap.values(),
+    ];
+
+  for (const item of yearly) {
+    item.items.sort(
+      (a, b) =>
+        String(
+          a.object_type ?? "",
+        ).localeCompare(
+          String(
+            b.object_type ?? "",
+          ),
+          "uk",
+        ) ||
+        (
+          b.area ??
+          -Infinity
+        ) -
+        (
+          a.area ??
+          -Infinity
+        ),
+    );
+  }
+
+  yearly.sort(
+    (a, b) =>
+      b.year - a.year,
+  );
+
+  return {
+    yearly,
+  };
+}
+
 export function buildSubjectReportModelPayload({
   subject,
   generatedAt = new Date(),
   declarations = null,
   income = null,
   cashAssets = null,
+  realEstate = null,
 } = {}) {
   if (!subject) {
     return null;
@@ -1000,6 +1325,15 @@ export function buildSubjectReportModelPayload({
         cashAssets?.yearly,
       )
         ? cashAssets.yearly
+        : [],
+  };
+
+  const realEstateSection = {
+    yearly:
+      Array.isArray(
+        realEstate?.yearly,
+      )
+        ? realEstate.yearly
         : [],
   };
 
@@ -1069,9 +1403,8 @@ export function buildSubjectReportModelPayload({
     cash_assets:
       cashAssetsSection,
 
-    real_estate: {
-      yearly: [],
-    },
+    real_estate:
+      realEstateSection,
 
     vehicles: {
       yearly: [],
@@ -1246,6 +1579,31 @@ export async function buildSubjectReportModel(
         cashContexts,
     });
 
+  const realEstateContextLoader =
+    options.realEstateContextLoader ??
+    loadDeterministicRealEstateContext;
+
+  const realEstateOptions =
+    options.realEstateOptions ?? {};
+
+  const realEstateContexts =
+    await Promise.all(
+      availableYears.map(
+        (year) =>
+          realEstateContextLoader(
+            subject.entity_id,
+            year,
+            realEstateOptions,
+          ),
+      ),
+    );
+
+  const realEstate =
+    buildRealEstateSection({
+      contexts:
+        realEstateContexts,
+    });
+
   return buildSubjectReportModelPayload({
     subject,
 
@@ -1256,5 +1614,6 @@ export async function buildSubjectReportModel(
     declarations,
     income,
     cashAssets,
+    realEstate,
   });
 }

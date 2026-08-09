@@ -108,7 +108,19 @@ Cash item: `asset_type`, `other_asset_type`, `amount`, `currency`, `currency_raw
 ### real_estate
 `yearly[].items`.
 
-Asset item повинен містити тип, площу, location, rights, actor role, acquisition data, tracking identity та evidence, якщо ці дані доступні.
+Real estate item: `object_type`, `other_object_type`, `area`, `area_unit`, `location`, `acquisition_date`, `cost`, `owner_role`, `owner_name`, `owner_relationship`, `rights`, `tracking_identity`, `source_document_id`, `statement_type`, `evidence`.
+
+`location`: `country`, `region`, `district`, `city`.
+
+`tracking_identity` зберігає source-specific tracking signals: `source_system`, `source_item_ref` та `signature`.
+
+`signature` містить нормалізовані доступні ознаки об’єкта: тип, площу, location та дату набуття. Вона не є доказом тотожності і сама по собі не використовується для автоматичного merge.
+
+`source_item_ref` є сильним сигналом усередині джерела, але не вважається глобальним реєстраційним ідентифікатором.
+
+Report Model не об’єднує real estate items між роками. Cross-year identity визначається окремим matching layer.
+
+Якщо `person` відсутній, actor role не вигадується; власники та інші правовласники залишаються у `rights`.
 
 ### vehicles
 `yearly[].items`.
