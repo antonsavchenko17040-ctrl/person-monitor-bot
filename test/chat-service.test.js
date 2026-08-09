@@ -5,6 +5,7 @@ import {
   buildDeterministicAnalyticsAnswer,
   buildDeterministicIncomeDetailAnswer,
   buildDeterministicRealEstateAnswer,
+  buildDeterministicVehicleAnswer,
   buildDeterministicOrganizationRelationsAnswer,
   buildModelContext,
   buildResponsesRequest,
@@ -782,6 +783,380 @@ test(
         "Покажи повний документ декларації за 2025 рік"
       ),
       true,
+    );
+  },
+);
+
+test(
+  "builds deterministic declarant vehicle list",
+  () => {
+    const answer =
+      buildDeterministicVehicleAnswer(
+        "Які автомобілі має декларант у 2025 році?",
+        {
+          detected_years:
+            [2025],
+
+          facts: [
+            {
+              fact_type:
+                "vehicle",
+
+              metadata: {
+                declaration_year:
+                  2025,
+              },
+
+              value_text:
+                "LAND ROVER RANGE ROVER",
+
+              value_json: {
+                brand:
+                  "LAND ROVER",
+
+                model:
+                  "RANGE ROVER",
+
+                object_type:
+                  "Автомобіль легковий",
+
+                production_year:
+                  2016,
+
+                acquisition_date:
+                  "19.05.2016",
+
+                cost:
+                  4693990,
+
+                rights: [
+                  {
+                    actor: {
+                      role:
+                        "declarant",
+
+                      name:
+                        "Тестовий Декларант",
+
+                      relation:
+                        "декларант",
+                    },
+
+                    ownership_type:
+                      "Власність",
+                  },
+                ],
+              },
+            },
+
+            {
+              fact_type:
+                "vehicle",
+
+              metadata: {
+                declaration_year:
+                  2025,
+              },
+
+              value_text:
+                "MERCEDES-BENZ S 500 4 MATIC",
+
+              value_json: {
+                brand:
+                  "MERCEDES-BENZ",
+
+                model:
+                  "S 500 4 MATIC",
+
+                rights: [
+                  {
+                    actor: {
+                      role:
+                        "family",
+
+                      name:
+                        "Тестова Дружина",
+
+                      relation:
+                        "дружина",
+                    },
+
+                    ownership_type:
+                      "Власність",
+                  },
+                ],
+              },
+            },
+          ],
+
+          source_documents: [],
+          analytics: {
+            yearly: [],
+          },
+        }
+      );
+
+    assert.match(
+      answer,
+      /LAND ROVER RANGE ROVER/,
+    );
+
+    assert.match(
+      answer,
+      /2016/,
+    );
+
+    assert.match(
+      answer,
+      /4 693 990 грн/,
+    );
+
+    assert.doesNotMatch(
+      answer,
+      /MERCEDES-BENZ/,
+    );
+  },
+);
+
+test(
+  "builds deterministic family vehicle list",
+  () => {
+    const answer =
+      buildDeterministicVehicleAnswer(
+        "Які автомобілі членів сім’ї були у 2025 році?",
+        {
+          detected_years:
+            [2025],
+
+          facts: [
+            {
+              fact_type:
+                "vehicle",
+
+              metadata: {
+                declaration_year:
+                  2025,
+              },
+
+              value_json: {
+                brand:
+                  "LAND ROVER",
+
+                model:
+                  "RANGE ROVER",
+
+                rights: [
+                  {
+                    actor: {
+                      role:
+                        "declarant",
+
+                      name:
+                        "Декларант",
+                    },
+
+                    ownership_type:
+                      "Власність",
+                  },
+                ],
+              },
+            },
+
+            {
+              fact_type:
+                "vehicle",
+
+              metadata: {
+                declaration_year:
+                  2025,
+              },
+
+              value_json: {
+                brand:
+                  "MERCEDES-BENZ",
+
+                model:
+                  "S 500 4 MATIC",
+
+                production_year:
+                  2014,
+
+                acquisition_date:
+                  "14.02.2014",
+
+                cost:
+                  1830637,
+
+                rights: [
+                  {
+                    actor: {
+                      role:
+                        "family",
+
+                      name:
+                        "Тестова Дружина",
+
+                      relation:
+                        "дружина",
+                    },
+
+                    ownership_type:
+                      "Власність",
+                  },
+                ],
+              },
+            },
+          ],
+
+          source_documents: [],
+          analytics: {
+            yearly: [],
+          },
+        }
+      );
+
+    assert.match(
+      answer,
+      /MERCEDES-BENZ S 500 4 MATIC/,
+    );
+
+    assert.match(
+      answer,
+      /Тестова Дружина \(дружина\)/,
+    );
+
+    assert.match(
+      answer,
+      /1 830 637 грн/,
+    );
+
+    assert.doesNotMatch(
+      answer,
+      /LAND ROVER/,
+    );
+  },
+);
+
+test(
+  "builds deterministic household vehicle list",
+  () => {
+    const answer =
+      buildDeterministicVehicleAnswer(
+        "Які автомобілі декларанта і членів сім’ї були у 2025 році?",
+        {
+          detected_years:
+            [2025],
+
+          facts: [
+            {
+              fact_type:
+                "vehicle",
+
+              metadata: {
+                declaration_year:
+                  2025,
+              },
+
+              value_json: {
+                brand:
+                  "LAND ROVER",
+
+                model:
+                  "RANGE ROVER",
+
+                rights: [
+                  {
+                    actor: {
+                      role:
+                        "declarant",
+
+                      name:
+                        "Декларант",
+
+                      relation:
+                        "декларант",
+                    },
+
+                    ownership_type:
+                      "Власність",
+                  },
+                ],
+              },
+            },
+
+            {
+              fact_type:
+                "vehicle",
+
+              metadata: {
+                declaration_year:
+                  2025,
+              },
+
+              value_json: {
+                brand:
+                  "MERCEDES-BENZ",
+
+                model:
+                  "S 500 4 MATIC",
+
+                rights: [
+                  {
+                    actor: {
+                      role:
+                        "family",
+
+                      name:
+                        "Дружина",
+
+                      relation:
+                        "дружина",
+                    },
+
+                    ownership_type:
+                      "Власність",
+                  },
+                ],
+              },
+            },
+          ],
+
+          source_documents: [],
+          analytics: {
+            yearly: [],
+          },
+        }
+      );
+
+    assert.match(
+      answer,
+      /LAND ROVER RANGE ROVER/,
+    );
+
+    assert.match(
+      answer,
+      /MERCEDES-BENZ S 500 4 MATIC/,
+    );
+  },
+);
+
+test(
+  "keeps analytical vehicle question on AI path",
+  () => {
+    const answer =
+      buildDeterministicVehicleAnswer(
+        "Проаналізуй зміни автомобілів декларанта у 2024 та 2025 роках.",
+        {
+          detected_years:
+            [2024, 2025],
+
+          facts: [],
+        }
+      );
+
+    assert.equal(
+      answer,
+      null,
     );
   },
 );

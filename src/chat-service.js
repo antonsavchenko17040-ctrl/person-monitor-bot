@@ -2082,6 +2082,384 @@ export function buildDeterministicRealEstateAnswer(
   return answer;
 }
 
+function isVehicleListQuestion(
+  question
+) {
+  const q =
+    String(question ?? "")
+      .toLowerCase();
+
+  const hasDomain =
+    /авто|автомоб|транспортн\S*\s+засоб|машин/.test(
+      q
+    );
+
+  const hasListIntent =
+    /які|який|перелік|список|покажи|має|мав|мала|належ|волод/.test(
+      q
+    );
+
+  const hasAnalyticalIntent =
+    /аналіз|проаналіз|оцін|ризик|що\s+означ|виснов|чому|поясн|порівн|динамік|змін|різниц/.test(
+      q
+    );
+
+  return Boolean(
+    hasDomain &&
+    hasListIntent &&
+    !hasAnalyticalIntent
+  );
+}
+
+function formatVehicleCost(
+  value
+) {
+  const number =
+    Number(value);
+
+  if (
+    !Number.isFinite(number)
+  ) {
+    return null;
+  }
+
+  return number
+    .toLocaleString(
+      "uk-UA",
+      {
+        maximumFractionDigits:
+          2,
+      }
+    )
+    .replace(
+      /[\u00a0\u202f]/g,
+      " "
+    );
+}
+
+export function buildDeterministicVehicleAnswer(
+  question,
+  context
+) {
+  if (
+    !isVehicleListQuestion(
+      question
+    )
+  ) {
+    return null;
+  }
+
+  const years =
+    (
+      context
+        ?.detected_years ??
+      []
+    )
+      .map(Number)
+      .filter(
+        Number.isInteger
+      );
+
+  if (years.length !== 1) {
+    return null;
+  }
+
+  const year =
+    years[0];
+
+  const q =
+    String(question ?? "")
+      .toLowerCase();
+
+  const asksHousehold =
+    /домогосподар|разом\s+(?:із|з)\s+сім/.test(
+      q
+    ) ||
+    (
+      /декларант/.test(q) &&
+      /сім['’]?ї|членів\s+сім|дружин|чоловік|дитин/.test(
+        q
+      )
+    );
+
+  const asksFamily =
+    !asksHousehold &&
+    /сім['’]?ї|членів\s+сім|дружин|чоловік|дитин|родин/.test(
+      q
+    );
+
+  const acceptedRoles =
+    asksHousehold
+      ? new Set([
+          "declarant",
+          "family",
+        ])
+      : asksFamily
+        ? new Set([
+            "family",
+          ])
+        : new Set([
+            "declarant",
+          ]);
+
+  const rows = [];
+
+  for (
+    const fact of
+    context?.facts ?? []
+  ) {
+    if (
+      fact?.fact_type !==
+        "vehicle" ||
+      factYear(fact) !==
+        year
+    ) {
+      continue;
+    }
+
+    const value =
+      fact.value_json ??
+      {};
+
+    const rights =
+      (
+        Array.isArray(
+          value.rights
+        )
+          ? value.rights
+          : []
+      ).filter(
+        (right) =>
+          acceptedRoles.has(
+            right
+              ?.actor
+              ?.role
+          )
+      );
+
+    if (!rights.length) {
+      continue;
+    }
+
+    const brand =
+      String(
+        value.brand ??
+        ""
+      ).trim();
+
+    const model =
+      String(
+        value.model ??
+        ""
+      ).trim();
+
+    const name =
+      (
+        [brand, model]
+          .filter(Boolean)
+          .join(" ")
+          .trim()
+      ) ||
+      String(
+        fact.value_text ??
+        "Транспортний засіб"
+      ).trim();
+
+    const rightDescriptions =
+      uniqueTextValues(
+        rights.map(
+          (right) => {
+            const ownership =
+              String(
+                right
+                  ?.ownership_type ??
+                "вид права не зазначено"
+              ).trim();
+
+            const other =
+              String(
+                right
+                  ?.other_ownership ??
+                ""
+              ).trim();
+
+            return other
+              ? `${ownership} (${other})`
+              : ownership;
+          }
+        )
+      );
+
+    const people =
+      uniqueTextValues(
+        rights
+          .map(
+            (right) => {
+              const actor =
+                right?.actor;
+
+              if (
+                !actor?.name
+              ) {
+                return "";
+              }
+
+              const relation =
+                String(
+                  actor.relation ??
+                  ""
+                ).trim();
+
+              return relation
+                ? `${actor.name} (${relation})`
+                : actor.name;
+            }
+          )
+      );
+
+    rows.push({
+      name,
+
+      objectType:
+        String(
+          value.object_type ??
+          ""
+        ).trim(),
+
+      productionYear:
+        Number.isInteger(
+          Number(
+            value.production_year
+          )
+        )
+          ? Number(
+              value.production_year
+            )
+          : null,
+
+      acquisitionDate:
+        value.acquisition_date ??
+        null,
+
+      cost:
+        formatVehicleCost(
+          value.cost
+        ),
+
+      rights:
+        rightDescriptions,
+
+      people,
+    });
+  }
+
+  if (!rows.length) {
+    return null;
+  }
+
+  const scopeLabel =
+    asksHousehold
+      ? "домогосподарства"
+      : asksFamily
+        ? "членів сім’ї"
+        : "декларанта";
+
+  let answer =
+    `Транспортні засоби ${scopeLabel} за ${year} рік:\n\n`;
+
+  answer +=
+    rows
+      .map(
+        (row, index) => {
+          const lines = [
+            `${index + 1}. **${row.name}**`,
+          ];
+
+          if (row.objectType) {
+            lines.push(
+              `   - Тип: ${row.objectType}`
+            );
+          }
+
+          lines.push(
+            `   - Рік випуску: ${
+              row.productionYear ??
+              "не зазначено"
+            }`
+          );
+
+          lines.push(
+            `   - Вид права: ${
+              row.rights.length
+                ? row.rights.join("; ")
+                : "не зазначено"
+            }`
+          );
+
+          lines.push(
+            `   - Дата набуття: ${
+              row.acquisitionDate ??
+              "не зазначено"
+            }`
+          );
+
+          lines.push(
+            `   - Задекларована вартість: ${
+              row.cost
+                ? `${row.cost} грн`
+                : "не зазначено"
+            }`
+          );
+
+          if (
+            asksFamily ||
+            asksHousehold
+          ) {
+            lines.push(
+              `   - Особа: ${
+                row.people.length
+                  ? row.people.join("; ")
+                  : "не зазначено"
+              }`
+            );
+          }
+
+          return lines.join(
+            "\n"
+          );
+        }
+      )
+      .join(
+        "\n\n"
+      );
+
+  const yearlyAnalytics =
+    (
+      context
+        ?.analytics
+        ?.yearly ??
+      []
+    ).find(
+      (item) =>
+        Number(item?.year) ===
+        year
+    );
+
+  const source =
+    analyticsSourceForYear(
+      context,
+      yearlyAnalytics
+    );
+
+  if (source?.url) {
+    answer +=
+      `\n\nДжерело: ` +
+      `[декларація НАЗК за ${year} рік](${source.url})`;
+  }
+
+  return answer;
+}
+
 function isOrganizationRelationListQuestion(
   question
 ) {
@@ -3279,6 +3657,12 @@ export async function createSubjectChatResponse({
       context
     );
 
+  const deterministicVehicleAnswer =
+    buildDeterministicVehicleAnswer(
+      contextualQuestion,
+      context
+    );
+
   const deterministicOrganizationRelationsAnswer =
     buildDeterministicOrganizationRelationsAnswer(
       contextualQuestion,
@@ -3289,6 +3673,7 @@ export async function createSubjectChatResponse({
     deterministicAnalyticsAnswer ??
     deterministicIncomeDetailAnswer ??
     deterministicRealEstateAnswer ??
+    deterministicVehicleAnswer ??
     deterministicOrganizationRelationsAnswer;
 
   if (deterministicAnswer) {
