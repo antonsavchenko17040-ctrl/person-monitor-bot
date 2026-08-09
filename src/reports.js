@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 
@@ -249,13 +250,31 @@ export async function buildExcelReport({ subject, mentions, newMentions = [], sc
 }
 
 function resolvePdfFonts() {
+  const packagedRegular =
+    fileURLToPath(
+      new URL(
+        "../node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf",
+        import.meta.url
+      )
+    );
+
+  const packagedBold =
+    fileURLToPath(
+      new URL(
+        "../node_modules/dejavu-fonts-ttf/ttf/DejaVuSans-Bold.ttf",
+        import.meta.url
+      )
+    );
+
   const regularCandidates = [
+    packagedRegular,
     "/System/Library/Fonts/Supplemental/Arial.ttf", "/Library/Fonts/Arial.ttf",
     "C:/Windows/Fonts/arial.ttf", "C:/Windows/Fonts/calibri.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
     "/System/Library/Fonts/Supplemental/Times New Roman.ttf",
   ];
   const boldCandidates = [
+    packagedBold,
     "/System/Library/Fonts/Supplemental/Arial Bold.ttf", "/Library/Fonts/Arial Bold.ttf",
     "C:/Windows/Fonts/arialbd.ttf", "C:/Windows/Fonts/calibrib.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
