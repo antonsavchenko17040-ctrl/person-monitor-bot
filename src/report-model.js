@@ -2277,6 +2277,137 @@ export function buildRelationsSection({
 }
 
 
+function isReportPersonType(value) {
+  return (
+    value === "person" ||
+    value === "person_observation"
+  );
+}
+
+
+export function buildThirdPartyPeopleSection({
+  relations = null,
+} = {}) {
+  const items = [];
+
+  const relationItems =
+    Array.isArray(
+      relations?.items,
+    )
+      ? relations.items
+      : [];
+
+  for (const relation of relationItems) {
+    if (
+      relation?.relation_type !==
+      "third_party_rightsholder"
+    ) {
+      continue;
+    }
+
+    for (
+      const side of
+      ["from", "to"]
+    ) {
+      const entityType =
+        relation[
+          `${side}_entity_type`
+        ];
+
+      if (
+        !isReportPersonType(
+          entityType,
+        )
+      ) {
+        continue;
+      }
+
+      const fullName =
+        cleanValue(
+          relation[
+            `${side}_name`
+          ],
+        );
+
+      if (!fullName) {
+        continue;
+      }
+
+      items.push({
+        entity_id:
+          null,
+
+        full_name:
+          fullName,
+
+        relation_type:
+          "third_party_rightsholder",
+
+        role:
+          "third_party",
+
+        relationship:
+          cleanValue(
+            relation
+              ?.metadata
+              ?.relation,
+          ),
+
+        years: [
+          relation.year,
+        ],
+
+        identity_status:
+          "source_observation",
+
+        review_required:
+          true,
+
+        source_identity: {
+          source_system:
+            "nazk",
+
+          source_person_ref:
+            null,
+        },
+
+        statement_type:
+          "source_fact",
+
+        evidence:
+          Array.isArray(
+            relation.evidence,
+          )
+            ? relation.evidence
+            : [],
+      });
+    }
+  }
+
+  items.sort(
+    (a, b) =>
+      Number(
+        b.years?.[0] ?? 0,
+      ) -
+      Number(
+        a.years?.[0] ?? 0,
+      ) ||
+      String(
+        a.full_name ?? "",
+      ).localeCompare(
+        String(
+          b.full_name ?? "",
+        ),
+        "uk",
+      ),
+  );
+
+  return {
+    items,
+  };
+}
+
+
 export function buildSubjectReportModelPayload({
   subject,
   generatedAt = new Date(),
@@ -2748,6 +2879,48 @@ export async function buildSubjectReportModel(
         relationContexts,
     });
 
+  const thirdPartyPeople =
+    buildThirdPartyPeopleSection({
+      relations,
+    });
+
+  const relatedPeopleCombined = {
+    items: [
+      ...(
+        relatedPeople?.items ??
+        []
+      ),
+
+      ...(
+        thirdPartyPeople?.items ??
+        []
+      ),
+    ].sort(
+      (a, b) =>
+        Number(
+          b.years?.[0] ?? 0,
+        ) -
+        Number(
+          a.years?.[0] ?? 0,
+        ) ||
+        String(
+          a.relation_type ?? "",
+        ).localeCompare(
+          String(
+            b.relation_type ?? "",
+          ),
+        ) ||
+        String(
+          a.full_name ?? "",
+        ).localeCompare(
+          String(
+            b.full_name ?? "",
+          ),
+          "uk",
+        ),
+    ),
+  };
+
   return buildSubjectReportModelPayload({
     subject,
 
@@ -2761,7 +2934,10 @@ export async function buildSubjectReportModel(
     realEstate,
     vehicles,
     career,
-    relatedPeople,
+
+    relatedPeople:
+      relatedPeopleCombined,
+
     relations,
   });
 }

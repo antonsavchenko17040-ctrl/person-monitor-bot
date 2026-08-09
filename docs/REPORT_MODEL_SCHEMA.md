@@ -86,6 +86,10 @@ Family facts із декларації спочатку зберігаються
 
 Report Model не об’єднує family observations між роками лише за ПІБ, родинним зв’язком або `source_person_ref`.
 
+Особи з `third_party_rightsholder` також додаються до `related_people` як окремі `source_observation`. Повторення тієї самої назви або участь у кількох активах не є підставою для автоматичного merge.
+
+Для unresolved third-party observation `entity_id` залишається `null`, а `review_required = true`.
+
 ### income
 `yearly`, `sources`.
 
