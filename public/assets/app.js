@@ -442,10 +442,17 @@ async function loadMentions(subjectId, fullName) {
   const excelReport =
     document.getElementById("excel-report");
 
+  const pdfReport =
+    document.getElementById("pdf-report");
+
   excelReport.href =
     `/api/report-excel?subjectId=${encodeURIComponent(subjectId)}`;
 
+  pdfReport.href =
+    `/api/report-pdf?subjectId=${encodeURIComponent(subjectId)}`;
+
   excelReport.style.display = "inline-block";
+  pdfReport.style.display = "inline-block";
 
   section.style.display = "block";
   title.textContent = `Згадки: ${fullName}`;
