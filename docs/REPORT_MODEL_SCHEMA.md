@@ -125,7 +125,17 @@ Report Model не об’єднує real estate items між роками. Cross
 ### vehicles
 `yearly[].items`.
 
-Vehicle item повинен містити type, brand, model, year, rights, actor role, acquisition data, tracking identity та evidence.
+Vehicle item: `object_type`, `other_object_type`, `brand`, `model`, `production_year`, `acquisition_date`, `cost`, `owner_role`, `owner_name`, `owner_relationship`, `rights`, `tracking_identity`, `source_document_id`, `statement_type`, `evidence`.
+
+`tracking_identity` зберігає `source_system`, `source_item_ref` та `signature`.
+
+Vehicle `signature` містить `brand`, `model`, `production_year`, `acquisition_date`.
+
+`source_item_ref` є сильним source-specific signal, але не вважається глобальним реєстраційним ідентифікатором транспортного засобу.
+
+Report Model не об’єднує vehicle items між роками. Cross-year identity визначається окремим matching layer.
+
+Якщо `person` відсутній, actor role не вигадується; інформація про правовласника зберігається в `rights`.
 
 ### relations
 `items`, `counts`.

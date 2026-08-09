@@ -8,6 +8,7 @@ import {
   buildIncomeSection,
   buildCashAssetsSection,
   buildRealEstateSection,
+  buildVehicleSection,
   buildSubjectReportModel,
   buildSubjectReportModelPayload,
 } from "../src/report-model.js";
@@ -476,6 +477,86 @@ test(
               }],
             }),
 
+          vehicleContextLoader:
+            async (_entityId, year) => ({
+              detected_years: [
+                year,
+              ],
+
+              analytics: {
+                yearly: [{
+                  year,
+
+                  sourceDocumentId:
+                    `doc-${year}`,
+                }],
+              },
+
+              source_documents: [{
+                id:
+                  `doc-${year}`,
+
+                url:
+                  `https://example.test/${year}`,
+              }],
+
+              facts: [{
+                id:
+                  `vehicle-${year}`,
+
+                fact_type:
+                  "vehicle",
+
+                source_document_id:
+                  `doc-${year}`,
+
+                metadata: {
+                  declaration_year:
+                    year,
+
+                  item_ref:
+                    `vehicle-ref-${year}`,
+                },
+
+                value_json: {
+                  person:
+                    null,
+
+                  object_type:
+                    "Автомобіль легковий",
+
+                  brand:
+                    "TEST BRAND",
+
+                  model:
+                    year === 2025
+                      ? "MODEL A"
+                      : "MODEL B",
+
+                  production_year:
+                    year === 2025
+                      ? 2020
+                      : 2019,
+
+                  acquisition_date:
+                    "01.01.2020",
+
+                  cost:
+                    500000,
+
+                  rights: [{
+                    actor: {
+                      role:
+                        "declarant",
+                    },
+
+                    ownership_type:
+                      "Власність",
+                  }],
+                },
+              }],
+            }),
+
           multiYearIncomeAnalyticsContextLoader:
             async (_entityId, years) => ({
               source_documents:
@@ -646,6 +727,57 @@ test(
         .role,
       "declarant",
     );
+
+    assert.deepEqual(
+      report.vehicles.yearly.map(
+        (item) =>
+          item.year,
+      ),
+      [2025, 2024],
+    );
+
+    assert.equal(
+      report.vehicles.yearly[0]
+        .items.length,
+      1,
+    );
+
+    assert.equal(
+      report.vehicles.yearly[0]
+        .items[0]
+        .brand,
+      "TEST BRAND",
+    );
+
+    assert.equal(
+      report.vehicles.yearly[0]
+        .items[0]
+        .model,
+      "MODEL A",
+    );
+
+    assert.equal(
+      report.vehicles.yearly[0]
+        .items[0]
+        .tracking_identity
+        .source_item_ref,
+      "vehicle-ref-2025",
+    );
+
+    assert.equal(
+      report.vehicles.yearly[0]
+        .items[0]
+        .owner_role,
+      null,
+    );
+
+    assert.equal(
+      report.vehicles.yearly[0]
+        .items[0]
+        .rights[0]
+        .role,
+      "declarant",
+    );
   },
 );
 
@@ -775,6 +907,9 @@ test(
             async () => null,
 
           realEstateContextLoader:
+            async () => null,
+
+          vehicleContextLoader:
             async () => null,
 
           incomeDetailContextLoader:
@@ -1501,6 +1636,189 @@ test(
         .items[0]
         .cost,
       null,
+    );
+
+    assert.equal(
+      section.yearly[0]
+        .items[0]
+        .owner_role,
+      null,
+    );
+
+    assert.equal(
+      section.yearly[0]
+        .items[0]
+        .rights.length,
+      1,
+    );
+  },
+);
+
+test(
+  "vehicles keep source records separate",
+  () => {
+    const section =
+      buildVehicleSection({
+        contexts: [{
+          detected_years:
+            [2025],
+
+          analytics: {
+            yearly: [{
+              year:
+                2025,
+
+              sourceDocumentId:
+                "doc-2025",
+            }],
+          },
+
+          source_documents: [{
+            id:
+              "doc-2025",
+
+            url:
+              "https://example.test/2025",
+          }],
+
+          facts: [
+            {
+              fact_type:
+                "vehicle",
+
+              source_document_id:
+                "doc-2025",
+
+              metadata: {
+                declaration_year:
+                  2025,
+
+                item_ref:
+                  "vehicle-a",
+              },
+
+              value_json: {
+                person:
+                  null,
+
+                object_type:
+                  "Автомобіль легковий",
+
+                brand:
+                  "LAND ROVER",
+
+                model:
+                  "RANGE ROVER",
+
+                production_year:
+                  2016,
+
+                acquisition_date:
+                  "19.05.2016",
+
+                cost:
+                  1000000,
+
+                rights: [{
+                  actor: {
+                    role:
+                      "declarant",
+                  },
+
+                  ownership_type:
+                    "Власність",
+                }],
+              },
+            },
+
+            {
+              fact_type:
+                "vehicle",
+
+              source_document_id:
+                "doc-2025",
+
+              metadata: {
+                declaration_year:
+                  2025,
+
+                item_ref:
+                  "vehicle-b",
+              },
+
+              value_json: {
+                person:
+                  null,
+
+                object_type:
+                  "Автомобіль легковий",
+
+                brand:
+                  "LAND ROVER",
+
+                model:
+                  "RANGE ROVER",
+
+                production_year:
+                  2016,
+
+                acquisition_date:
+                  "19.05.2016",
+
+                cost:
+                  1100000,
+
+                rights: [{
+                  actor: {
+                    role:
+                      "family",
+                  },
+
+                  ownership_type:
+                    "Власність",
+                }],
+              },
+            },
+          ],
+        }],
+      });
+
+    assert.equal(
+      section.yearly.length,
+      1,
+    );
+
+    assert.equal(
+      section.yearly[0]
+        .items.length,
+      2,
+    );
+
+    const refs =
+      section.yearly[0]
+        .items
+        .map(
+          (item) =>
+            item
+              .tracking_identity
+              .source_item_ref,
+        )
+        .sort();
+
+    assert.deepEqual(
+      refs,
+      [
+        "vehicle-a",
+        "vehicle-b",
+      ],
+    );
+
+    assert.equal(
+      section.yearly[0]
+        .items[0]
+        .tracking_identity
+        .source_system,
+      "nazk",
     );
 
     assert.equal(
