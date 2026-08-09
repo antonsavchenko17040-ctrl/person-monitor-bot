@@ -18,6 +18,7 @@ let activeChatSubjectId = null;
 let activeChatSubjectName = "";
 let activeChatHistory = [];
 let chatRequestPending = false;
+let chatApiAvailable = null;
 
 function providerLabel(provider) {
   return PROVIDER_LABELS[provider] ?? provider ?? "Інше джерело";
@@ -90,6 +91,93 @@ async function loadHealth() {
     status.classList.add("error");
     dot.classList.remove("ok");
   }
+}
+
+function applyChatAvailability() {
+  const input =
+    document.getElementById(
+      "subject-chat-input"
+    );
+
+  const status =
+    document.getElementById(
+      "subject-chat-status"
+    );
+
+  const button =
+    document.getElementById(
+      "subject-chat-submit"
+    );
+
+  const unavailable =
+    chatApiAvailable === false;
+
+  if (input) {
+    input.disabled =
+      unavailable;
+  }
+
+  if (button) {
+    button.disabled =
+      unavailable ||
+      chatRequestPending;
+
+    if (unavailable) {
+      button.textContent =
+        "Недоступно";
+    } else if (
+      !chatRequestPending
+    ) {
+      button.textContent =
+        "Запитати";
+    }
+  }
+
+  if (
+    status &&
+    unavailable
+  ) {
+    status.textContent =
+      "AI-чат у цьому середовищі недоступний.";
+  }
+}
+
+async function loadChatAvailability() {
+  try {
+    const response =
+      await fetch(
+        "/api/chat",
+        {
+          method:
+            "GET",
+
+          headers: {
+            Accept:
+              "application/json",
+          },
+        }
+      );
+
+    const data =
+      await response.json();
+
+    chatApiAvailable =
+      Boolean(
+        response.ok &&
+        data?.ok === true &&
+        data?.available === true
+      );
+  } catch (error) {
+    console.error(
+      "Chat availability check failed:",
+      error
+    );
+
+    chatApiAvailable =
+      false;
+  }
+
+  applyChatAvailability();
 }
 
 function appendChatInlineMarkdown(
@@ -476,6 +564,8 @@ function prepareSubjectChat(
     button.textContent =
       "Запитати";
   }
+
+  applyChatAvailability();
 }
 
 async function submitSubjectChat(
@@ -484,6 +574,13 @@ async function submitSubjectChat(
   event.preventDefault();
 
   if (chatRequestPending) {
+    return;
+  }
+
+  if (
+    chatApiAvailable === false
+  ) {
+    applyChatAvailability();
     return;
   }
 
@@ -652,13 +749,22 @@ async function submitSubjectChat(
 
     if (button) {
       button.disabled =
+        chatApiAvailable ===
         false;
 
       button.textContent =
-        "Запитати";
+        chatApiAvailable ===
+        false
+          ? "Недоступно"
+          : "Запитати";
     }
 
-    input?.focus();
+    if (
+      chatApiAvailable !==
+      false
+    ) {
+      input?.focus();
+    }
   }
 }
 
@@ -2448,4 +2554,5 @@ document
   );
 
 loadHealth();
+loadChatAvailability();
 loadSubjects();

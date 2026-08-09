@@ -83,7 +83,7 @@ test(
 );
 
 test(
-  "rejects non-POST requests",
+  "returns unavailable chat status when disabled",
   async () => {
     const handler =
       createChatApiHandler({
@@ -96,6 +96,78 @@ test(
     await handler(
       {
         method: "GET",
+      },
+      response,
+    );
+
+    assert.equal(
+      response.state.status,
+      200,
+    );
+
+    assert.deepEqual(
+      response.state.body,
+      {
+        ok: true,
+        available: false,
+      },
+    );
+  },
+);
+
+test(
+  "returns available chat status when configured",
+  async () => {
+    const handler =
+      createChatApiHandler({
+        env: {
+          CHAT_API_ENABLED:
+            "true",
+
+          CHAT_PROVIDER:
+            "ollama",
+        },
+      });
+
+    const response =
+      createResponse();
+
+    await handler(
+      {
+        method: "GET",
+      },
+      response,
+    );
+
+    assert.equal(
+      response.state.status,
+      200,
+    );
+
+    assert.deepEqual(
+      response.state.body,
+      {
+        ok: true,
+        available: true,
+      },
+    );
+  },
+);
+
+test(
+  "rejects unsupported methods",
+  async () => {
+    const handler =
+      createChatApiHandler({
+        env: {},
+      });
+
+    const response =
+      createResponse();
+
+    await handler(
+      {
+        method: "PUT",
       },
       response,
     );

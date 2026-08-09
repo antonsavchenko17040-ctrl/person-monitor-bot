@@ -150,6 +150,38 @@ export function createChatApiHandler({
       "no-store",
     );
 
+    const chatEnabled =
+      String(
+        env.CHAT_API_ENABLED ??
+        "",
+      ).toLowerCase() ===
+      "true";
+
+    const providerConfig =
+      chatEnabled
+        ? resolveChatProviderConfig(
+            env,
+          )
+        : null;
+
+    if (
+      request.method === "GET"
+    ) {
+      return sendJson(
+        response,
+        200,
+        {
+          ok: true,
+
+          available:
+            Boolean(
+              chatEnabled &&
+              providerConfig
+            ),
+        },
+      );
+    }
+
     if (
       request.method !== "POST"
     ) {
@@ -164,13 +196,7 @@ export function createChatApiHandler({
       );
     }
 
-    if (
-      String(
-        env.CHAT_API_ENABLED ??
-        "",
-      ).toLowerCase() !==
-      "true"
-    ) {
+    if (!chatEnabled) {
       return sendJson(
         response,
         503,
@@ -181,11 +207,6 @@ export function createChatApiHandler({
         },
       );
     }
-
-    const providerConfig =
-      resolveChatProviderConfig(
-        env,
-      );
 
     if (!providerConfig) {
       return sendJson(
