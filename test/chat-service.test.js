@@ -4572,6 +4572,440 @@ test(
 );
 
 test(
+  "uses family member preflight without loading full subject knowledge",
+  async () => {
+    let knowledgeCalls = 0;
+    let subjectCalls = 0;
+    let familyCalls = 0;
+    let retrieverCalls = 0;
+    let modelCalls = 0;
+
+    const fakeClient = {
+      responses: {
+        async create() {
+          modelCalls += 1;
+
+          throw new Error(
+            "MODEL_SHOULD_NOT_BE_CALLED"
+          );
+        },
+      },
+    };
+
+    const result =
+      await createSubjectChatResponse({
+        subjectId:
+          "subject-1",
+
+        message:
+          "Які члени сім’ї були у декларанта у 2025 році?",
+
+        client:
+          fakeClient,
+
+        model:
+          "test-model",
+
+        subjectLoader:
+          async (subjectId) => {
+            subjectCalls += 1;
+
+            assert.equal(
+              subjectId,
+              "subject-1",
+            );
+
+            return {
+              id:
+                "subject-1",
+
+              entity_id:
+                "entity-1",
+
+              full_name:
+                "Тестова Особа",
+            };
+          },
+
+        familyContextLoader:
+          async (
+            entityId,
+            year
+          ) => {
+            familyCalls += 1;
+
+            assert.equal(
+              entityId,
+              "entity-1",
+            );
+
+            assert.equal(
+              year,
+              2025,
+            );
+
+            return {
+              detected_years:
+                [2025],
+
+              facts: [
+                {
+                  fact_type:
+                    "family_member",
+
+                  source_document_id:
+                    "doc-2025",
+
+                  metadata: {
+                    declaration_year:
+                      2025,
+                  },
+
+                  value_text:
+                    "Тестова Дружина",
+
+                  value_json: {
+                    name:
+                      "Тестова Дружина",
+
+                    relation:
+                      "дружина",
+
+                    person_ref:
+                      "family-wife",
+                  },
+                },
+
+                {
+                  fact_type:
+                    "family_member",
+
+                  source_document_id:
+                    "doc-2025",
+
+                  metadata: {
+                    declaration_year:
+                      2025,
+                  },
+
+                  value_text:
+                    "Тестовий Син",
+
+                  value_json: {
+                    name:
+                      "Тестовий Син",
+
+                    relation:
+                      "син",
+
+                    person_ref:
+                      "family-son",
+                  },
+                },
+              ],
+
+              analytics: {
+                yearly: [
+                  {
+                    year:
+                      2025,
+
+                    sourceDocumentId:
+                      "doc-2025",
+                  },
+                ],
+              },
+
+              source_documents: [
+                {
+                  id:
+                    "doc-2025",
+
+                  url:
+                    "https://example.test/declaration-2025",
+                },
+              ],
+            };
+          },
+
+        knowledgeLoader:
+          async () => {
+            knowledgeCalls += 1;
+
+            throw new Error(
+              "FULL_KNOWLEDGE_SHOULD_NOT_LOAD"
+            );
+          },
+
+        retriever:
+          () => {
+            retrieverCalls += 1;
+
+            throw new Error(
+              "RETRIEVER_SHOULD_NOT_RUN"
+            );
+          },
+      });
+
+    assert.equal(
+      result.model,
+      "person-monitor-facts",
+    );
+
+    assert.equal(
+      result.retrieval.version,
+      "deterministic-family-members-v1",
+    );
+
+    assert.deepEqual(
+      result.retrieval
+        .detected_years,
+      [2025],
+    );
+
+    assert.equal(
+      result.retrieval
+        .counts.facts,
+      2,
+    );
+
+    assert.equal(
+      result.retrieval
+        .counts.source_documents,
+      1,
+    );
+
+    assert.match(
+      result.answer,
+      /Тестова Дружина/,
+    );
+
+    assert.match(
+      result.answer,
+      /дружина/,
+    );
+
+    assert.match(
+      result.answer,
+      /Тестовий Син/,
+    );
+
+    assert.match(
+      result.answer,
+      /син/,
+    );
+
+    assert.match(
+      result.answer,
+      /declaration-2025/,
+    );
+
+    assert.equal(
+      subjectCalls,
+      1,
+    );
+
+    assert.equal(
+      familyCalls,
+      1,
+    );
+
+    assert.equal(
+      knowledgeCalls,
+      0,
+    );
+
+    assert.equal(
+      retrieverCalls,
+      0,
+    );
+
+    assert.equal(
+      modelCalls,
+      0,
+    );
+  },
+);
+
+test(
+  "falls back to full knowledge pipeline for analytical family member question",
+  async () => {
+    let knowledgeCalls = 0;
+    let subjectCalls = 0;
+    let familyCalls = 0;
+    let retrieverCalls = 0;
+    let modelCalls = 0;
+
+    const fakeClient = {
+      responses: {
+        async create() {
+          modelCalls += 1;
+
+          return {
+            output_text:
+              "Аналітична відповідь",
+          };
+        },
+      },
+    };
+
+    const fakeKnowledge = {
+      subject: {
+        full_name:
+          "Тестова Особа",
+      },
+
+      facts: [],
+    };
+
+    const fakeContext = {
+      retrieval_version:
+        "subject-retrieval-v1",
+
+      detected_years:
+        [2025],
+
+      counts: {
+        facts: 1,
+        relations: 0,
+        mentions: 0,
+        cross_checks: 0,
+        source_documents: 0,
+      },
+
+      subject:
+        fakeKnowledge.subject,
+
+      facts: [
+        {
+          fact_type:
+            "family_member",
+
+          source_document_id:
+            "doc-2025",
+
+          metadata: {
+            declaration_year:
+              2025,
+          },
+
+          value_text:
+            "Тестова Дружина",
+
+          value_json: {
+            name:
+              "Тестова Дружина",
+
+            relation:
+              "дружина",
+
+            person_ref:
+              "family-wife",
+          },
+        },
+      ],
+
+      relations: [],
+      mentions: [],
+      cross_checks: [],
+      source_documents: [],
+
+      analytics: {
+        yearly: [],
+        transitions: [],
+      },
+    };
+
+    const result =
+      await createSubjectChatResponse({
+        subjectId:
+          "subject-1",
+
+        message:
+          "Проаналізуй, які члени сім’ї були у 2025 році та оціни зміни",
+
+        client:
+          fakeClient,
+
+        model:
+          "test-model",
+
+        subjectLoader:
+          async () => {
+            subjectCalls += 1;
+
+            throw new Error(
+              "SUBJECT_PREFLIGHT_SHOULD_NOT_RUN"
+            );
+          },
+
+        familyContextLoader:
+          async () => {
+            familyCalls += 1;
+
+            throw new Error(
+              "FAMILY_PREFLIGHT_SHOULD_NOT_RUN"
+            );
+          },
+
+        knowledgeLoader:
+          async () => {
+            knowledgeCalls += 1;
+
+            return fakeKnowledge;
+          },
+
+        retriever:
+          () => {
+            retrieverCalls += 1;
+
+            return fakeContext;
+          },
+      });
+
+    assert.equal(
+      result.answer,
+      "Аналітична відповідь",
+    );
+
+    assert.equal(
+      result.model,
+      "test-model",
+    );
+
+    assert.equal(
+      result.retrieval.version,
+      "subject-retrieval-v1",
+    );
+
+    assert.equal(
+      subjectCalls,
+      0,
+    );
+
+    assert.equal(
+      familyCalls,
+      0,
+    );
+
+    assert.equal(
+      knowledgeCalls,
+      1,
+    );
+
+    assert.equal(
+      retrieverCalls,
+      1,
+    );
+
+    assert.equal(
+      modelCalls,
+      1,
+    );
+  },
+);
+
+test(
   "uses income detail preflight without loading full subject knowledge",
   async () => {
     let knowledgeCalls = 0;

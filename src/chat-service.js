@@ -1,5 +1,6 @@
 import {
   loadDeterministicEmploymentContext,
+  loadDeterministicFamilyContext,
   loadDeterministicIncomeContext,
   loadDeterministicOrganizationRelationsContext,
   loadSubjectKnowledge,
@@ -4945,6 +4946,8 @@ export async function createSubjectChatResponse({
     getSubject,
   employmentContextLoader =
     loadDeterministicEmploymentContext,
+  familyContextLoader =
+    loadDeterministicFamilyContext,
   incomeContextLoader =
     loadDeterministicIncomeContext,
   organizationRelationsContextLoader =
@@ -4967,6 +4970,107 @@ export async function createSubjectChatResponse({
       message,
       history
     );
+
+  /*
+   * Fast-path для factual family-member
+   * запиту за одним конкретним роком.
+   *
+   * Завантажуємо лише family_member
+   * facts канонічної декларації року.
+   */
+  if (
+    isFamilyMemberListQuestion(
+      contextualQuestion
+    )
+  ) {
+    const familyYears =
+      [
+        ...new Set(
+          String(
+            contextualQuestion ??
+            ""
+          ).match(
+            /\b(?:19|20)\d{2}\b/g
+          ) ?? []
+        ),
+      ]
+        .map(Number)
+        .filter(
+          Number.isInteger
+        );
+
+    if (
+      familyYears.length === 1
+    ) {
+      const subject =
+        await subjectLoader(
+          subjectId
+        );
+
+      if (!subject) {
+        throw new Error(
+          "SUBJECT_NOT_FOUND",
+        );
+      }
+
+      const entityId =
+        subject.entity_id ??
+        subject.id;
+
+      const fastContext =
+        await familyContextLoader(
+          entityId,
+          familyYears[0]
+        );
+
+      if (fastContext) {
+        const fastAnswer =
+          buildDeterministicFamilyMemberAnswer(
+            contextualQuestion,
+            fastContext,
+            fastContext.facts
+          );
+
+        if (fastAnswer) {
+          return {
+            answer:
+              fastAnswer,
+
+            model:
+              "person-monitor-facts",
+
+            retrieval: {
+              version:
+                "deterministic-family-members-v1",
+
+              detected_years:
+                fastContext
+                  .detected_years ??
+                familyYears,
+
+              counts: {
+                facts:
+                  fastContext
+                    .facts
+                    ?.length ??
+                  0,
+
+                source_documents:
+                  fastContext
+                    .source_documents
+                    ?.length ??
+                  0,
+
+                mentions: 0,
+                relations: 0,
+                cross_checks: 0,
+              },
+            },
+          };
+        }
+      }
+    }
+  }
 
   /*
    * Fast-path для factual income-detail
