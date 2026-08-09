@@ -4572,6 +4572,467 @@ test(
 );
 
 test(
+  "uses declaration submission preflight without loading full subject knowledge",
+  async () => {
+    let knowledgeCalls = 0;
+    let subjectCalls = 0;
+    let declarationCalls = 0;
+    let retrieverCalls = 0;
+    let modelCalls = 0;
+
+    const fakeClient = {
+      responses: {
+        async create() {
+          modelCalls += 1;
+
+          throw new Error(
+            "MODEL_SHOULD_NOT_BE_CALLED"
+          );
+        },
+      },
+    };
+
+    const result =
+      await createSubjectChatResponse({
+        subjectId:
+          "subject-1",
+
+        message:
+          "Які декларації були подані у 2025 році?",
+
+        client:
+          fakeClient,
+
+        model:
+          "test-model",
+
+        subjectLoader:
+          async (subjectId) => {
+            subjectCalls += 1;
+
+            assert.equal(
+              subjectId,
+              "subject-1",
+            );
+
+            return {
+              id:
+                "subject-1",
+
+              entity_id:
+                "entity-1",
+            };
+          },
+
+        declarationContextLoader:
+          async (
+            entityId,
+            year
+          ) => {
+            declarationCalls += 1;
+
+            assert.equal(
+              entityId,
+              "entity-1",
+            );
+
+            assert.equal(
+              year,
+              2025,
+            );
+
+            const facts = [
+              {
+                fact_type:
+                  "declaration_submission",
+
+                source_document_id:
+                  "doc-canonical",
+
+                metadata: {
+                  declaration_year:
+                    2025,
+                },
+
+                value_json: {
+                  declaration_year:
+                    2025,
+
+                  document_guid:
+                    "guid-canonical",
+
+                  published_at:
+                    "2026-03-30T17:07:13.000Z",
+
+                  registry:
+                    "Реєстр НАЗК",
+
+                  url:
+                    "https://example.test/guid-canonical",
+                },
+              },
+
+              {
+                fact_type:
+                  "declaration_submission",
+
+                source_document_id:
+                  "doc-2",
+
+                metadata: {
+                  declaration_year:
+                    2025,
+                },
+
+                value_json: {
+                  declaration_year:
+                    2025,
+
+                  document_guid:
+                    "guid-second",
+
+                  published_at:
+                    "2025-10-03T18:13:35.000Z",
+
+                  registry:
+                    "Реєстр НАЗК",
+
+                  url:
+                    "https://example.test/guid-second",
+                },
+              },
+
+              {
+                fact_type:
+                  "declaration_submission",
+
+                source_document_id:
+                  "doc-3",
+
+                metadata: {
+                  declaration_year:
+                    2025,
+                },
+
+                value_json: {
+                  declaration_year:
+                    2025,
+
+                  document_guid:
+                    "guid-third",
+
+                  published_at:
+                    "2025-10-03T18:11:33.000Z",
+
+                  registry:
+                    "Реєстр НАЗК",
+
+                  url:
+                    "https://example.test/guid-third",
+                },
+              },
+            ];
+
+            return {
+              detected_years:
+                [2025],
+
+              facts,
+
+              analytics: {
+                yearly: [
+                  {
+                    year:
+                      2025,
+
+                    sourceDocumentId:
+                      "doc-canonical",
+                  },
+                ],
+              },
+
+              source_documents: [
+                {
+                  id:
+                    "doc-canonical",
+
+                  url:
+                    "https://example.test/guid-canonical",
+                },
+
+                {
+                  id:
+                    "doc-2",
+
+                  url:
+                    "https://example.test/guid-second",
+                },
+
+                {
+                  id:
+                    "doc-3",
+
+                  url:
+                    "https://example.test/guid-third",
+                },
+              ],
+            };
+          },
+
+        knowledgeLoader:
+          async () => {
+            knowledgeCalls += 1;
+
+            throw new Error(
+              "FULL_KNOWLEDGE_SHOULD_NOT_LOAD"
+            );
+          },
+
+        retriever:
+          () => {
+            retrieverCalls += 1;
+
+            throw new Error(
+              "RETRIEVER_SHOULD_NOT_RUN"
+            );
+          },
+      });
+
+    assert.equal(
+      result.model,
+      "person-monitor-facts",
+    );
+
+    assert.equal(
+      result.retrieval.version,
+      "deterministic-declaration-submissions-v1",
+    );
+
+    assert.deepEqual(
+      result.retrieval
+        .detected_years,
+      [2025],
+    );
+
+    assert.equal(
+      result.retrieval
+        .counts.facts,
+      3,
+    );
+
+    assert.equal(
+      result.retrieval
+        .counts.source_documents,
+      3,
+    );
+
+    assert.match(
+      result.answer,
+      /Декларації за 2025 рік: \*\*3\*\*/,
+    );
+
+    assert.match(
+      result.answer,
+      /guid-canonical/,
+    );
+
+    assert.match(
+      result.answer,
+      /guid-second/,
+    );
+
+    assert.match(
+      result.answer,
+      /guid-third/,
+    );
+
+    assert.equal(
+      (
+        result.answer.match(
+          /Основне джерело Person Monitor для аналітики цього року/g
+        ) ?? []
+      ).length,
+      1,
+    );
+
+    assert.equal(
+      subjectCalls,
+      1,
+    );
+
+    assert.equal(
+      declarationCalls,
+      1,
+    );
+
+    assert.equal(
+      knowledgeCalls,
+      0,
+    );
+
+    assert.equal(
+      retrieverCalls,
+      0,
+    );
+
+    assert.equal(
+      modelCalls,
+      0,
+    );
+  },
+);
+
+test(
+  "falls back to full knowledge pipeline for analytical declaration question",
+  async () => {
+    let knowledgeCalls = 0;
+    let subjectCalls = 0;
+    let declarationCalls = 0;
+    let retrieverCalls = 0;
+    let modelCalls = 0;
+
+    const fakeClient = {
+      responses: {
+        async create() {
+          modelCalls += 1;
+
+          return {
+            output_text:
+              "Аналітична відповідь",
+          };
+        },
+      },
+    };
+
+    const fakeKnowledge = {
+      subject: {
+        full_name:
+          "Тестова Особа",
+      },
+
+      facts: [],
+    };
+
+    const fakeContext = {
+      retrieval_version:
+        "subject-retrieval-v1",
+
+      detected_years:
+        [2025],
+
+      counts: {
+        facts: 0,
+        relations: 0,
+        mentions: 0,
+        cross_checks: 0,
+        source_documents: 0,
+      },
+
+      subject:
+        fakeKnowledge.subject,
+
+      facts: [],
+      relations: [],
+      mentions: [],
+      cross_checks: [],
+      source_documents: [],
+
+      analytics: {
+        yearly: [],
+        transitions: [],
+      },
+    };
+
+    const result =
+      await createSubjectChatResponse({
+        subjectId:
+          "subject-1",
+
+        message:
+          "Проаналізуй декларації за 2025 рік та оціни можливі ризики",
+
+        client:
+          fakeClient,
+
+        model:
+          "test-model",
+
+        subjectLoader:
+          async () => {
+            subjectCalls += 1;
+
+            throw new Error(
+              "SUBJECT_PREFLIGHT_SHOULD_NOT_RUN"
+            );
+          },
+
+        declarationContextLoader:
+          async () => {
+            declarationCalls += 1;
+
+            throw new Error(
+              "DECLARATION_PREFLIGHT_SHOULD_NOT_RUN"
+            );
+          },
+
+        knowledgeLoader:
+          async () => {
+            knowledgeCalls += 1;
+
+            return fakeKnowledge;
+          },
+
+        retriever:
+          () => {
+            retrieverCalls += 1;
+
+            return fakeContext;
+          },
+      });
+
+    assert.equal(
+      result.answer,
+      "Аналітична відповідь",
+    );
+
+    assert.equal(
+      result.model,
+      "test-model",
+    );
+
+    assert.equal(
+      result.retrieval.version,
+      "subject-retrieval-v1",
+    );
+
+    assert.equal(
+      subjectCalls,
+      0,
+    );
+
+    assert.equal(
+      declarationCalls,
+      0,
+    );
+
+    assert.equal(
+      knowledgeCalls,
+      1,
+    );
+
+    assert.equal(
+      retrieverCalls,
+      1,
+    );
+
+    assert.equal(
+      modelCalls,
+      1,
+    );
+  },
+);
+
+test(
   "uses cash asset preflight without loading full subject knowledge",
   async () => {
     let knowledgeCalls = 0;

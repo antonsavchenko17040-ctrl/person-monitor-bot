@@ -1,5 +1,6 @@
 import {
   loadDeterministicCashContext,
+  loadDeterministicDeclarationContext,
   loadDeterministicEmploymentContext,
   loadDeterministicFamilyContext,
   loadDeterministicIncomeContext,
@@ -4946,6 +4947,8 @@ export async function createSubjectChatResponse({
     loadSubjectKnowledge,
   subjectLoader =
     getSubject,
+  declarationContextLoader =
+    loadDeterministicDeclarationContext,
   cashContextLoader =
     loadDeterministicCashContext,
   employmentContextLoader =
@@ -4976,6 +4979,108 @@ export async function createSubjectChatResponse({
       message,
       history
     );
+
+  /*
+   * Fast-path для factual declaration-list
+   * запиту за одним конкретним роком.
+   *
+   * Завантажуємо всі declaration_submission
+   * facts цього року та окремо знаємо
+   * canonical declaration для аналітики.
+   */
+  if (
+    isDeclarationSubmissionQuestion(
+      contextualQuestion
+    )
+  ) {
+    const declarationYears =
+      [
+        ...new Set(
+          String(
+            contextualQuestion ??
+            ""
+          ).match(
+            /\b(?:19|20)\d{2}\b/g
+          ) ?? []
+        ),
+      ]
+        .map(Number)
+        .filter(
+          Number.isInteger
+        );
+
+    if (
+      declarationYears.length === 1
+    ) {
+      const subject =
+        await subjectLoader(
+          subjectId
+        );
+
+      if (!subject) {
+        throw new Error(
+          "SUBJECT_NOT_FOUND",
+        );
+      }
+
+      const entityId =
+        subject.entity_id ??
+        subject.id;
+
+      const fastContext =
+        await declarationContextLoader(
+          entityId,
+          declarationYears[0]
+        );
+
+      if (fastContext) {
+        const fastAnswer =
+          buildDeterministicDeclarationSubmissionAnswer(
+            contextualQuestion,
+            fastContext,
+            fastContext.facts
+          );
+
+        if (fastAnswer) {
+          return {
+            answer:
+              fastAnswer,
+
+            model:
+              "person-monitor-facts",
+
+            retrieval: {
+              version:
+                "deterministic-declaration-submissions-v1",
+
+              detected_years:
+                fastContext
+                  .detected_years ??
+                declarationYears,
+
+              counts: {
+                facts:
+                  fastContext
+                    .facts
+                    ?.length ??
+                  0,
+
+                source_documents:
+                  fastContext
+                    .source_documents
+                    ?.length ??
+                  0,
+
+                mentions: 0,
+                relations: 0,
+                cross_checks: 0,
+              },
+            },
+          };
+        }
+      }
+    }
+  }
 
   /*
    * Fast-path для factual cash-asset
