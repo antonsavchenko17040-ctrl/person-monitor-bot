@@ -3,6 +3,7 @@ import {
   loadDeterministicDeclarationContext,
   loadDeterministicEmploymentContext,
   loadDeterministicFamilyContext,
+  loadDeterministicIncomeAnalyticsContext,
   loadDeterministicIncomeContext,
   loadDeterministicOrganizationRelationsContext,
   loadDeterministicRealEstateContext,
@@ -4958,6 +4959,8 @@ export async function createSubjectChatResponse({
     loadDeterministicEmploymentContext,
   familyContextLoader =
     loadDeterministicFamilyContext,
+  incomeAnalyticsContextLoader =
+    loadDeterministicIncomeAnalyticsContext,
   incomeContextLoader =
     loadDeterministicIncomeContext,
   vehicleContextLoader =
@@ -4982,6 +4985,138 @@ export async function createSubjectChatResponse({
       message,
       history
     );
+
+  /*
+   * Fast-path для deterministic
+   * single-year aggregate income.
+   *
+   * Не будуємо analytics за всі роки
+   * і не завантажуємо full knowledge.
+   */
+  {
+    const q =
+      String(
+        contextualQuestion ??
+        ""
+      ).toLowerCase();
+
+    const hasIncome =
+      /дохід|доход/.test(
+        q
+      );
+
+    const hasAggregateIntent =
+      /порівн|змін|різниц|відсот|процент|скільки|сума|загаль/.test(
+        q
+      );
+
+    const hasSingleYearTotalIntent =
+      /який\s+(?:був\s+|становив\s+)?дохід/.test(
+        q
+      );
+
+    const hasDetailIntent =
+      /джерел|вид|тип|категор|структур|розбив|від кого|хто плат|перелік/.test(
+        q
+      );
+
+    if (
+      hasIncome &&
+      !hasDetailIntent &&
+      (
+        hasAggregateIntent ||
+        hasSingleYearTotalIntent
+      )
+    ) {
+      const incomeAnalyticsYears =
+        [
+          ...new Set(
+            String(
+              contextualQuestion ??
+              ""
+            ).match(
+              /\b(?:19|20)\d{2}\b/g
+            ) ?? []
+          ),
+        ]
+          .map(Number)
+          .filter(
+            Number.isInteger
+          );
+
+      /*
+       * Порівняння кількох років
+       * залишаємо повному analytics engine.
+       */
+      if (
+        incomeAnalyticsYears.length ===
+        1
+      ) {
+        const subject =
+          await subjectLoader(
+            subjectId
+          );
+
+        if (!subject) {
+          throw new Error(
+            "SUBJECT_NOT_FOUND",
+          );
+        }
+
+        const entityId =
+          subject.entity_id ??
+          subject.id;
+
+        const fastContext =
+          await incomeAnalyticsContextLoader(
+            entityId,
+            incomeAnalyticsYears[0]
+          );
+
+        if (fastContext) {
+          const fastAnswer =
+            buildDeterministicAnalyticsAnswer(
+              contextualQuestion,
+              fastContext
+            );
+
+          if (fastAnswer) {
+            return {
+              answer:
+                fastAnswer,
+
+              model:
+                "person-monitor-analytics",
+
+              retrieval: {
+                version:
+                  "deterministic-income-analytics-v1",
+
+                detected_years:
+                  fastContext
+                    .detected_years ??
+                  incomeAnalyticsYears,
+
+                counts: {
+                  facts: 0,
+
+                  source_documents:
+                    fastContext
+                      .source_documents
+                      ?.length ??
+                    0,
+
+                  mentions: 0,
+                  relations: 0,
+                  cross_checks: 0,
+                },
+              },
+            };
+          }
+        }
+      }
+    }
+  }
 
   /*
    * Fast-path для factual real-estate

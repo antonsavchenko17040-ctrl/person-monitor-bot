@@ -6809,6 +6809,417 @@ test(
 );
 
 test(
+  "uses single-year income analytics preflight without loading full subject knowledge",
+  async () => {
+    let subjectCalls = 0;
+    let analyticsCalls = 0;
+    let knowledgeCalls = 0;
+    let retrieverCalls = 0;
+    let modelCalls = 0;
+
+    const fakeClient = {
+      responses: {
+        async create() {
+          modelCalls += 1;
+
+          throw new Error(
+            "MODEL_SHOULD_NOT_BE_CALLED"
+          );
+        },
+      },
+    };
+
+    const result =
+      await createSubjectChatResponse({
+        subjectId:
+          "subject-1",
+
+        message:
+          "Який загальний дохід декларанта у 2025 році?",
+
+        client:
+          fakeClient,
+
+        model:
+          "test-model",
+
+        subjectLoader:
+          async (subjectId) => {
+            subjectCalls += 1;
+
+            assert.equal(
+              subjectId,
+              "subject-1",
+            );
+
+            return {
+              id:
+                "subject-1",
+
+              entity_id:
+                "entity-1",
+            };
+          },
+
+        incomeAnalyticsContextLoader:
+          async (
+            entityId,
+            year
+          ) => {
+            analyticsCalls += 1;
+
+            assert.equal(
+              entityId,
+              "entity-1",
+            );
+
+            assert.equal(
+              year,
+              2025,
+            );
+
+            return {
+              detected_years:
+                [2025],
+
+              analytics: {
+                yearly: [
+                  {
+                    year:
+                      2025,
+
+                    sourceDocumentId:
+                      "doc-2025",
+
+                    incomeDeclarantUah:
+                      100,
+
+                    incomeHouseholdUah:
+                      150,
+                  },
+                ],
+
+                transitions: [],
+              },
+
+              source_documents: [
+                {
+                  id:
+                    "doc-2025",
+
+                  url:
+                    "https://example.test/2025",
+                },
+              ],
+
+              facts: [],
+            };
+          },
+
+        knowledgeLoader:
+          async () => {
+            knowledgeCalls += 1;
+
+            throw new Error(
+              "FULL_KNOWLEDGE_SHOULD_NOT_LOAD"
+            );
+          },
+
+        retriever:
+          () => {
+            retrieverCalls += 1;
+
+            throw new Error(
+              "RETRIEVER_SHOULD_NOT_RUN"
+            );
+          },
+      });
+
+    assert.equal(
+      result.model,
+      "person-monitor-analytics",
+    );
+
+    assert.equal(
+      result.retrieval.version,
+      "deterministic-income-analytics-v1",
+    );
+
+    assert.deepEqual(
+      result.retrieval
+        .detected_years,
+      [2025],
+    );
+
+    assert.equal(
+      result.retrieval
+        .counts.facts,
+      0,
+    );
+
+    assert.equal(
+      result.retrieval
+        .counts.source_documents,
+      1,
+    );
+
+    assert.match(
+      result.answer,
+      /За 2025 рік дохід декларанта становив \*\*100 грн\*\*/,
+    );
+
+    assert.equal(
+      subjectCalls,
+      1,
+    );
+
+    assert.equal(
+      analyticsCalls,
+      1,
+    );
+
+    assert.equal(
+      knowledgeCalls,
+      0,
+    );
+
+    assert.equal(
+      retrieverCalls,
+      0,
+    );
+
+    assert.equal(
+      modelCalls,
+      0,
+    );
+  },
+);
+
+test(
+  "keeps multi-year aggregate income on full knowledge pipeline",
+  async () => {
+    let subjectCalls = 0;
+    let analyticsCalls = 0;
+    let knowledgeCalls = 0;
+    let retrieverCalls = 0;
+    let modelCalls = 0;
+
+    const fakeClient = {
+      responses: {
+        async create() {
+          modelCalls += 1;
+
+          throw new Error(
+            "MODEL_SHOULD_NOT_BE_CALLED"
+          );
+        },
+      },
+    };
+
+    const fakeKnowledge = {
+      subject: {
+        full_name:
+          "Тестова Особа",
+      },
+    };
+
+    const fakeContext = {
+      retrieval_version:
+        "subject-retrieval-v1",
+
+      detected_years:
+        [2024, 2025],
+
+      counts: {
+        facts: 2,
+        relations: 0,
+        mentions: 0,
+        cross_checks: 0,
+        source_documents: 2,
+      },
+
+      subject:
+        fakeKnowledge.subject,
+
+      facts: [],
+
+      relations: [],
+      mentions: [],
+      cross_checks: [],
+
+      analytics: {
+        yearly: [
+          {
+            year:
+              2024,
+
+            sourceDocumentId:
+              "doc-2024",
+
+            incomeDeclarantUah:
+              100,
+
+            incomeHouseholdUah:
+              150,
+          },
+
+          {
+            year:
+              2025,
+
+            sourceDocumentId:
+              "doc-2025",
+
+            incomeDeclarantUah:
+              200,
+
+            incomeHouseholdUah:
+              250,
+          },
+        ],
+
+        transitions: [
+          {
+            fromYear:
+              2024,
+
+            toYear:
+              2025,
+
+            incomeDelta:
+              100,
+
+            incomeDeltaPercent:
+              100,
+          },
+        ],
+      },
+
+      source_documents: [
+        {
+          id:
+            "doc-2024",
+
+          url:
+            "https://example.test/2024",
+        },
+
+        {
+          id:
+            "doc-2025",
+
+          url:
+            "https://example.test/2025",
+        },
+      ],
+    };
+
+    const result =
+      await createSubjectChatResponse({
+        subjectId:
+          "subject-1",
+
+        message:
+          "Порівняй дохід декларанта за 2024 та 2025 роки",
+
+        client:
+          fakeClient,
+
+        model:
+          "test-model",
+
+        subjectLoader:
+          async () => {
+            subjectCalls += 1;
+
+            throw new Error(
+              "SINGLE_YEAR_PREFLIGHT_SHOULD_NOT_RUN"
+            );
+          },
+
+        incomeAnalyticsContextLoader:
+          async () => {
+            analyticsCalls += 1;
+
+            throw new Error(
+              "SINGLE_YEAR_ANALYTICS_SHOULD_NOT_RUN"
+            );
+          },
+
+        knowledgeLoader:
+          async () => {
+            knowledgeCalls += 1;
+
+            return fakeKnowledge;
+          },
+
+        retriever:
+          () => {
+            retrieverCalls += 1;
+
+            return fakeContext;
+          },
+      });
+
+    assert.equal(
+      result.model,
+      "person-monitor-analytics",
+    );
+
+    assert.equal(
+      result.retrieval.version,
+      "subject-retrieval-v1",
+    );
+
+    assert.deepEqual(
+      result.retrieval
+        .detected_years,
+      [2024, 2025],
+    );
+
+    assert.match(
+      result.answer,
+      /\*\*2024:\*\* 100 грн/,
+    );
+
+    assert.match(
+      result.answer,
+      /\*\*2025:\*\* 200 грн/,
+    );
+
+    assert.match(
+      result.answer,
+      /\*\*Зміна:\*\* \+100 грн \(\+100%\)/,
+    );
+
+    assert.equal(
+      subjectCalls,
+      0,
+    );
+
+    assert.equal(
+      analyticsCalls,
+      0,
+    );
+
+    assert.equal(
+      knowledgeCalls,
+      1,
+    );
+
+    assert.equal(
+      retrieverCalls,
+      1,
+    );
+
+    assert.equal(
+      modelCalls,
+      0,
+    );
+  },
+);
+
+test(
   "uses income detail preflight without loading full subject knowledge",
   async () => {
     let knowledgeCalls = 0;
@@ -8023,6 +8434,39 @@ test(
 
         model:
           "test-model",
+
+        subjectLoader:
+          async () => ({
+            id:
+              "subject-1",
+
+            entity_id:
+              "entity-1",
+          }),
+
+        incomeAnalyticsContextLoader:
+          async (
+            entityId,
+            year
+          ) => {
+            assert.equal(
+              entityId,
+              "entity-1",
+            );
+
+            assert.equal(
+              year,
+              2025,
+            );
+
+            /*
+             * Цей тест перевіряє саме
+             * Responses API fallback.
+             * Імітуємо відсутність
+             * targeted analytics context.
+             */
+            return null;
+          },
 
         knowledgeLoader:
           async () =>

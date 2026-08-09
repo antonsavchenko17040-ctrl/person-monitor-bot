@@ -1298,6 +1298,230 @@ export async function loadDeterministicFamilyContext(
   };
 }
 
+export async function loadDeterministicIncomeAnalyticsContext(
+  entityId,
+  year,
+  options = {},
+) {
+  const sql =
+    options.sql ?? db();
+
+  const normalizedYear =
+    Number(year);
+
+  if (
+    !entityId ||
+    !Number.isInteger(
+      normalizedYear
+    )
+  ) {
+    return null;
+  }
+
+  const rows =
+    await sql`
+      WITH canonical AS (
+        SELECT
+          f.source_document_id
+
+        FROM facts f
+
+        WHERE
+          f.entity_id =
+            ${entityId}
+
+          AND f.fact_type =
+            'declaration_submission'
+
+          AND (
+            f.value_json
+            ->> 'declaration_year'
+          )::int =
+            ${normalizedYear}
+
+        ORDER BY
+          (
+            f.value_json
+            ->> 'published_at'
+          )::timestamptz
+            DESC NULLS LAST,
+
+          f.created_at DESC
+
+        LIMIT 1
+      )
+
+      SELECT
+        c.source_document_id
+          AS source_document_id,
+
+        sd.url
+          AS source_url,
+
+        COALESCE(
+          SUM(
+            CASE
+              WHEN
+                UPPER(
+                  COALESCE(
+                    i.unit,
+                    'UAH'
+                  )
+                ) = 'UAH'
+
+                AND (
+                  i.value_json
+                  -> 'person'
+                  ->> 'role'
+                ) = 'declarant'
+
+              THEN
+                COALESCE(
+                  i.value_number,
+                  0
+                )
+
+              ELSE 0
+            END
+          ),
+          0
+        ) AS income_declarant_uah,
+
+        COALESCE(
+          SUM(
+            CASE
+              WHEN
+                UPPER(
+                  COALESCE(
+                    i.unit,
+                    'UAH'
+                  )
+                ) = 'UAH'
+
+                AND (
+                  i.value_json
+                  -> 'person'
+                  ->> 'role'
+                ) IN (
+                  'declarant',
+                  'family'
+                )
+
+              THEN
+                COALESCE(
+                  i.value_number,
+                  0
+                )
+
+              ELSE 0
+            END
+          ),
+          0
+        ) AS income_household_uah,
+
+        COUNT(i.id)::int
+          AS income_fact_count
+
+      FROM canonical c
+
+      LEFT JOIN source_documents sd
+        ON sd.id =
+           c.source_document_id
+
+      LEFT JOIN facts i
+        ON i.entity_id =
+           ${entityId}
+
+       AND i.source_document_id =
+           c.source_document_id
+
+       AND i.fact_type =
+           'income'
+
+      GROUP BY
+        c.source_document_id,
+        sd.url
+    `;
+
+  if (!rows.length) {
+    return null;
+  }
+
+  const row =
+    rows[0];
+
+  const sourceDocumentId =
+    row
+      ?.source_document_id ??
+    null;
+
+  if (!sourceDocumentId) {
+    return null;
+  }
+
+  const incomeDeclarantUah =
+    Number(
+      row
+        ?.income_declarant_uah ??
+      0
+    );
+
+  const incomeHouseholdUah =
+    Number(
+      row
+        ?.income_household_uah ??
+      0
+    );
+
+  const incomeFactCount =
+    Number(
+      row
+        ?.income_fact_count ??
+      0
+    );
+
+  return {
+    detected_years: [
+      normalizedYear,
+    ],
+
+    analytics: {
+      yearly: [
+        {
+          year:
+            normalizedYear,
+
+          sourceDocumentId,
+
+          incomeDeclarantUah,
+
+          incomeHouseholdUah,
+        },
+      ],
+
+      transitions: [],
+    },
+
+    source_documents:
+      row?.source_url
+        ? [
+            {
+              id:
+                sourceDocumentId,
+
+              url:
+                row.source_url,
+            },
+          ]
+        : [],
+
+    facts: [],
+
+    income_fact_count:
+      incomeFactCount,
+  };
+}
+
 export async function loadDeterministicIncomeContext(
   entityId,
   year,
