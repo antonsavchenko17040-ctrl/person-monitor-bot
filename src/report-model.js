@@ -7,6 +7,10 @@ import {
 } from "./income-context.js";
 
 import {
+  loadDeterministicCashContext,
+} from "./cash-context.js";
+
+import {
   getSubject,
 } from "./store.js";
 
@@ -503,11 +507,461 @@ export function buildIncomeSection({
   };
 }
 
+function normalizeCurrency(
+  value,
+) {
+  const raw =
+    cleanValue(value);
+
+  if (!raw) {
+    return null;
+  }
+
+  const upper =
+    raw.toUpperCase();
+
+  if (/^UAH(?:\s|\(|$)/.test(upper)) {
+    return "UAH";
+  }
+
+  if (/^USD(?:\s|\(|$)/.test(upper)) {
+    return "USD";
+  }
+
+  if (/^EUR(?:\s|\(|$)/.test(upper)) {
+    return "EUR";
+  }
+
+  return upper;
+}
+
+function safeCashRight(
+  right,
+) {
+  const actor =
+    right?.actor &&
+    typeof right.actor === "object"
+      ? right.actor
+      : {};
+
+  return {
+    role:
+      cleanValue(
+        actor.role,
+      ),
+
+    name:
+      cleanValue(
+        actor.name,
+      ),
+
+    relation:
+      cleanValue(
+        actor.relationship ??
+        actor.relation,
+      ),
+
+    ownership_type:
+      cleanValue(
+        right?.ownership_type,
+      ),
+
+    other_ownership:
+      cleanValue(
+        right?.other_ownership,
+      ),
+
+    share_percent:
+      numericValue(
+        right?.share_percent,
+      ),
+
+    third_party_kind:
+      cleanValue(
+        right?.third_party_kind,
+      ),
+
+    third_party_name:
+      cleanValue(
+        right?.third_party_name,
+      ),
+
+    third_party_edrpou:
+      cleanValue(
+        right?.third_party_edrpou,
+      ),
+
+    third_party_foreign_code:
+      cleanValue(
+        right?.third_party_foreign_code,
+      ),
+  };
+}
+
+function cashItemRoles(
+  value,
+) {
+  const roles =
+    new Set();
+
+  const directRole =
+    cleanValue(
+      value?.person?.role,
+    );
+
+  if (directRole) {
+    roles.add(
+      directRole,
+    );
+  }
+
+  for (
+    const right of
+    Array.isArray(value?.rights)
+      ? value.rights
+      : []
+  ) {
+    const role =
+      cleanValue(
+        right
+          ?.actor
+          ?.role,
+      );
+
+    if (role) {
+      roles.add(
+        role,
+      );
+    }
+  }
+
+  return roles;
+}
+
+function addCurrencyAmount(
+  target,
+  currency,
+  amount,
+) {
+  if (
+    !currency ||
+    amount === null
+  ) {
+    return;
+  }
+
+  target[currency] =
+    round2(
+      (
+        target[currency] ??
+        0
+      ) +
+      amount,
+    );
+}
+
+export function buildCashAssetsSection({
+  contexts = [],
+} = {}) {
+  const yearlyMap =
+    new Map();
+
+  for (
+    const context of
+    (
+      Array.isArray(contexts)
+        ? contexts
+        : []
+    ).filter(Boolean)
+  ) {
+    const detectedYear =
+      normalizeYears(
+        context
+          ?.detected_years,
+      )[0] ?? null;
+
+    const canonicalSourceId =
+      context
+        ?.analytics
+        ?.yearly
+        ?.[0]
+        ?.sourceDocumentId ??
+      null;
+
+    const sourceDocument =
+      (
+        context
+          ?.source_documents ??
+        []
+      ).find(
+        (candidate) =>
+          String(
+            candidate?.id ?? "",
+          ) ===
+          String(
+            canonicalSourceId ??
+            "",
+          ),
+      );
+
+    const sourceUrl =
+      cleanValue(
+        sourceDocument?.url,
+      );
+
+    for (
+      const fact of
+      context?.facts ?? []
+    ) {
+      if (
+        fact?.fact_type !==
+        "cash_asset"
+      ) {
+        continue;
+      }
+
+      const value =
+        fact.value_json ?? {};
+
+      const year =
+        numericValue(
+          fact
+            ?.metadata
+            ?.declaration_year ??
+          detectedYear,
+        );
+
+      if (
+        !Number.isInteger(year)
+      ) {
+        continue;
+      }
+
+      if (!yearlyMap.has(year)) {
+        yearlyMap.set(
+          year,
+          {
+            year,
+
+            declarant_by_currency:
+              {},
+
+            household_by_currency:
+              {},
+
+            items: [],
+
+            evidence:
+              canonicalSourceId !== null ||
+              sourceUrl
+                ? [{
+                    source_document_id:
+                      canonicalSourceId,
+
+                    provider:
+                      null,
+
+                    url:
+                      sourceUrl,
+
+                    observed_at:
+                      null,
+
+                    statement_type:
+                      "calculation",
+                  }]
+                : [],
+          },
+        );
+      }
+
+      const yearItem =
+        yearlyMap.get(year);
+
+      const amount =
+        numericValue(
+          value.amount ??
+          fact.value_number,
+        );
+
+      const currencyRaw =
+        cleanValue(
+          value.currency ??
+          fact.unit,
+        );
+
+      const currency =
+        normalizeCurrency(
+          currencyRaw,
+        );
+
+      const roles =
+        cashItemRoles(
+          value,
+        );
+
+      if (
+        roles.has(
+          "declarant",
+        )
+      ) {
+        addCurrencyAmount(
+          yearItem
+            .declarant_by_currency,
+          currency,
+          amount,
+        );
+      }
+
+      if (
+        roles.has(
+          "declarant",
+        ) ||
+        roles.has(
+          "family",
+        )
+      ) {
+        addCurrencyAmount(
+          yearItem
+            .household_by_currency,
+          currency,
+          amount,
+        );
+      }
+
+      const person =
+        value.person &&
+        typeof value.person ===
+          "object"
+          ? value.person
+          : {};
+
+      const sourceDocumentId =
+        fact.source_document_id ??
+        canonicalSourceId ??
+        null;
+
+      yearItem.items.push({
+        asset_type:
+          cleanValue(
+            value.asset_type ??
+            fact.value_text,
+          ),
+
+        other_asset_type:
+          cleanValue(
+            value.other_asset_type,
+          ),
+
+        amount,
+
+        currency,
+
+        currency_raw:
+          currencyRaw,
+
+        organization_type:
+          cleanValue(
+            value.organization_type,
+          ),
+
+        organization_name:
+          cleanValue(
+            value.organization_name,
+          ),
+
+        owner_role:
+          cleanValue(
+            person.role,
+          ),
+
+        owner_name:
+          cleanValue(
+            person.name,
+          ),
+
+        owner_relationship:
+          cleanValue(
+            person.relationship ??
+            person.relation,
+          ),
+
+        rights:
+          (
+            Array.isArray(
+              value.rights,
+            )
+              ? value.rights
+              : []
+          ).map(
+            safeCashRight,
+          ),
+
+        source_document_id:
+          sourceDocumentId,
+
+        statement_type:
+          "source_fact",
+
+        evidence:
+          sourceDocumentId !== null ||
+          sourceUrl
+            ? [{
+                source_document_id:
+                  sourceDocumentId,
+
+                provider:
+                  null,
+
+                url:
+                  sourceUrl,
+
+                observed_at:
+                  null,
+
+                statement_type:
+                  "source_fact",
+              }]
+            : [],
+      });
+    }
+  }
+
+  const yearly =
+    [
+      ...yearlyMap.values(),
+    ];
+
+  for (const item of yearly) {
+    item.items.sort(
+      (a, b) =>
+        (
+          b.amount ??
+          -Infinity
+        ) -
+        (
+          a.amount ??
+          -Infinity
+        ),
+    );
+  }
+
+  yearly.sort(
+    (a, b) =>
+      b.year - a.year,
+  );
+
+  return {
+    yearly,
+  };
+}
+
 export function buildSubjectReportModelPayload({
   subject,
   generatedAt = new Date(),
   declarations = null,
   income = null,
+  cashAssets = null,
 } = {}) {
   if (!subject) {
     return null;
@@ -537,6 +991,15 @@ export function buildSubjectReportModelPayload({
     sources:
       Array.isArray(income?.sources)
         ? income.sources
+        : [],
+  };
+
+  const cashAssetsSection = {
+    yearly:
+      Array.isArray(
+        cashAssets?.yearly,
+      )
+        ? cashAssets.yearly
         : [],
   };
 
@@ -603,9 +1066,8 @@ export function buildSubjectReportModelPayload({
     income:
       incomeSection,
 
-    cash_assets: {
-      yearly: [],
-    },
+    cash_assets:
+      cashAssetsSection,
 
     real_estate: {
       yearly: [],
@@ -759,6 +1221,31 @@ export async function buildSubjectReportModel(
         incomeDetailContexts,
     });
 
+  const cashContextLoader =
+    options.cashContextLoader ??
+    loadDeterministicCashContext;
+
+  const cashOptions =
+    options.cashOptions ?? {};
+
+  const cashContexts =
+    await Promise.all(
+      availableYears.map(
+        (year) =>
+          cashContextLoader(
+            subject.entity_id,
+            year,
+            cashOptions,
+          ),
+      ),
+    );
+
+  const cashAssets =
+    buildCashAssetsSection({
+      contexts:
+        cashContexts,
+    });
+
   return buildSubjectReportModelPayload({
     subject,
 
@@ -768,5 +1255,6 @@ export async function buildSubjectReportModel(
 
     declarations,
     income,
+    cashAssets,
   });
 }

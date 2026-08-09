@@ -95,7 +95,15 @@ Aggregate V1 використовує UAH; інші валюти не конве
 
 Year item: `year`, `declarant_by_currency`, `household_by_currency`, `items`, `evidence`.
 
-Кожна валюта зберігається окремо.
+Cash item: `asset_type`, `other_asset_type`, `amount`, `currency`, `currency_raw`, `organization_type`, `organization_name`, `owner_role`, `owner_name`, `owner_relationship`, `rights`, `source_document_id`, `statement_type`, `evidence`.
+
+`declarant_by_currency` включає повну задекларовану суму cash asset один раз, якщо декларант є прямим owner або присутній серед `rights`.
+
+`household_by_currency` включає повну задекларовану суму cash asset один раз, якщо декларант або член сім’ї є прямим owner чи присутній серед `rights`.
+
+Для спільної власності сума не множиться на кількість правовласників і не ділиться на неіснуючі частки. `rights` зберігаються окремо.
+
+Кожна валюта зберігається окремо. Відомі текстові варіанти UAH/USD/EUR нормалізуються до коду валюти; початкове значення зберігається у `currency_raw`. Конвертація валют не виконується.
 
 ### real_estate
 `yearly[].items`.
