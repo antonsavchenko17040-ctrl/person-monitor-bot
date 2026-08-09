@@ -5,6 +5,7 @@ import {
   buildDeterministicAnalyticsAnswer,
   buildDeterministicIncomeDetailAnswer,
   buildDeterministicRealEstateAnswer,
+  buildDeterministicOrganizationRelationsAnswer,
   buildModelContext,
   buildResponsesRequest,
   createSubjectChatResponse,
@@ -781,6 +782,199 @@ test(
         "Покажи повний документ декларації за 2025 рік"
       ),
       true,
+    );
+  },
+);
+
+test(
+  "builds deterministic organization relation list",
+  () => {
+    const answer =
+      buildDeterministicOrganizationRelationsAnswer(
+        "Які зв'язки з організаціями має декларант у 2025 році? Назви організації та тип зв'язку.",
+        {
+          detected_years:
+            [2025],
+
+          relations: [
+            {
+              relation_type:
+                "third_party_rightsholder",
+
+              relation_scope:
+                "second_hop",
+
+              from_entity_type:
+                "asset",
+
+              from_name:
+                "Квартира · 269.7 м²",
+
+              to_entity_type:
+                "organization_observation",
+
+              to_name:
+                "Алдоранте Лімітед",
+            },
+
+            {
+              relation_type:
+                "third_party_rightsholder",
+
+              relation_scope:
+                "second_hop",
+
+              from_entity_type:
+                "asset",
+
+              from_name:
+                "Машиномісце · 21.9 м²",
+
+              to_entity_type:
+                "organization_observation",
+
+              to_name:
+                "Алдоранте Лімітед",
+            },
+
+            {
+              relation_type:
+                "third_party_rightsholder",
+
+              relation_scope:
+                "second_hop",
+
+              from_entity_type:
+                "asset",
+
+              from_name:
+                "Квартира · 91.9 м²",
+
+              to_entity_type:
+                "organization_observation",
+
+              to_name:
+                "Стренд Резідентіал",
+            },
+
+            {
+              relation_type:
+                "third_party_rightsholder",
+
+              relation_scope:
+                "second_hop",
+
+              from_entity_type:
+                "asset",
+
+              from_name:
+                "Інше · 4011.1 м²",
+
+              to_entity_type:
+                "organization",
+
+              to_name:
+                'Державне управління справами "Будинок відпочинку "КОНЧА-ЗАСПА""',
+            },
+
+            {
+              relation_type:
+                "third_party_rightsholder",
+
+              relation_scope:
+                "second_hop",
+
+              from_entity_type:
+                "asset",
+
+              from_name:
+                "Квартира · 254.5 м²",
+
+              to_entity_type:
+                "person_observation",
+
+              to_name:
+                "Тестова Людина",
+            },
+          ],
+
+          source_documents: [],
+          analytics: {
+            yearly: [],
+          },
+        }
+      );
+
+    assert.match(
+      answer,
+      /Алдоранте Лімітед/,
+    );
+
+    assert.match(
+      answer,
+      /Квартира · 269\.7 м²/,
+    );
+
+    assert.match(
+      answer,
+      /Машиномісце · 21\.9 м²/,
+    );
+
+    assert.match(
+      answer,
+      /Стренд Резідентіал/,
+    );
+
+    assert.match(
+      answer,
+      /КОНЧА-ЗАСПА/,
+    );
+
+    assert.match(
+      answer,
+      /непрям/i,
+    );
+
+    assert.doesNotMatch(
+      answer,
+      /Тестова Людина/,
+    );
+
+    assert.doesNotMatch(
+      answer,
+      /source_document_id|verification_status|confidence/,
+    );
+  },
+);
+
+test(
+  "keeps analytical relation question on AI path",
+  () => {
+    const answer =
+      buildDeterministicOrganizationRelationsAnswer(
+        "Проаналізуй зв'язки декларанта з організаціями у 2025 році та поясни, що вони можуть означати.",
+        {
+          detected_years:
+            [2025],
+
+          relations: [
+            {
+              relation_type:
+                "third_party_rightsholder",
+
+              to_entity_type:
+                "organization",
+
+              to_name:
+                "Тестова Організація",
+            },
+          ],
+        }
+      );
+
+    assert.equal(
+      answer,
+      null,
     );
   },
 );

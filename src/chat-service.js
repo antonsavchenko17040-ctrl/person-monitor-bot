@@ -2082,6 +2082,275 @@ export function buildDeterministicRealEstateAnswer(
   return answer;
 }
 
+function isOrganizationRelationListQuestion(
+  question
+) {
+  const q =
+    String(question ?? "")
+      .toLowerCase();
+
+  const hasRelationDomain =
+    /зв['’]?яз|пов['’]?язан/.test(
+      q
+    );
+
+  const asksOrganizations =
+    /організаці|компан|підприємств|установ|юридичн\S*\s+особ/.test(
+      q
+    );
+
+  const hasListIntent =
+    /які|перелік|список|назви|назвати|покажи|має|мав|мала/.test(
+      q
+    );
+
+  const hasAnalyticalIntent =
+    /аналіз|проаналіз|оцін|ризик|що\s+означ|виснов|чому|поясн|порівн|динамік|змін/.test(
+      q
+    );
+
+  return Boolean(
+    hasRelationDomain &&
+    asksOrganizations &&
+    hasListIntent &&
+    !hasAnalyticalIntent
+  );
+}
+
+function relationOrganizationName(
+  relation
+) {
+  if (
+    isOrganizationEntityType(
+      relation?.to_entity_type
+    )
+  ) {
+    return String(
+      relation?.to_name ??
+      ""
+    ).trim();
+  }
+
+  if (
+    isOrganizationEntityType(
+      relation?.from_entity_type
+    )
+  ) {
+    return String(
+      relation?.from_name ??
+      ""
+    ).trim();
+  }
+
+  return "";
+}
+
+function relationAssetName(
+  relation
+) {
+  if (
+    String(
+      relation?.from_entity_type ??
+      ""
+    ) === "asset"
+  ) {
+    return String(
+      relation?.from_name ??
+      ""
+    ).trim();
+  }
+
+  if (
+    String(
+      relation?.to_entity_type ??
+      ""
+    ) === "asset"
+  ) {
+    return String(
+      relation?.to_name ??
+      ""
+    ).trim();
+  }
+
+  return "";
+}
+
+export function buildDeterministicOrganizationRelationsAnswer(
+  question,
+  context
+) {
+  if (
+    !isOrganizationRelationListQuestion(
+      question
+    )
+  ) {
+    return null;
+  }
+
+  const years =
+    (
+      context
+        ?.detected_years ??
+      []
+    )
+      .map(Number)
+      .filter(
+        Number.isInteger
+      );
+
+  if (years.length !== 1) {
+    return null;
+  }
+
+  const year =
+    years[0];
+
+  const grouped =
+    new Map();
+
+  for (
+    const relation of
+    context?.relations ?? []
+  ) {
+    const organization =
+      relationOrganizationName(
+        relation
+      );
+
+    if (!organization) {
+      continue;
+    }
+
+    const type =
+      String(
+        relation?.relation_type ??
+        ""
+      ).trim();
+
+    const label =
+      relationTypeLabel(
+        relation
+      ) ||
+      type ||
+      "зв’язок";
+
+    const scope =
+      String(
+        relation?.relation_scope ??
+        ""
+      ).trim();
+
+    const asset =
+      relationAssetName(
+        relation
+      );
+
+    const key =
+      JSON.stringify([
+        organization,
+        type,
+        scope,
+      ]);
+
+    const current =
+      grouped.get(key) ?? {
+        organization,
+        type,
+        label,
+        scope,
+        assets: [],
+      };
+
+    if (
+      asset &&
+      !current.assets.includes(
+        asset
+      )
+    ) {
+      current.assets.push(
+        asset
+      );
+    }
+
+    grouped.set(
+      key,
+      current
+    );
+  }
+
+  const rows =
+    [
+      ...grouped.values(),
+    ];
+
+  if (!rows.length) {
+    return null;
+  }
+
+  let answer =
+    `Зв’язки декларанта з організаціями за ${year} рік:\n\n`;
+
+  answer +=
+    rows
+      .map(
+        (row) => {
+          let line =
+            `- **${row.organization}** — ${row.label}`;
+
+          if (
+            row.assets.length
+          ) {
+            line +=
+              `; через ${
+                row.assets.length === 1
+                  ? "актив"
+                  : "активи"
+              }: ${row.assets.join("; ")}`;
+          }
+
+          return line + ".";
+        }
+      )
+      .join("\n");
+
+  if (
+    rows.every(
+      (row) =>
+        row.scope ===
+        "second_hop"
+    )
+  ) {
+    answer +=
+      "\n\nУ переданих даних ці зв’язки є непрямими — через інші сутності, зокрема задекларовані активи.";
+  }
+
+  const yearlyAnalytics =
+    (
+      context
+        ?.analytics
+        ?.yearly ??
+      []
+    ).find(
+      (item) =>
+        Number(item?.year) ===
+        year
+    );
+
+  const source =
+    analyticsSourceForYear(
+      context,
+      yearlyAnalytics
+    );
+
+  if (source?.url) {
+    answer +=
+      `\n\nДжерело: ` +
+      `[декларація НАЗК за ${year} рік](${source.url})`;
+  }
+
+  return answer;
+}
+
 export function buildDeterministicAnalyticsAnswer(
   question,
   context
@@ -3010,10 +3279,17 @@ export async function createSubjectChatResponse({
       context
     );
 
+  const deterministicOrganizationRelationsAnswer =
+    buildDeterministicOrganizationRelationsAnswer(
+      contextualQuestion,
+      context
+    );
+
   const deterministicAnswer =
     deterministicAnalyticsAnswer ??
     deterministicIncomeDetailAnswer ??
-    deterministicRealEstateAnswer;
+    deterministicRealEstateAnswer ??
+    deterministicOrganizationRelationsAnswer;
 
   if (deterministicAnswer) {
     return {
