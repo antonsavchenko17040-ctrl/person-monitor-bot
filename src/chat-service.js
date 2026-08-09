@@ -2908,6 +2908,253 @@ export function buildDeterministicCashAssetAnswer(
   return answer;
 }
 
+function isEmploymentListQuestion(
+  question
+) {
+  const q =
+    String(question ?? "")
+      .toLowerCase();
+
+  const hasDomain =
+    /посад|місц[ея]\s+робот|працював|працювала|працює|працювали|роботодав|служб/.test(
+      q
+    );
+
+  const hasListIntent =
+    /яку|який|яке|де|ким|хто|покажи|назви|назвати|мав|мала|обіймав|обіймала/.test(
+      q
+    );
+
+  const hasAnalyticalIntent =
+    /аналіз|проаналіз|кар['’]?єр|порівн|динамік|змін|ризик|аномал|чому|що\s+означ|виснов|оцін/.test(
+      q
+    );
+
+  return Boolean(
+    hasDomain &&
+    hasListIntent &&
+    !hasAnalyticalIntent
+  );
+}
+
+export function buildDeterministicEmploymentAnswer(
+  question,
+  context,
+  allFacts = null
+) {
+  if (
+    !isEmploymentListQuestion(
+      question
+    )
+  ) {
+    return null;
+  }
+
+  const years =
+    (
+      context
+        ?.detected_years ??
+      []
+    )
+      .map(Number)
+      .filter(
+        Number.isInteger
+      );
+
+  if (years.length !== 1) {
+    return null;
+  }
+
+  const year =
+    years[0];
+
+  const yearlyAnalytics =
+    (
+      context
+        ?.analytics
+        ?.yearly ??
+      []
+    ).find(
+      (item) =>
+        Number(item?.year) ===
+        year
+    );
+
+  const canonicalSourceId =
+    yearlyAnalytics
+      ?.sourceDocumentId ??
+    null;
+
+  /*
+   * Якщо Person Monitor не визначив
+   * канонічний документ року,
+   * не змішуємо кілька декларацій.
+   * У такому разі залишаємо
+   * питання AI-шляху.
+   */
+  if (!canonicalSourceId) {
+    return null;
+  }
+
+  const facts =
+    Array.isArray(allFacts)
+      ? allFacts
+      : (
+          context?.facts ??
+          []
+        );
+
+  const rows = [];
+  const seen = new Set();
+
+  for (const fact of facts) {
+    if (
+      fact?.fact_type !==
+        "employment" ||
+      factYear(fact) !==
+        year
+    ) {
+      continue;
+    }
+
+    if (
+      String(
+        fact.source_document_id ??
+        ""
+      ) !==
+        String(
+          canonicalSourceId
+        )
+    ) {
+      continue;
+    }
+
+    const value =
+      fact.value_json ??
+      {};
+
+    const person =
+      value.person ??
+      null;
+
+    /*
+     * Employment-відповідь стосується
+     * самого суб'єкта/декларанта.
+     */
+    if (
+      person?.role &&
+      person.role !==
+        "declarant"
+    ) {
+      continue;
+    }
+
+    const position =
+      String(
+        value.position ??
+        fact.value_text ??
+        ""
+      ).trim();
+
+    const workplace =
+      String(
+        value.workplace ??
+        ""
+      ).trim();
+
+    const responsiblePosition =
+      String(
+        value.responsible_position_exact ??
+        value.responsible_position ??
+        ""
+      ).trim();
+
+    if (
+      !position &&
+      !workplace
+    ) {
+      continue;
+    }
+
+    const key =
+      JSON.stringify([
+        position.toLowerCase(),
+        workplace.toLowerCase(),
+        responsiblePosition.toLowerCase(),
+      ]);
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+
+    rows.push({
+      position,
+      workplace,
+      responsiblePosition,
+    });
+  }
+
+  if (!rows.length) {
+    return null;
+  }
+
+  let answer =
+    `Посада та місце роботи декларанта за ${year} рік:\n\n`;
+
+  answer +=
+    rows
+      .map(
+        (row, index) => {
+          const lines = [
+            `${index + 1}.`,
+          ];
+
+          if (row.position) {
+            lines.push(
+              `   - **Посада:** ${row.position}`
+            );
+          }
+
+          if (row.workplace) {
+            lines.push(
+              `   - **Місце роботи (як зазначено у декларації):** ${row.workplace}`
+            );
+          }
+
+          if (
+            row.responsiblePosition
+          ) {
+            lines.push(
+              `   - **Категорія відповідальної посади:** ${row.responsiblePosition}`
+            );
+          }
+
+          return lines.join(
+            "\n"
+          );
+        }
+      )
+      .join(
+        "\n\n"
+      );
+
+  const source =
+    analyticsSourceForYear(
+      context,
+      yearlyAnalytics
+    );
+
+  if (source?.url) {
+    answer +=
+      `\n\nДжерело: ` +
+      `[декларація НАЗК за ${year} рік](${source.url})`;
+  }
+
+  return answer;
+}
+
 function isFamilyMemberListQuestion(
   question
 ) {
@@ -4329,6 +4576,13 @@ export async function createSubjectChatResponse({
       knowledge?.facts
     );
 
+  const deterministicEmploymentAnswer =
+    buildDeterministicEmploymentAnswer(
+      contextualQuestion,
+      context,
+      knowledge?.facts
+    );
+
   const deterministicOrganizationRelationsAnswer =
     buildDeterministicOrganizationRelationsAnswer(
       contextualQuestion,
@@ -4342,6 +4596,7 @@ export async function createSubjectChatResponse({
     deterministicVehicleAnswer ??
     deterministicCashAssetAnswer ??
     deterministicFamilyMemberAnswer ??
+    deterministicEmploymentAnswer ??
     deterministicOrganizationRelationsAnswer;
 
   if (deterministicAnswer) {

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   buildDeterministicAnalyticsAnswer,
   buildDeterministicCashAssetAnswer,
+  buildDeterministicEmploymentAnswer,
   buildDeterministicFamilyMemberAnswer,
   buildDeterministicIncomeDetailAnswer,
   buildDeterministicRealEstateAnswer,
@@ -785,6 +786,305 @@ test(
         "Покажи повний документ декларації за 2025 рік"
       ),
       true,
+    );
+  },
+);
+
+test(
+  "builds deterministic employment answer from canonical document",
+  () => {
+    const answer =
+      buildDeterministicEmploymentAnswer(
+        "Яку посаду обіймав декларант у 2025 році?",
+        {
+          detected_years:
+            [2025],
+
+          analytics: {
+            yearly: [
+              {
+                year:
+                  2025,
+
+                sourceDocumentId:
+                  "doc-canonical",
+              },
+            ],
+          },
+
+          source_documents: [
+            {
+              id:
+                "doc-canonical",
+
+              url:
+                "https://example.test/declaration-2025",
+            },
+          ],
+        },
+
+        [
+          {
+            fact_type:
+              "employment",
+
+            source_document_id:
+              "doc-canonical",
+
+            metadata: {
+              declaration_year:
+                2025,
+            },
+
+            value_text:
+              "ПРЕЗИДЕНТ УКРАЇНИ",
+
+            value_json: {
+              person: {
+                role:
+                  "declarant",
+
+                name:
+                  "Тестовий Декларант",
+              },
+
+              position:
+                "ПРЕЗИДЕНТ УКРАЇНИ",
+
+              workplace:
+                "ПРЕЗИДЕНТ УКРАЇНИ",
+
+              responsible_position_exact:
+                "Президент України",
+            },
+          },
+
+          /*
+           * Інший документ того
+           * самого року не повинен
+           * потрапити у відповідь.
+           */
+          {
+            fact_type:
+              "employment",
+
+            source_document_id:
+              "doc-other",
+
+            metadata: {
+              declaration_year:
+                2025,
+            },
+
+            value_text:
+              "ІНША ПОСАДА",
+
+            value_json: {
+              person: {
+                role:
+                  "declarant",
+              },
+
+              position:
+                "ІНША ПОСАДА",
+
+              workplace:
+                "ІНША ОРГАНІЗАЦІЯ",
+            },
+          },
+
+          /*
+           * Employment іншої особи
+           * у канонічному документі
+           * також відсіюємо.
+           */
+          {
+            fact_type:
+              "employment",
+
+            source_document_id:
+              "doc-canonical",
+
+            metadata: {
+              declaration_year:
+                2025,
+            },
+
+            value_text:
+              "ПОСАДА ЧЛЕНА СІМ’Ї",
+
+            value_json: {
+              person: {
+                role:
+                  "family",
+
+                name:
+                  "Тестовий Член Сім’ї",
+              },
+
+              position:
+                "ПОСАДА ЧЛЕНА СІМ’Ї",
+
+              workplace:
+                "СТОРОННЯ УСТАНОВА",
+            },
+          },
+        ]
+      );
+
+    assert.match(
+      answer,
+      /ПРЕЗИДЕНТ УКРАЇНИ/,
+    );
+
+    assert.match(
+      answer,
+      /Президент України/,
+    );
+
+    assert.match(
+      answer,
+      /Місце роботи \(як зазначено у декларації\)/,
+    );
+
+    assert.doesNotMatch(
+      answer,
+      /ІНША ПОСАДА/,
+    );
+
+    assert.doesNotMatch(
+      answer,
+      /ПОСАДА ЧЛЕНА СІМ’Ї/,
+    );
+
+    assert.match(
+      answer,
+      /https:\/\/example\.test\/declaration-2025/,
+    );
+  },
+);
+
+test(
+  "requires canonical document for deterministic employment answer",
+  () => {
+    const answer =
+      buildDeterministicEmploymentAnswer(
+        "Де працював декларант у 2025 році?",
+        {
+          detected_years:
+            [2025],
+
+          analytics: {
+            yearly: [
+              {
+                year:
+                  2025,
+              },
+            ],
+          },
+
+          source_documents: [],
+        },
+
+        [
+          {
+            fact_type:
+              "employment",
+
+            source_document_id:
+              "doc-random",
+
+            metadata: {
+              declaration_year:
+                2025,
+            },
+
+            value_text:
+              "ТЕСТОВА ПОСАДА",
+
+            value_json: {
+              person: {
+                role:
+                  "declarant",
+              },
+
+              position:
+                "ТЕСТОВА ПОСАДА",
+
+              workplace:
+                "ТЕСТОВА УСТАНОВА",
+            },
+          },
+        ]
+      );
+
+    assert.equal(
+      answer,
+      null,
+    );
+  },
+);
+
+test(
+  "keeps analytical employment question on AI path",
+  () => {
+    const answer =
+      buildDeterministicEmploymentAnswer(
+        "Покажи та проаналізуй посаду декларанта у 2025 році",
+        {
+          detected_years:
+            [2025],
+
+          analytics: {
+            yearly: [
+              {
+                year:
+                  2025,
+
+                sourceDocumentId:
+                  "doc-canonical",
+              },
+            ],
+          },
+
+          source_documents: [],
+        },
+
+        [
+          {
+            fact_type:
+              "employment",
+
+            source_document_id:
+              "doc-canonical",
+
+            metadata: {
+              declaration_year:
+                2025,
+            },
+
+            value_text:
+              "ТЕСТОВА ПОСАДА",
+
+            value_json: {
+              person: {
+                role:
+                  "declarant",
+              },
+
+              position:
+                "ТЕСТОВА ПОСАДА",
+
+              workplace:
+                "ТЕСТОВА УСТАНОВА",
+            },
+          },
+        ]
+      );
+
+    assert.equal(
+      answer,
+      null,
     );
   },
 );
