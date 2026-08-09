@@ -1,5 +1,6 @@
 import {
   loadDeterministicEmploymentContext,
+  loadDeterministicIncomeContext,
   loadDeterministicOrganizationRelationsContext,
   loadSubjectKnowledge,
 } from "./chat-context.js";
@@ -4319,11 +4320,25 @@ function isIncomeDetailQuestion(
     String(question ?? "")
       .toLowerCase();
 
-  return (
-    /дохід|доход/.test(q) &&
+  const hasDomain =
+    /дохід|доход/.test(
+      q
+    );
+
+  const hasDetailIntent =
     /джерел|вид|тип|категор|структур|розбив|від кого|хто плат|перелік/.test(
       q
-    )
+    );
+
+  const hasAnalyticalIntent =
+    /аналіз|проаналіз|оцін|ризик|аномал|порівн|динамік|змін|чому|що\s+означ|виснов|поясн/.test(
+      q
+    );
+
+  return Boolean(
+    hasDomain &&
+    hasDetailIntent &&
+    !hasAnalyticalIntent
   );
 }
 
@@ -4930,6 +4945,8 @@ export async function createSubjectChatResponse({
     getSubject,
   employmentContextLoader =
     loadDeterministicEmploymentContext,
+  incomeContextLoader =
+    loadDeterministicIncomeContext,
   organizationRelationsContextLoader =
     loadDeterministicOrganizationRelationsContext,
   retriever =
@@ -4950,6 +4967,106 @@ export async function createSubjectChatResponse({
       message,
       history
     );
+
+  /*
+   * Fast-path для factual income-detail
+   * запиту за одним конкретним роком.
+   *
+   * Завантажуємо лише income facts
+   * канонічної декларації року.
+   */
+  if (
+    isIncomeDetailQuestion(
+      contextualQuestion
+    )
+  ) {
+    const incomeYears =
+      [
+        ...new Set(
+          String(
+            contextualQuestion ??
+            ""
+          ).match(
+            /\b(?:19|20)\d{2}\b/g
+          ) ?? []
+        ),
+      ]
+        .map(Number)
+        .filter(
+          Number.isInteger
+        );
+
+    if (
+      incomeYears.length === 1
+    ) {
+      const subject =
+        await subjectLoader(
+          subjectId
+        );
+
+      if (!subject) {
+        throw new Error(
+          "SUBJECT_NOT_FOUND",
+        );
+      }
+
+      const entityId =
+        subject.entity_id ??
+        subject.id;
+
+      const fastContext =
+        await incomeContextLoader(
+          entityId,
+          incomeYears[0]
+        );
+
+      if (fastContext) {
+        const fastAnswer =
+          buildDeterministicIncomeDetailAnswer(
+            contextualQuestion,
+            fastContext
+          );
+
+        if (fastAnswer) {
+          return {
+            answer:
+              fastAnswer,
+
+            model:
+              "person-monitor-facts",
+
+            retrieval: {
+              version:
+                "deterministic-income-detail-v1",
+
+              detected_years:
+                fastContext
+                  .detected_years ??
+                incomeYears,
+
+              counts: {
+                facts:
+                  fastContext
+                    .facts
+                    ?.length ??
+                  0,
+
+                source_documents:
+                  fastContext
+                    .source_documents
+                    ?.length ??
+                  0,
+
+                mentions: 0,
+                relations: 0,
+                cross_checks: 0,
+              },
+            },
+          };
+        }
+      }
+    }
+  }
 
   /*
    * Fast-path для простого
