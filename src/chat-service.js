@@ -4,6 +4,7 @@ import {
   loadDeterministicEmploymentContext,
   loadDeterministicFamilyContext,
   loadDeterministicIncomeAnalyticsContext,
+  loadDeterministicMultiYearIncomeAnalyticsContext,
   loadDeterministicIncomeContext,
   loadDeterministicOrganizationRelationsContext,
   loadDeterministicRealEstateContext,
@@ -1303,11 +1304,17 @@ function shouldUseAnalyticsOnly(
       q,
     );
 
+  const hasDeepAnalyticalIntent =
+    /аналіз|проаналіз|ризик|аномал|чому|що\s+означ|виснов|оцін|поясн/.test(
+      q,
+    );
+
   return Boolean(
     hasIncome &&
     hasAnalytics &&
     hasRequestedYear &&
     !hasDetailIntent &&
+    !hasDeepAnalyticalIntent &&
     (
       hasAggregateIntent ||
       hasSingleYearTotalIntent
@@ -4961,6 +4968,8 @@ export async function createSubjectChatResponse({
     loadDeterministicFamilyContext,
   incomeAnalyticsContextLoader =
     loadDeterministicIncomeAnalyticsContext,
+  multiYearIncomeAnalyticsContextLoader =
+    loadDeterministicMultiYearIncomeAnalyticsContext,
   incomeContextLoader =
     loadDeterministicIncomeContext,
   vehicleContextLoader =
@@ -5091,6 +5100,145 @@ export async function createSubjectChatResponse({
               retrieval: {
                 version:
                   "deterministic-income-analytics-v1",
+
+                detected_years:
+                  fastContext
+                    .detected_years ??
+                  incomeAnalyticsYears,
+
+                counts: {
+                  facts: 0,
+
+                  source_documents:
+                    fastContext
+                      .source_documents
+                      ?.length ??
+                    0,
+
+                  mentions: 0,
+                  relations: 0,
+                  cross_checks: 0,
+                },
+              },
+            };
+          }
+        }
+      }
+    }
+  }
+
+  /*
+   * Fast-path для deterministic
+   * multi-year aggregate income.
+   *
+   * Завантажуємо лише income totals
+   * канонічних декларацій запитаних років.
+   * Full knowledge graph не потрібен.
+   */
+  {
+    const q =
+      String(
+        contextualQuestion ??
+        ""
+      ).toLowerCase();
+
+    const hasIncome =
+      /дохід|доход/.test(
+        q
+      );
+
+    const hasAggregateIntent =
+      /порівн|змін|різниц|динамік|відсот|процент|скільки|сума|загаль/.test(
+        q
+      );
+
+    const hasDetailIntent =
+      /джерел|вид|тип|категор|структур|розбив|від кого|хто плат|перелік/.test(
+        q
+      );
+
+    /*
+     * Глибокі аналітичні запити
+     * залишаємо AI/full-knowledge шляху.
+     *
+     * Просте "порівняй" тут дозволене:
+     * воно обслуговується точними
+     * математичними показниками.
+     */
+    const hasDeepAnalyticalIntent =
+      /аналіз|проаналіз|ризик|аномал|чому|що\s+означ|виснов|оцін|поясн/.test(
+        q
+      );
+
+    if (
+      hasIncome &&
+      hasAggregateIntent &&
+      !hasDetailIntent &&
+      !hasDeepAnalyticalIntent
+    ) {
+      const incomeAnalyticsYears =
+        [
+          ...new Set(
+            String(
+              contextualQuestion ??
+              ""
+            ).match(
+              /\b(?:19|20)\d{2}\b/g
+            ) ?? []
+          ),
+        ]
+          .map(Number)
+          .filter(
+            Number.isInteger
+          )
+          .sort(
+            (a, b) =>
+              a - b
+          );
+
+      if (
+        incomeAnalyticsYears.length >=
+        2
+      ) {
+        const subject =
+          await subjectLoader(
+            subjectId
+          );
+
+        if (!subject) {
+          throw new Error(
+            "SUBJECT_NOT_FOUND",
+          );
+        }
+
+        const entityId =
+          subject.entity_id ??
+          subject.id;
+
+        const fastContext =
+          await multiYearIncomeAnalyticsContextLoader(
+            entityId,
+            incomeAnalyticsYears
+          );
+
+        if (fastContext) {
+          const fastAnswer =
+            buildDeterministicAnalyticsAnswer(
+              contextualQuestion,
+              fastContext
+            );
+
+          if (fastAnswer) {
+            return {
+              answer:
+                fastAnswer,
+
+              model:
+                "person-monitor-analytics",
+
+              retrieval: {
+                version:
+                  "deterministic-multi-year-income-analytics-v1",
 
                 detected_years:
                   fastContext

@@ -6996,10 +6996,11 @@ test(
 );
 
 test(
-  "keeps multi-year aggregate income on full knowledge pipeline",
+  "uses multi-year income analytics preflight without loading full subject knowledge",
   async () => {
     let subjectCalls = 0;
-    let analyticsCalls = 0;
+    let singleYearCalls = 0;
+    let multiYearCalls = 0;
     let knowledgeCalls = 0;
     let retrieverCalls = 0;
     let modelCalls = 0;
@@ -7012,6 +7013,258 @@ test(
           throw new Error(
             "MODEL_SHOULD_NOT_BE_CALLED"
           );
+        },
+      },
+    };
+
+    const result =
+      await createSubjectChatResponse({
+        subjectId:
+          "subject-1",
+
+        message:
+          "Порівняй дохід декларанта за 2024 та 2025 роки",
+
+        client:
+          fakeClient,
+
+        model:
+          "test-model",
+
+        subjectLoader:
+          async (subjectId) => {
+            subjectCalls += 1;
+
+            assert.equal(
+              subjectId,
+              "subject-1",
+            );
+
+            return {
+              id:
+                "subject-1",
+
+              entity_id:
+                "entity-1",
+            };
+          },
+
+        incomeAnalyticsContextLoader:
+          async () => {
+            singleYearCalls += 1;
+
+            throw new Error(
+              "SINGLE_YEAR_LOADER_SHOULD_NOT_RUN"
+            );
+          },
+
+        multiYearIncomeAnalyticsContextLoader:
+          async (
+            entityId,
+            years
+          ) => {
+            multiYearCalls += 1;
+
+            assert.equal(
+              entityId,
+              "entity-1",
+            );
+
+            assert.deepEqual(
+              years,
+              [2024, 2025],
+            );
+
+            return {
+              detected_years:
+                [2024, 2025],
+
+              analytics: {
+                yearly: [
+                  {
+                    year:
+                      2024,
+
+                    sourceDocumentId:
+                      "doc-2024",
+
+                    incomeDeclarantUah:
+                      100,
+
+                    incomeHouseholdUah:
+                      150,
+                  },
+
+                  {
+                    year:
+                      2025,
+
+                    sourceDocumentId:
+                      "doc-2025",
+
+                    incomeDeclarantUah:
+                      200,
+
+                    incomeHouseholdUah:
+                      250,
+                  },
+                ],
+
+                transitions: [
+                  {
+                    fromYear:
+                      2024,
+
+                    toYear:
+                      2025,
+
+                    yearGap:
+                      1,
+
+                    incomeDelta:
+                      100,
+
+                    incomeDeltaPercent:
+                      100,
+                  },
+                ],
+              },
+
+              source_documents: [
+                {
+                  id:
+                    "doc-2024",
+
+                  url:
+                    "https://example.test/2024",
+                },
+
+                {
+                  id:
+                    "doc-2025",
+
+                  url:
+                    "https://example.test/2025",
+                },
+              ],
+
+              facts: [],
+            };
+          },
+
+        knowledgeLoader:
+          async () => {
+            knowledgeCalls += 1;
+
+            throw new Error(
+              "FULL_KNOWLEDGE_SHOULD_NOT_LOAD"
+            );
+          },
+
+        retriever:
+          () => {
+            retrieverCalls += 1;
+
+            throw new Error(
+              "RETRIEVER_SHOULD_NOT_RUN"
+            );
+          },
+      });
+
+    assert.equal(
+      result.model,
+      "person-monitor-analytics",
+    );
+
+    assert.equal(
+      result.retrieval.version,
+      "deterministic-multi-year-income-analytics-v1",
+    );
+
+    assert.deepEqual(
+      result.retrieval
+        .detected_years,
+      [2024, 2025],
+    );
+
+    assert.equal(
+      result.retrieval
+        .counts.facts,
+      0,
+    );
+
+    assert.equal(
+      result.retrieval
+        .counts.source_documents,
+      2,
+    );
+
+    assert.match(
+      result.answer,
+      /\*\*2024:\*\* 100 грн/,
+    );
+
+    assert.match(
+      result.answer,
+      /\*\*2025:\*\* 200 грн/,
+    );
+
+    assert.match(
+      result.answer,
+      /\*\*Зміна:\*\* \+100 грн \(\+100%\)/,
+    );
+
+    assert.equal(
+      subjectCalls,
+      1,
+    );
+
+    assert.equal(
+      singleYearCalls,
+      0,
+    );
+
+    assert.equal(
+      multiYearCalls,
+      1,
+    );
+
+    assert.equal(
+      knowledgeCalls,
+      0,
+    );
+
+    assert.equal(
+      retrieverCalls,
+      0,
+    );
+
+    assert.equal(
+      modelCalls,
+      0,
+    );
+  },
+);
+
+test(
+  "keeps deep multi-year income analysis on full knowledge AI pipeline",
+  async () => {
+    let subjectCalls = 0;
+    let singleYearCalls = 0;
+    let multiYearCalls = 0;
+    let knowledgeCalls = 0;
+    let retrieverCalls = 0;
+    let modelCalls = 0;
+
+    const fakeClient = {
+      responses: {
+        async create() {
+          modelCalls += 1;
+
+          return {
+            output_text:
+              "Аналітична відповідь",
+          };
         },
       },
     };
@@ -7041,7 +7294,18 @@ test(
       subject:
         fakeKnowledge.subject,
 
-      facts: [],
+      facts: [
+        {
+          fact_type:
+            "income",
+
+          value_number:
+            100,
+
+          unit:
+            "UAH",
+        },
+      ],
 
       relations: [],
       mentions: [],
@@ -7095,23 +7359,7 @@ test(
         ],
       },
 
-      source_documents: [
-        {
-          id:
-            "doc-2024",
-
-          url:
-            "https://example.test/2024",
-        },
-
-        {
-          id:
-            "doc-2025",
-
-          url:
-            "https://example.test/2025",
-        },
-      ],
+      source_documents: [],
     };
 
     const result =
@@ -7120,7 +7368,7 @@ test(
           "subject-1",
 
         message:
-          "Порівняй дохід декларанта за 2024 та 2025 роки",
+          "Проаналізуй ризики зміни доходу декларанта за 2024 та 2025 роки",
 
         client:
           fakeClient,
@@ -7133,16 +7381,25 @@ test(
             subjectCalls += 1;
 
             throw new Error(
-              "SINGLE_YEAR_PREFLIGHT_SHOULD_NOT_RUN"
+              "TARGETED_SUBJECT_LOADER_SHOULD_NOT_RUN"
             );
           },
 
         incomeAnalyticsContextLoader:
           async () => {
-            analyticsCalls += 1;
+            singleYearCalls += 1;
 
             throw new Error(
-              "SINGLE_YEAR_ANALYTICS_SHOULD_NOT_RUN"
+              "SINGLE_YEAR_LOADER_SHOULD_NOT_RUN"
+            );
+          },
+
+        multiYearIncomeAnalyticsContextLoader:
+          async () => {
+            multiYearCalls += 1;
+
+            throw new Error(
+              "MULTI_YEAR_LOADER_SHOULD_NOT_RUN"
             );
           },
 
@@ -7162,8 +7419,13 @@ test(
       });
 
     assert.equal(
+      result.answer,
+      "Аналітична відповідь",
+    );
+
+    assert.equal(
       result.model,
-      "person-monitor-analytics",
+      "test-model",
     );
 
     assert.equal(
@@ -7177,28 +7439,18 @@ test(
       [2024, 2025],
     );
 
-    assert.match(
-      result.answer,
-      /\*\*2024:\*\* 100 грн/,
-    );
-
-    assert.match(
-      result.answer,
-      /\*\*2025:\*\* 200 грн/,
-    );
-
-    assert.match(
-      result.answer,
-      /\*\*Зміна:\*\* \+100 грн \(\+100%\)/,
-    );
-
     assert.equal(
       subjectCalls,
       0,
     );
 
     assert.equal(
-      analyticsCalls,
+      singleYearCalls,
+      0,
+    );
+
+    assert.equal(
+      multiYearCalls,
       0,
     );
 
@@ -7214,7 +7466,7 @@ test(
 
     assert.equal(
       modelCalls,
-      0,
+      1,
     );
   },
 );
