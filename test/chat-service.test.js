@@ -455,6 +455,313 @@ test(
 );
 
 test(
+  "hides relation evidence metadata unless explicitly requested",
+  () => {
+    const base = {
+      subject: {
+        full_name:
+          "Тестова Особа",
+      },
+
+      detected_years:
+        [2025],
+
+      facts: [],
+
+      relations: [
+        {
+          relation_type:
+            "third_party_rightsholder",
+
+          relation_scope:
+            "second_hop",
+
+          from_entity_type:
+            "asset",
+
+          from_name:
+            "Квартира",
+
+          to_entity_type:
+            "organization",
+
+          to_name:
+            "Тестова Організація",
+
+          confidence:
+            100,
+
+          verification_status:
+            "source_extracted",
+        },
+      ],
+
+      mentions: [],
+      cross_checks: [],
+      source_documents: [],
+      analytics: null,
+      counts: {},
+    };
+
+    const ordinary =
+      JSON.stringify(
+        buildModelContext(
+          base,
+          "Які зв'язки з організаціями є у 2025 році?"
+        )
+      );
+
+    assert.doesNotMatch(
+      ordinary,
+      /source_extracted/,
+    );
+
+    assert.doesNotMatch(
+      ordinary,
+      /"confidence":100/,
+    );
+
+    const evidence =
+      JSON.stringify(
+        buildModelContext(
+          base,
+          "Наскільки підтверджені ці зв'язки з організаціями?"
+        )
+      );
+
+    assert.match(
+      evidence,
+      /source_extracted/,
+    );
+
+    assert.match(
+      evidence,
+      /"confidence":100/,
+    );
+  },
+);
+
+test(
+  "hides internal relation source id for ordinary question",
+  () => {
+    const context =
+      buildModelContext(
+        {
+          subject: {
+            full_name:
+              "Тестова Особа",
+          },
+
+          detected_years:
+            [2025],
+
+          facts: [],
+
+          relations: [
+            {
+              relation_type:
+                "third_party_rightsholder",
+
+              relation_scope:
+                "second_hop",
+
+              from_entity_type:
+                "asset",
+
+              from_name:
+                "Квартира",
+
+              to_entity_type:
+                "organization",
+
+              to_name:
+                "Тестова Організація",
+
+              source_document_id:
+                "INTERNAL-DOC-ID-123",
+            },
+          ],
+
+          mentions: [],
+          cross_checks: [],
+          source_documents: [],
+          analytics: null,
+          counts: {},
+        },
+
+        "Які зв'язки з організаціями є у 2025 році?"
+      );
+
+    const serialized =
+      JSON.stringify(context);
+
+    assert.doesNotMatch(
+      serialized,
+      /INTERNAL-DOC-ID-123/,
+    );
+  },
+);
+
+test(
+  "prioritizes organization relations for relation question",
+  () => {
+    const context =
+      buildModelContext(
+        {
+          subject: {
+            full_name:
+              "Тестова Особа",
+          },
+
+          detected_years:
+            [2025],
+
+          facts: [
+            {
+              fact_type:
+                "real_estate",
+
+              value_text:
+                "BIG IRRELEVANT FACT",
+
+              metadata: {
+                declaration_year:
+                  2025,
+              },
+
+              value_json: {
+                object_type:
+                  "Квартира",
+
+                total_area:
+                  100,
+
+                rights: [],
+              },
+            },
+          ],
+
+          relations: [
+            {
+              relation_type:
+                "third_party_rightsholder",
+
+              relation_scope:
+                "second_hop",
+
+              from_entity_type:
+                "asset",
+
+              from_name:
+                "Квартира",
+
+              to_entity_type:
+                "organization_observation",
+
+              to_name:
+                "Тестова Компанія",
+            },
+
+            {
+              relation_type:
+                "third_party_rightsholder",
+
+              relation_scope:
+                "second_hop",
+
+              from_entity_type:
+                "asset",
+
+              from_name:
+                "Квартира",
+
+              to_entity_type:
+                "person_observation",
+
+              to_name:
+                "Тестова Людина",
+            },
+          ],
+
+          mentions: [],
+
+          cross_checks: [],
+
+          source_documents: [
+            {
+              id:
+                "doc-1",
+
+              source_type:
+                "mention",
+
+              title:
+                "BIG SOURCE DOCUMENT",
+
+              url:
+                "https://example.test/doc",
+            },
+          ],
+
+          analytics: null,
+
+          counts: {},
+        },
+
+        "Які зв'язки з організаціями має декларант у 2025 році?"
+      );
+
+    const serialized =
+      JSON.stringify(
+        context
+      );
+
+    assert.equal(
+      context.facts.length,
+      0,
+    );
+
+    assert.equal(
+      context.relations.length,
+      1,
+    );
+
+    assert.equal(
+      context.relations[0]
+        .to_name,
+      "Тестова Компанія",
+    );
+
+    assert.match(
+      context.relations[0]
+        .relation_label,
+      /непрямий зв’язок/,
+    );
+
+    assert.equal(
+      context.source_documents
+        .length,
+      0,
+    );
+
+    assert.doesNotMatch(
+      serialized,
+      /BIG IRRELEVANT FACT/,
+    );
+
+    assert.doesNotMatch(
+      serialized,
+      /Тестова Людина/,
+    );
+
+    assert.doesNotMatch(
+      serialized,
+      /BIG SOURCE DOCUMENT/,
+    );
+  },
+);
+
+test(
   "does not attach source tool to ordinary analytical question",
   () => {
     assert.equal(
