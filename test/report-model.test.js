@@ -308,6 +308,9 @@ test(
           declarationYearsLoader:
             async () => [2025, 2024],
 
+          employmentContextLoader:
+            async () => null,
+
           incomeDetailContextLoader:
             async () => null,
 
@@ -910,6 +913,9 @@ test(
             async () => null,
 
           vehicleContextLoader:
+            async () => null,
+
+          employmentContextLoader:
             async () => null,
 
           incomeDetailContextLoader:

@@ -65,9 +65,13 @@ V1 summary формується детерміновано з analytics/findings
 ### career
 `items`, `transitions`.
 
-Career item: `year`, `organization`, `position`, `source_document_id`, `evidence`.
+Career item: `year`, `organization`, `position`, `source_document_id`, `statement_type`, `evidence`.
+
+До `career.items` потрапляють employment facts самого декларанта з канонічної декларації відповідного року.
 
 Transition: `from_year`, `to_year`, `organization_changed`, `position_changed`, `statement_type`, `evidence`.
+
+V1 формує transition лише між сусідніми роками. Порівняння виконується після нормалізації регістру, пробілів і пунктуації.
 
 ### related_people
 `items`.

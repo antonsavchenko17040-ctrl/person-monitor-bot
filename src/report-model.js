@@ -19,6 +19,11 @@ import {
   loadDeterministicVehicleContext,
 } from "./vehicle-context.js";
 
+
+import {
+  loadDeterministicEmploymentContext,
+} from "./employment-context.js";
+
 import {
   getSubject,
 } from "./store.js";
@@ -1562,6 +1567,227 @@ export function buildVehicleSection({
   };
 }
 
+function normalizeCareerText(value) {
+  const text =
+    cleanValue(value);
+
+  if (!text) {
+    return null;
+  }
+
+  return text
+    .normalize("NFKC")
+    .toLocaleLowerCase("uk-UA")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+
+export function buildCareerSection({
+  contexts = [],
+} = {}) {
+  const items = [];
+
+  for (
+    const context of
+    (
+      Array.isArray(contexts)
+        ? contexts
+        : []
+    ).filter(Boolean)
+  ) {
+    const detectedYear =
+      normalizeYears(
+        context?.detected_years,
+      )[0] ?? null;
+
+    const canonicalSourceId =
+      context?.analytics?.yearly
+        ?.[0]?.sourceDocumentId ??
+      null;
+
+    const sourceDocument =
+      (
+        context?.source_documents ??
+        []
+      ).find(
+        (item) =>
+          String(item?.id ?? "") ===
+          String(canonicalSourceId ?? ""),
+      );
+
+    const sourceUrl =
+      cleanValue(
+        sourceDocument?.url,
+      );
+
+    for (
+      const fact of
+      context?.facts ?? []
+    ) {
+      if (
+        fact?.fact_type !==
+        "employment"
+      ) {
+        continue;
+      }
+
+      const value =
+        fact.value_json ?? {};
+
+      if (
+        value?.person?.role !==
+        "declarant"
+      ) {
+        continue;
+      }
+
+      const year =
+        Number(
+          fact?.metadata
+            ?.declaration_year ??
+          detectedYear,
+        );
+
+      if (!Number.isInteger(year)) {
+        continue;
+      }
+
+      const sourceDocumentId =
+        fact.source_document_id ??
+        canonicalSourceId ??
+        null;
+
+      items.push({
+        year,
+
+        organization:
+          cleanValue(
+            value.workplace,
+          ),
+
+        position:
+          cleanValue(
+            value.position ??
+            fact.value_text,
+          ),
+
+        source_document_id:
+          sourceDocumentId,
+
+        statement_type:
+          "source_fact",
+
+        evidence:
+          sourceDocumentId !== null ||
+          sourceUrl
+            ? [{
+                source_document_id:
+                  sourceDocumentId,
+                provider:
+                  null,
+                url:
+                  sourceUrl,
+                observed_at:
+                  null,
+                statement_type:
+                  "source_fact",
+              }]
+            : [],
+      });
+    }
+  }
+
+  items.sort(
+    (a, b) =>
+      b.year - a.year,
+  );
+
+  const chronological =
+    [...items].sort(
+      (a, b) =>
+        a.year - b.year,
+    );
+
+  const transitions = [];
+
+  for (
+    let index = 1;
+    index < chronological.length;
+    index += 1
+  ) {
+    const previous =
+      chronological[index - 1];
+
+    const current =
+      chronological[index];
+
+    if (
+      current.year -
+      previous.year !==
+      1
+    ) {
+      continue;
+    }
+
+    const previousOrganization =
+      normalizeCareerText(
+        previous.organization,
+      );
+
+    const currentOrganization =
+      normalizeCareerText(
+        current.organization,
+      );
+
+    const previousPosition =
+      normalizeCareerText(
+        previous.position,
+      );
+
+    const currentPosition =
+      normalizeCareerText(
+        current.position,
+      );
+
+    transitions.push({
+      from_year:
+        previous.year,
+
+      to_year:
+        current.year,
+
+      organization_changed:
+        previousOrganization &&
+        currentOrganization
+          ? previousOrganization !==
+            currentOrganization
+          : null,
+
+      position_changed:
+        previousPosition &&
+        currentPosition
+          ? previousPosition !==
+            currentPosition
+          : null,
+
+      statement_type:
+        "calculation",
+
+      evidence: [
+        ...(previous.evidence ?? []),
+        ...(current.evidence ?? []),
+      ],
+    });
+  }
+
+  return {
+    items,
+    transitions,
+  };
+}
+
+
 export function buildSubjectReportModelPayload({
   subject,
   generatedAt = new Date(),
@@ -1570,6 +1796,7 @@ export function buildSubjectReportModelPayload({
   cashAssets = null,
   realEstate = null,
   vehicles = null,
+  career = null,
 } = {}) {
   if (!subject) {
     return null;
@@ -1629,6 +1856,22 @@ export function buildSubjectReportModelPayload({
         : [],
   };
 
+  const careerSection = {
+    items:
+      Array.isArray(
+        career?.items,
+      )
+        ? career.items
+        : [],
+
+    transitions:
+      Array.isArray(
+        career?.transitions,
+      )
+        ? career.transitions
+        : [],
+  };
+
   return {
     schema_version:
       REPORT_MODEL_SCHEMA_VERSION,
@@ -1680,10 +1923,8 @@ export function buildSubjectReportModelPayload({
     declarations:
       declarationSection,
 
-    career: {
-      items: [],
-      transitions: [],
-    },
+    career:
+      careerSection,
 
     related_people: {
       items: [],
@@ -1789,6 +2030,31 @@ export async function buildSubjectReportModel(
     buildDeclarationSection({
       availableYears,
       contexts,
+    });
+
+  const employmentContextLoader =
+    options.employmentContextLoader ??
+    loadDeterministicEmploymentContext;
+
+  const employmentOptions =
+    options.employmentOptions ?? {};
+
+  const employmentContexts =
+    await Promise.all(
+      availableYears.map(
+        (year) =>
+          employmentContextLoader(
+            subject.entity_id,
+            year,
+            employmentOptions,
+          ),
+      ),
+    );
+
+  const career =
+    buildCareerSection({
+      contexts:
+        employmentContexts,
     });
 
   const singleYearIncomeLoader =
@@ -1932,5 +2198,6 @@ export async function buildSubjectReportModel(
     cashAssets,
     realEstate,
     vehicles,
+    career,
   });
 }
