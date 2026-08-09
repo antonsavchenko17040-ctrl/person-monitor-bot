@@ -114,6 +114,138 @@ test(
   },
 );
 
+
+test(
+  "uses analytics only for multi-year aggregate income question",
+  () => {
+    const request =
+      buildResponsesRequest({
+        question:
+          "Порівняй доходи за 2024 та 2025 роки та скажи відсоток зміни.",
+
+        model:
+          "test-model",
+
+        context: {
+          detected_years:
+            [2024, 2025],
+
+          facts: [
+            {
+              fact_type:
+                "income",
+
+              value_text:
+                "PARTIAL_FACT_MUST_NOT_BE_USED",
+            },
+          ],
+
+          analytics: {
+            yearly: [
+              {
+                year: 2024,
+
+                incomeDeclarantUah:
+                  6907216,
+              },
+              {
+                year: 2025,
+
+                incomeDeclarantUah:
+                  7118608,
+              },
+            ],
+
+            transitions: [
+              {
+                fromYear: 2024,
+                toYear: 2025,
+
+                incomeDelta:
+                  211392,
+
+                incomeDeltaPercent:
+                  3.06,
+              },
+            ],
+          },
+
+          relations: [],
+          mentions: [],
+          cross_checks: [],
+          source_documents: [],
+        },
+      });
+
+    const serialized =
+      JSON.stringify(request);
+
+    assert.match(
+      serialized,
+      /6907216/,
+    );
+
+    assert.match(
+      serialized,
+      /7118608/,
+    );
+
+    assert.match(
+      serialized,
+      /211392/,
+    );
+
+    assert.match(
+      serialized,
+      /3\.06/,
+    );
+
+    const promptContent =
+      String(
+        request.input
+          .at(-1)
+          ?.content ??
+        "",
+      );
+
+    assert.doesNotMatch(
+      serialized,
+      /PARTIAL_FACT_MUST_NOT_BE_USED/,
+    );
+
+    assert.doesNotMatch(
+      promptContent,
+      /model_context_policy/,
+    );
+
+    assert.doesNotMatch(
+      promptContent,
+      /analytics_only/,
+    );
+
+    assert.doesNotMatch(
+      promptContent,
+      /incomeDeclarantUah/,
+    );
+
+    assert.doesNotMatch(
+      promptContent,
+      /incomeDelta/,
+    );
+
+    assert.match(
+      promptContent,
+      /declarant_income_uah/,
+    );
+
+    assert.match(
+      promptContent,
+      /income_change_percent/,
+    );
+  },
+);
+
+
 test(
   "calls Responses API through injected client",
   async () => {
