@@ -14,6 +14,11 @@ const PAGE_SIZE = 20;
 let activeMentions = [];
 let visibleMentions = PAGE_SIZE;
 
+let activeChatSubjectId = null;
+let activeChatSubjectName = "";
+let activeChatHistory = [];
+let chatRequestPending = false;
+
 function providerLabel(provider) {
   return PROVIDER_LABELS[provider] ?? provider ?? "Інше джерело";
 }
@@ -87,6 +92,576 @@ async function loadHealth() {
   }
 }
 
+function appendChatInlineMarkdown(
+  container,
+  value
+) {
+  const text =
+    String(value ?? "");
+
+  const pattern =
+    /(\*\*([^*]+)\*\*)|(\[([^\]]+)\]\((https?:\/\/[^)\s]+)\))/g;
+
+  let lastIndex = 0;
+  let match;
+
+  while (
+    (
+      match =
+        pattern.exec(text)
+    ) !== null
+  ) {
+    if (
+      match.index >
+      lastIndex
+    ) {
+      container.append(
+        document.createTextNode(
+          text.slice(
+            lastIndex,
+            match.index
+          )
+        )
+      );
+    }
+
+    if (match[2] != null) {
+      const strong =
+        document.createElement(
+          "strong"
+        );
+
+      strong.textContent =
+        match[2];
+
+      container.append(
+        strong
+      );
+    } else if (
+      match[4] != null &&
+      match[5] != null
+    ) {
+      const link =
+        document.createElement(
+          "a"
+        );
+
+      link.textContent =
+        match[4];
+
+      link.href =
+        match[5];
+
+      link.target =
+        "_blank";
+
+      link.rel =
+        "noopener noreferrer";
+
+      link.style.color =
+        "inherit";
+
+      link.style.textDecoration =
+        "underline";
+
+      container.append(
+        link
+      );
+    }
+
+    lastIndex =
+      pattern.lastIndex;
+  }
+
+  if (
+    lastIndex <
+    text.length
+  ) {
+    container.append(
+      document.createTextNode(
+        text.slice(
+          lastIndex
+        )
+      )
+    );
+  }
+}
+
+function renderChatMarkdown(
+  container,
+  value
+) {
+  container.replaceChildren();
+
+  const lines =
+    String(value ?? "")
+      .split(/\r?\n/);
+
+  let list = null;
+
+  for (const line of lines) {
+    const trimmed =
+      line.trim();
+
+    if (!trimmed) {
+      list = null;
+
+      const spacer =
+        document.createElement(
+          "div"
+        );
+
+      spacer.style.height =
+        "8px";
+
+      container.append(
+        spacer
+      );
+
+      continue;
+    }
+
+    const heading =
+      /^\s*#{1,3}\s+(.+)$/
+        .exec(line);
+
+    if (heading) {
+      list = null;
+
+      const title =
+        document.createElement(
+          "div"
+        );
+
+      title.style.fontWeight =
+        "700";
+
+      title.style.fontSize =
+        "1.05em";
+
+      title.style.marginTop =
+        "6px";
+
+      appendChatInlineMarkdown(
+        title,
+        heading[1]
+      );
+
+      container.append(
+        title
+      );
+
+      continue;
+    }
+
+    const bullet =
+      /^\s*[-*]\s+(.+)$/
+        .exec(line);
+
+    if (bullet) {
+      if (!list) {
+        list =
+          document.createElement(
+            "ul"
+          );
+
+        list.style.margin =
+          "4px 0 4px 20px";
+
+        list.style.padding =
+          "0";
+
+        container.append(
+          list
+        );
+      }
+
+      const item =
+        document.createElement(
+          "li"
+        );
+
+      item.style.margin =
+        "4px 0";
+
+      appendChatInlineMarkdown(
+        item,
+        bullet[1]
+      );
+
+      list.append(
+        item
+      );
+
+      continue;
+    }
+
+    list = null;
+
+    const paragraph =
+      document.createElement(
+        "div"
+      );
+
+    appendChatInlineMarkdown(
+      paragraph,
+      line
+    );
+
+    container.append(
+      paragraph
+    );
+  }
+}
+
+function appendChatMessage(
+  role,
+  text
+) {
+  const container =
+    document.getElementById(
+      "subject-chat-messages"
+    );
+
+  if (!container) {
+    return;
+  }
+
+  if (
+    container.dataset.empty ===
+    "true"
+  ) {
+    container.replaceChildren();
+    delete container.dataset.empty;
+  }
+
+  const item =
+    document.createElement("div");
+
+  item.style.padding = "12px";
+  item.style.borderRadius = "12px";
+  item.style.border =
+    "1px solid #252b36";
+
+  item.style.background =
+    role === "user"
+      ? "#1b2230"
+      : "#10141c";
+
+  const label =
+    document.createElement("div");
+
+  label.className = "label";
+  label.style.marginBottom = "6px";
+
+  label.textContent =
+    role === "user"
+      ? "Ви"
+      : "Person Monitor AI";
+
+  const content =
+    document.createElement("div");
+
+  content.style.whiteSpace =
+    "pre-wrap";
+
+  content.style.wordBreak =
+    "break-word";
+
+  content.style.lineHeight =
+    "1.55";
+
+  if (role === "assistant") {
+    renderChatMarkdown(
+      content,
+      text
+    );
+  } else {
+    content.textContent =
+      String(text ?? "");
+  }
+
+  item.append(
+    label,
+    content
+  );
+
+  container.append(item);
+
+  container.scrollTop =
+    container.scrollHeight;
+}
+
+function prepareSubjectChat(
+  subjectId,
+  fullName
+) {
+  activeChatSubjectId =
+    subjectId;
+
+  activeChatSubjectName =
+    fullName ?? "";
+
+  activeChatHistory = [];
+  chatRequestPending = false;
+
+  const section =
+    document.getElementById(
+      "subject-chat-section"
+    );
+
+  const title =
+    document.getElementById(
+      "subject-chat-title"
+    );
+
+  const messages =
+    document.getElementById(
+      "subject-chat-messages"
+    );
+
+  const input =
+    document.getElementById(
+      "subject-chat-input"
+    );
+
+  const status =
+    document.getElementById(
+      "subject-chat-status"
+    );
+
+  const button =
+    document.getElementById(
+      "subject-chat-submit"
+    );
+
+  if (section) {
+    section.style.display =
+      "block";
+  }
+
+  if (title) {
+    title.textContent =
+      `AI-аналіз: ${activeChatSubjectName}`;
+  }
+
+  if (messages) {
+    messages.replaceChildren();
+
+    const intro =
+      document.createElement(
+        "div"
+      );
+
+    intro.className = "label";
+
+    intro.textContent =
+      "Поставте питання про дані цього суб’єкта.";
+
+    messages.append(intro);
+    messages.dataset.empty =
+      "true";
+  }
+
+  if (input) {
+    input.value = "";
+  }
+
+  if (status) {
+    status.textContent = "";
+  }
+
+  if (button) {
+    button.disabled = false;
+    button.textContent =
+      "Запитати";
+  }
+}
+
+async function submitSubjectChat(
+  event
+) {
+  event.preventDefault();
+
+  if (chatRequestPending) {
+    return;
+  }
+
+  const input =
+    document.getElementById(
+      "subject-chat-input"
+    );
+
+  const status =
+    document.getElementById(
+      "subject-chat-status"
+    );
+
+  const button =
+    document.getElementById(
+      "subject-chat-submit"
+    );
+
+  const message =
+    input?.value
+      ?.trim() ??
+    "";
+
+  if (!activeChatSubjectId) {
+    if (status) {
+      status.textContent =
+        "Спочатку оберіть суб’єкта.";
+    }
+
+    return;
+  }
+
+  if (!message) {
+    return;
+  }
+
+  const requestHistory =
+    activeChatHistory
+      .slice(-10);
+
+  appendChatMessage(
+    "user",
+    message
+  );
+
+  if (input) {
+    input.value = "";
+  }
+
+  chatRequestPending = true;
+
+  if (button) {
+    button.disabled = true;
+    button.textContent =
+      "Аналізую…";
+  }
+
+  if (status) {
+    status.textContent =
+      "Локальна AI-модель формує відповідь…";
+  }
+
+  try {
+    const response =
+      await fetch(
+        "/api/chat",
+        {
+          method:
+            "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            Accept:
+              "application/json",
+          },
+
+          body:
+            JSON.stringify({
+              subjectId:
+                activeChatSubjectId,
+
+              message,
+
+              history:
+                requestHistory,
+            }),
+        }
+      );
+
+    let data = null;
+
+    try {
+      data =
+        await response.json();
+    } catch {}
+
+    if (
+      !response.ok ||
+      data?.ok !== true
+    ) {
+      throw new Error(
+        data?.error ??
+        `HTTP ${response.status}`
+      );
+    }
+
+    const answer =
+      String(
+        data.answer ?? ""
+      ).trim();
+
+    appendChatMessage(
+      "assistant",
+      answer ||
+      "Модель не повернула текстової відповіді."
+    );
+
+    activeChatHistory.push(
+      {
+        role:
+          "user",
+        content:
+          message,
+      },
+      {
+        role:
+          "assistant",
+        content:
+          answer,
+      }
+    );
+
+    activeChatHistory =
+      activeChatHistory
+        .slice(-10);
+
+    if (status) {
+      status.textContent =
+        data.model
+          ? `Модель: ${data.model}`
+          : "Готово";
+    }
+  } catch (error) {
+    console.error(
+      "Chat request failed:",
+      error
+    );
+
+    appendChatMessage(
+      "assistant",
+      "Не вдалося отримати відповідь AI."
+    );
+
+    if (status) {
+      status.textContent =
+        `Помилка: ${
+          error?.message ??
+          "невідома помилка"
+        }`;
+    }
+  } finally {
+    chatRequestPending =
+      false;
+
+    if (button) {
+      button.disabled =
+        false;
+
+      button.textContent =
+        "Запитати";
+    }
+
+    input?.focus();
+  }
+}
+
 async function loadSubjects() {
   const container = document.getElementById("subjects-list");
 
@@ -137,6 +712,11 @@ async function loadSubjects() {
       card.append(name, organization, position, city, count);
 
       card.addEventListener("click", async () => {
+        prepareSubjectChat(
+          subject.id,
+          subject.full_name
+        );
+
         await Promise.all([
           loadSubjectStats(subject.id, subject.full_name),
           loadMentions(subject.id, subject.full_name),
@@ -1830,6 +2410,40 @@ document
       graphNodeOverrides.clear();
       graphDragState = null;
       renderSubjectGraph();
+    }
+  );
+
+document
+  .getElementById(
+    "subject-chat-form"
+  )
+  ?.addEventListener(
+    "submit",
+    submitSubjectChat
+  );
+
+document
+  .getElementById(
+    "subject-chat-input"
+  )
+  ?.addEventListener(
+    "keydown",
+    (event) => {
+      if (
+        event.key === "Enter" &&
+        (
+          event.metaKey ||
+          event.ctrlKey
+        )
+      ) {
+        event.preventDefault();
+
+        document
+          .getElementById(
+            "subject-chat-form"
+          )
+          ?.requestSubmit();
+      }
     }
   );
 

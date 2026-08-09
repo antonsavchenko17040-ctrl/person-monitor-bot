@@ -132,6 +132,43 @@
       </div>
     </section>
 
+    <section id="subject-chat-section" style="margin-top: 32px; display: none;">
+      <h2 id="subject-chat-title">AI-аналіз</h2>
+
+      <div class="card">
+        <div
+          id="subject-chat-messages"
+          style="display: grid; gap: 12px; max-height: 520px; overflow-y: auto; margin-bottom: 16px;"
+        ></div>
+
+        <form id="subject-chat-form">
+          <textarea
+            id="subject-chat-input"
+            maxlength="4000"
+            rows="4"
+            placeholder="Запитайте про доходи, майно, зв’язки, декларації або інші дані суб’єкта..."
+            style="width: 100%; resize: vertical; padding: 12px; border-radius: 10px; border: 1px solid #2a303b; background: #0b0d12; color: inherit; font: inherit;"
+          ></textarea>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 12px;">
+            <div
+              id="subject-chat-status"
+              class="label"
+              style="margin: 0;"
+            ></div>
+
+            <button
+              id="subject-chat-submit"
+              type="submit"
+              style="padding: 11px 18px; border: 1px solid #2a303b; border-radius: 10px; background: #f5f7fa; color: #0b0d12; font-weight: 700; cursor: pointer;"
+            >
+              Запитати
+            </button>
+          </div>
+        </form>
+      </div>
+    </section>
+
     <section id="subject-graph-section" style="margin-top: 32px; display: none;">
       <h2 id="subject-graph-title">Граф зв’язків</h2>
 
