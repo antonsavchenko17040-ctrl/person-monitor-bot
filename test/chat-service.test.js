@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   buildDeterministicAnalyticsAnswer,
   buildDeterministicCashAssetAnswer,
+  buildDeterministicFamilyMemberAnswer,
   buildDeterministicIncomeDetailAnswer,
   buildDeterministicRealEstateAnswer,
   buildDeterministicVehicleAnswer,
@@ -784,6 +785,314 @@ test(
         "Покажи повний документ декларації за 2025 рік"
       ),
       true,
+    );
+  },
+);
+
+test(
+  "builds deterministic family member list from canonical document",
+  () => {
+    const answer =
+      buildDeterministicFamilyMemberAnswer(
+        "Хто входив до складу сім’ї декларанта у 2025 році?",
+        {
+          detected_years:
+            [2025],
+
+          facts: [],
+
+          analytics: {
+            yearly: [
+              {
+                year:
+                  2025,
+
+                sourceDocumentId:
+                  "doc-canonical",
+              },
+            ],
+          },
+
+          source_documents: [
+            {
+              id:
+                "doc-canonical",
+
+              url:
+                "https://example.test/declaration-2025",
+            },
+          ],
+        },
+
+        [
+          {
+            fact_type:
+              "family_member",
+
+            source_document_id:
+              "doc-canonical",
+
+            metadata: {
+              declaration_year:
+                2025,
+            },
+
+            value_text:
+              "Тестова Дружина",
+
+            value_json: {
+              name:
+                "Тестова Дружина",
+
+              relation:
+                "дружина",
+
+              person_ref:
+                "family-wife",
+            },
+          },
+
+          {
+            fact_type:
+              "family_member",
+
+            source_document_id:
+              "doc-canonical",
+
+            metadata: {
+              declaration_year:
+                2025,
+            },
+
+            value_text:
+              "Тестовий Син",
+
+            value_json: {
+              name:
+                "Тестовий Син",
+
+              relation:
+                "син",
+
+              person_ref:
+                "family-son",
+            },
+          },
+
+          /*
+           * Інша декларація того
+           * самого року не повинна
+           * потрапити у відповідь.
+           */
+          {
+            fact_type:
+              "family_member",
+
+            source_document_id:
+              "doc-other",
+
+            metadata: {
+              declaration_year:
+                2025,
+            },
+
+            value_text:
+              "Стороння Особа",
+
+            value_json: {
+              name:
+                "Стороння Особа",
+
+              relation:
+                "інше",
+
+              person_ref:
+                "other-person",
+            },
+          },
+
+          /*
+           * Порожній family fact
+           * не повинен створювати
+           * фіктивного члена сім'ї.
+           */
+          {
+            fact_type:
+              "family_member",
+
+            source_document_id:
+              "doc-canonical",
+
+            metadata: {
+              declaration_year:
+                2025,
+            },
+
+            value_text:
+              null,
+
+            value_json: {
+              name:
+                null,
+
+              relation:
+                null,
+
+              person_ref:
+                null,
+            },
+          },
+        ]
+      );
+
+    assert.match(
+      answer,
+      /Тестова Дружина/,
+    );
+
+    assert.match(
+      answer,
+      /дружина/,
+    );
+
+    assert.match(
+      answer,
+      /Тестовий Син/,
+    );
+
+    assert.match(
+      answer,
+      /син/,
+    );
+
+    assert.doesNotMatch(
+      answer,
+      /Стороння Особа/,
+    );
+
+    assert.match(
+      answer,
+      /https:\/\/example\.test\/declaration-2025/,
+    );
+  },
+);
+
+test(
+  "deduplicates family member inside canonical document",
+  () => {
+    const member = {
+      fact_type:
+        "family_member",
+
+      source_document_id:
+        "doc-canonical",
+
+      metadata: {
+        declaration_year:
+          2020,
+      },
+
+      value_text:
+        "Тестова Дружина",
+
+      value_json: {
+        name:
+          "Тестова Дружина",
+
+        relation:
+          "дружина",
+
+        person_ref:
+          "family-wife",
+      },
+    };
+
+    const answer =
+      buildDeterministicFamilyMemberAnswer(
+        "Які члени сім’ї були у 2020 році?",
+        {
+          detected_years:
+            [2020],
+
+          analytics: {
+            yearly: [
+              {
+                year:
+                  2020,
+
+                sourceDocumentId:
+                  "doc-canonical",
+              },
+            ],
+          },
+
+          source_documents: [],
+        },
+
+        [
+          member,
+          {
+            ...member,
+
+            fact_key:
+              "duplicate-copy",
+          },
+        ]
+      );
+
+    const matches =
+      answer.match(
+        /Тестова Дружина/g
+      ) ?? [];
+
+    assert.equal(
+      matches.length,
+      1,
+    );
+  },
+);
+
+test(
+  "keeps analytical family question on AI path",
+  () => {
+    const answer =
+      buildDeterministicFamilyMemberAnswer(
+        "Проаналізуй, як змінювався склад сім’ї у 2024 та 2025 роках",
+        {
+          detected_years:
+            [2024, 2025],
+
+          facts: [
+            {
+              fact_type:
+                "family_member",
+
+              metadata: {
+                declaration_year:
+                  2025,
+              },
+
+              value_text:
+                "Тестова Дружина",
+
+              value_json: {
+                name:
+                  "Тестова Дружина",
+
+                relation:
+                  "дружина",
+
+                person_ref:
+                  "family-wife",
+              },
+            },
+          ],
+        }
+      );
+
+    assert.equal(
+      answer,
+      null,
     );
   },
 );

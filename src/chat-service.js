@@ -2908,6 +2908,210 @@ export function buildDeterministicCashAssetAnswer(
   return answer;
 }
 
+function isFamilyMemberListQuestion(
+  question
+) {
+  const q =
+    String(question ?? "")
+      .toLowerCase();
+
+  const hasDomain =
+    /член[а-яіїєґ’']*\s+сім|сім['’]?(?:я|ї)|дружин|чоловік|дитин|син|дочк|родин/.test(
+      q
+    );
+
+  const hasListIntent =
+    /хто|які|який|перелік|список|покажи|назви|входить|входили|був|була|були/.test(
+      q
+    );
+
+  const hasAnalyticalIntent =
+    /аналіз|проаналіз|порівн|динамік|змін|ризик|аномал|чому|що\s+означ|виснов|оцін/.test(
+      q
+    );
+
+  return Boolean(
+    hasDomain &&
+    hasListIntent &&
+    !hasAnalyticalIntent
+  );
+}
+
+export function buildDeterministicFamilyMemberAnswer(
+  question,
+  context,
+  allFacts = null
+) {
+  if (
+    !isFamilyMemberListQuestion(
+      question
+    )
+  ) {
+    return null;
+  }
+
+  const years =
+    (
+      context
+        ?.detected_years ??
+      []
+    )
+      .map(Number)
+      .filter(
+        Number.isInteger
+      );
+
+  if (years.length !== 1) {
+    return null;
+  }
+
+  const year =
+    years[0];
+
+  const yearlyAnalytics =
+    (
+      context
+        ?.analytics
+        ?.yearly ??
+      []
+    ).find(
+      (item) =>
+        Number(item?.year) ===
+        year
+    );
+
+  /*
+   * Для factual list використовуємо
+   * саме документ, який analytics
+   * визначив джерелом цього року.
+   *
+   * Це не дозволяє змішувати
+   * кілька декларацій одного року.
+   */
+  const canonicalSourceId =
+    yearlyAnalytics
+      ?.sourceDocumentId ??
+    null;
+
+  const facts =
+    Array.isArray(allFacts)
+      ? allFacts
+      : (
+          context?.facts ??
+          []
+        );
+
+  const seen =
+    new Set();
+
+  const rows = [];
+
+  for (const fact of facts) {
+    if (
+      fact?.fact_type !==
+        "family_member" ||
+      factYear(fact) !==
+        year
+    ) {
+      continue;
+    }
+
+    if (
+      canonicalSourceId &&
+      String(
+        fact.source_document_id ??
+        ""
+      ) !==
+        String(
+          canonicalSourceId
+        )
+    ) {
+      continue;
+    }
+
+    const value =
+      fact.value_json ??
+      {};
+
+    const name =
+      String(
+        value.name ??
+        fact.value_text ??
+        ""
+      ).trim();
+
+    const relation =
+      String(
+        value.relation ??
+        ""
+      ).trim();
+
+    const personRef =
+      String(
+        value.person_ref ??
+        ""
+      ).trim();
+
+    /*
+     * Порожній family fact
+     * не перетворюємо на людину.
+     */
+    if (!name) {
+      continue;
+    }
+
+    const key =
+      personRef
+        ? `ref:${personRef}`
+        : `name:${name.toLowerCase()}|${relation.toLowerCase()}`;
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+
+    rows.push({
+      name,
+      relation,
+    });
+  }
+
+  if (!rows.length) {
+    return null;
+  }
+
+  let answer =
+    `Члени сім’ї декларанта за ${year} рік:\n\n`;
+
+  answer +=
+    rows
+      .map(
+        (row) =>
+          `- **${row.name}**` +
+          (
+            row.relation
+              ? ` — ${row.relation}`
+              : ""
+          )
+      )
+      .join("\n");
+
+  const source =
+    analyticsSourceForYear(
+      context,
+      yearlyAnalytics
+    );
+
+  if (source?.url) {
+    answer +=
+      `\n\nДжерело: ` +
+      `[декларація НАЗК за ${year} рік](${source.url})`;
+  }
+
+  return answer;
+}
+
 function isOrganizationRelationListQuestion(
   question
 ) {
@@ -4118,6 +4322,13 @@ export async function createSubjectChatResponse({
       knowledge?.facts
     );
 
+  const deterministicFamilyMemberAnswer =
+    buildDeterministicFamilyMemberAnswer(
+      contextualQuestion,
+      context,
+      knowledge?.facts
+    );
+
   const deterministicOrganizationRelationsAnswer =
     buildDeterministicOrganizationRelationsAnswer(
       contextualQuestion,
@@ -4130,6 +4341,7 @@ export async function createSubjectChatResponse({
     deterministicRealEstateAnswer ??
     deterministicVehicleAnswer ??
     deterministicCashAssetAnswer ??
+    deterministicFamilyMemberAnswer ??
     deterministicOrganizationRelationsAnswer;
 
   if (deterministicAnswer) {
