@@ -94,6 +94,165 @@ export function normalizeChatHistory(
     );
 }
 
+function questionYears(
+  value
+) {
+  const matches =
+    String(value ?? "")
+      .match(
+        /\b20\d{2}\b/g
+      ) ?? [];
+
+  return [
+    ...new Set(
+      matches
+        .map(Number)
+        .filter(
+          Number.isInteger
+        )
+    ),
+  ];
+}
+
+function stripQuestionYears(
+  value
+) {
+  return String(value ?? "")
+    .replace(
+      /\b20\d{2}\b(?:\s*р(?:ік|оку|оці)?)?/gi,
+      " "
+    )
+    .replace(
+      /\s+/g,
+      " "
+    )
+    .trim();
+}
+
+function hasStrongQuestionDomain(
+  value
+) {
+  const q =
+    String(value ?? "")
+      .toLowerCase();
+
+  return (
+    /дохід|доход/.test(q) ||
+    /готів|cash/.test(q) ||
+    /нерухом|квартир|будин|земл|житл/.test(q) ||
+    /авто|автомоб|транспорт|машин/.test(q) ||
+    /посад|кар['’]?єр|працю|місце роботи|організаці/.test(q) ||
+    /новин|медіа|публікац|згадк/.test(q) ||
+    /зв['’]?яз|пов['’]?язан|правовлас|власник/.test(q) ||
+    /cross.?check|ризик|аномал|невідповід/.test(q) ||
+    /член\S*\s+сім|дружин|чоловік|дитин|родич/.test(q)
+  );
+}
+
+export function resolveContextualQuestion(
+  message,
+  history = []
+) {
+  const current =
+    cleanText(
+      message,
+      CHAT_SERVICE_LIMITS
+        .messageChars
+    );
+
+  if (!current) {
+    return "";
+  }
+
+  const normalizedHistory =
+    normalizeChatHistory(
+      history
+    );
+
+  const previousUser =
+    [
+      ...normalizedHistory,
+    ]
+      .reverse()
+      .find(
+        (item) =>
+          item.role ===
+          "user"
+      )
+      ?.content ?? "";
+
+  if (!previousUser) {
+    return current;
+  }
+
+  const currentYears =
+    questionYears(
+      current
+    );
+
+  const previousYears =
+    questionYears(
+      previousUser
+    );
+
+  const currentHasDomain =
+    hasStrongQuestionDomain(
+      current
+    );
+
+  /*
+   * Не використовуємо попередню
+   * відповідь AI для retrieval.
+   * Контекст успадковується лише
+   * з останнього питання користувача.
+   */
+  if (!currentHasDomain) {
+    const previousTopic =
+      currentYears.length
+        ? stripQuestionYears(
+            previousUser
+          )
+        : previousUser;
+
+    if (previousTopic) {
+      return cleanText(
+        [
+          previousTopic,
+          current,
+        ].join("\n"),
+        CHAT_SERVICE_LIMITS
+          .messageChars
+      );
+    }
+  }
+
+  /*
+   * Якщо користувач явно змінив
+   * тему, але не повторив рік,
+   * успадковуємо лише останній рік,
+   * а не попередню предметну область.
+   */
+  if (
+    currentHasDomain &&
+    !currentYears.length &&
+    previousYears.length
+  ) {
+    const inheritedYear =
+      previousYears.at(-1);
+
+    return cleanText(
+      [
+        `За ${inheritedYear} рік.`,
+        current,
+      ].join("\n"),
+      CHAT_SERVICE_LIMITS
+        .messageChars
+    );
+  }
+
+  return current;
+}
+
 function compactObject(value) {
   if (value == null) {
     return null;
@@ -1523,6 +1682,7 @@ export async function runResponsesWithTools({
 
 export function buildResponsesRequest({
   question,
+  contextQuestion = question,
   history = [],
   context,
   model =
@@ -1551,16 +1711,24 @@ export function buildResponsesRequest({
   const normalizedHistory =
     normalizeChatHistory(history);
 
+  const normalizedContextQuestion =
+    cleanText(
+      contextQuestion,
+      CHAT_SERVICE_LIMITS
+        .messageChars
+    ) ||
+    normalizedQuestion;
+
   const analyticsOnly =
     shouldUseAnalyticsOnly(
-      normalizedQuestion,
+      normalizedContextQuestion,
       context,
     );
 
   const modelContext =
     buildModelContext(
       context,
-      normalizedQuestion,
+      normalizedContextQuestion,
     );
 
   const contextJson =
@@ -1647,22 +1815,28 @@ export async function createSubjectChatResponse({
     );
   }
 
+  const contextualQuestion =
+    resolveContextualQuestion(
+      message,
+      history
+    );
+
   const context =
     retriever(
       knowledge,
-      message,
+      contextualQuestion,
       retrievalOptions,
     );
 
   const deterministicAnalyticsAnswer =
     buildDeterministicAnalyticsAnswer(
-      message,
+      contextualQuestion,
       context
     );
 
   const deterministicIncomeDetailAnswer =
     buildDeterministicIncomeDetailAnswer(
-      message,
+      contextualQuestion,
       context
     );
 
@@ -1696,6 +1870,8 @@ export async function createSubjectChatResponse({
   const request =
     buildResponsesRequest({
       question: message,
+      contextQuestion:
+        contextualQuestion,
       history,
       context,
       model,

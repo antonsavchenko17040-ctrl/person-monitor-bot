@@ -7,6 +7,7 @@ import {
   buildResponsesRequest,
   createSubjectChatResponse,
   normalizeChatHistory,
+  resolveContextualQuestion,
 } from "../src/chat-service.js";
 
 test(
@@ -41,6 +42,120 @@ test(
     assert.equal(
       history[1].role,
       "assistant",
+    );
+  },
+);
+
+test(
+  "inherits topic but replaces year in follow-up question",
+  () => {
+    const resolved =
+      resolveContextualQuestion(
+        "А за 2024?",
+        [
+          {
+            role:
+              "user",
+
+            content:
+              "Який дохід у 2025 році?",
+          },
+          {
+            role:
+              "assistant",
+
+            content:
+              "Попередня відповідь AI не повинна бути retrieval-джерелом.",
+          },
+        ]
+      );
+
+    assert.match(
+      resolved,
+      /дохід/i,
+    );
+
+    assert.match(
+      resolved,
+      /2024/,
+    );
+
+    assert.doesNotMatch(
+      resolved,
+      /2025/,
+    );
+
+    assert.doesNotMatch(
+      resolved,
+      /Попередня відповідь AI/,
+    );
+  },
+);
+
+test(
+  "inherits topic and year for ambiguous detail follow-up",
+  () => {
+    const resolved =
+      resolveContextualQuestion(
+        "А які джерела?",
+        [
+          {
+            role:
+              "user",
+
+            content:
+              "Який дохід у 2025 році?",
+          },
+        ]
+      );
+
+    assert.match(
+      resolved,
+      /дохід/i,
+    );
+
+    assert.match(
+      resolved,
+      /2025/,
+    );
+
+    assert.match(
+      resolved,
+      /джерела/i,
+    );
+  },
+);
+
+test(
+  "inherits only year when follow-up changes domain",
+  () => {
+    const resolved =
+      resolveContextualQuestion(
+        "А яка нерухомість?",
+        [
+          {
+            role:
+              "user",
+
+            content:
+              "Який дохід у 2025 році?",
+          },
+        ]
+      );
+
+    assert.match(
+      resolved,
+      /2025/,
+    );
+
+    assert.match(
+      resolved,
+      /нерухом/i,
+    );
+
+    assert.doesNotMatch(
+      resolved,
+      /дохід/i,
     );
   },
 );
