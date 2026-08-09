@@ -4572,6 +4572,468 @@ test(
 );
 
 test(
+  "uses cash asset preflight without loading full subject knowledge",
+  async () => {
+    let knowledgeCalls = 0;
+    let subjectCalls = 0;
+    let cashCalls = 0;
+    let retrieverCalls = 0;
+    let modelCalls = 0;
+
+    const fakeClient = {
+      responses: {
+        async create() {
+          modelCalls += 1;
+
+          throw new Error(
+            "MODEL_SHOULD_NOT_BE_CALLED"
+          );
+        },
+      },
+    };
+
+    const result =
+      await createSubjectChatResponse({
+        subjectId:
+          "subject-1",
+
+        message:
+          "Які грошові активи мали декларант та члени сім’ї у 2020 році?",
+
+        client:
+          fakeClient,
+
+        model:
+          "test-model",
+
+        subjectLoader:
+          async (subjectId) => {
+            subjectCalls += 1;
+
+            assert.equal(
+              subjectId,
+              "subject-1",
+            );
+
+            return {
+              id:
+                "subject-1",
+
+              entity_id:
+                "entity-1",
+            };
+          },
+
+        cashContextLoader:
+          async (
+            entityId,
+            year
+          ) => {
+            cashCalls += 1;
+
+            assert.equal(
+              entityId,
+              "entity-1",
+            );
+
+            assert.equal(
+              year,
+              2020,
+            );
+
+            return {
+              detected_years:
+                [2020],
+
+              facts: [
+                {
+                  fact_type:
+                    "cash_asset",
+
+                  source_document_id:
+                    "doc-2020",
+
+                  value_text:
+                    "Готівкові кошти",
+
+                  value_number:
+                    1000,
+
+                  unit:
+                    "USD",
+
+                  metadata: {
+                    declaration_year:
+                      2020,
+
+                    item_ref:
+                      "cash-1",
+                  },
+
+                  value_json: {
+                    asset_type:
+                      "Готівкові кошти",
+
+                    amount:
+                      1000,
+
+                    currency:
+                      "USD",
+
+                    rights: [
+                      {
+                        actor: {
+                          role:
+                            "declarant",
+
+                          ref:
+                            "person-declarant",
+
+                          name:
+                            "Тестовий Декларант",
+
+                          relation:
+                            "декларант",
+                        },
+
+                        ownership_type:
+                          "Власність",
+                      },
+
+                      {
+                        actor: {
+                          role:
+                            "family",
+
+                          ref:
+                            "person-family",
+
+                          name:
+                            "Тестова Дружина",
+
+                          relation:
+                            "дружина",
+                        },
+
+                        ownership_type:
+                          "Власність",
+                      },
+                    ],
+                  },
+                },
+              ],
+
+              analytics: {
+                yearly: [
+                  {
+                    year:
+                      2020,
+
+                    sourceDocumentId:
+                      "doc-2020",
+                  },
+                ],
+              },
+
+              source_documents: [
+                {
+                  id:
+                    "doc-2020",
+
+                  url:
+                    "https://example.test/declaration-2020",
+                },
+              ],
+            };
+          },
+
+        knowledgeLoader:
+          async () => {
+            knowledgeCalls += 1;
+
+            throw new Error(
+              "FULL_KNOWLEDGE_SHOULD_NOT_LOAD"
+            );
+          },
+
+        retriever:
+          () => {
+            retrieverCalls += 1;
+
+            throw new Error(
+              "RETRIEVER_SHOULD_NOT_RUN"
+            );
+          },
+      });
+
+    assert.equal(
+      result.model,
+      "person-monitor-facts",
+    );
+
+    assert.equal(
+      result.retrieval.version,
+      "deterministic-cash-assets-v1",
+    );
+
+    assert.deepEqual(
+      result.retrieval
+        .detected_years,
+      [2020],
+    );
+
+    assert.equal(
+      result.retrieval
+        .counts.facts,
+      1,
+    );
+
+    assert.equal(
+      result.retrieval
+        .counts.source_documents,
+      1,
+    );
+
+    assert.match(
+      result.answer,
+      /Грошові активи домогосподарства за 2020 рік/,
+    );
+
+    assert.match(
+      result.answer,
+      /1 000 USD/,
+    );
+
+    assert.match(
+      result.answer,
+      /Тестовий Декларант \(декларант\)/,
+    );
+
+    assert.match(
+      result.answer,
+      /Тестова Дружина \(дружина\)/,
+    );
+
+    assert.match(
+      result.answer,
+      /declaration-2020/,
+    );
+
+    assert.equal(
+      subjectCalls,
+      1,
+    );
+
+    assert.equal(
+      cashCalls,
+      1,
+    );
+
+    assert.equal(
+      knowledgeCalls,
+      0,
+    );
+
+    assert.equal(
+      retrieverCalls,
+      0,
+    );
+
+    assert.equal(
+      modelCalls,
+      0,
+    );
+  },
+);
+
+test(
+  "falls back to full knowledge pipeline for analytical cash asset question",
+  async () => {
+    let knowledgeCalls = 0;
+    let subjectCalls = 0;
+    let cashCalls = 0;
+    let retrieverCalls = 0;
+    let modelCalls = 0;
+
+    const fakeClient = {
+      responses: {
+        async create() {
+          modelCalls += 1;
+
+          return {
+            output_text:
+              "Аналітична відповідь",
+          };
+        },
+      },
+    };
+
+    const fakeKnowledge = {
+      subject: {
+        full_name:
+          "Тестова Особа",
+      },
+
+      facts: [],
+    };
+
+    const fakeContext = {
+      retrieval_version:
+        "subject-retrieval-v1",
+
+      detected_years:
+        [2025],
+
+      counts: {
+        facts: 1,
+        relations: 0,
+        mentions: 0,
+        cross_checks: 0,
+        source_documents: 0,
+      },
+
+      subject:
+        fakeKnowledge.subject,
+
+      facts: [
+        {
+          fact_type:
+            "cash_asset",
+
+          metadata: {
+            declaration_year:
+              2025,
+          },
+
+          value_number:
+            1000,
+
+          unit:
+            "USD",
+
+          value_json: {
+            amount:
+              1000,
+
+            currency:
+              "USD",
+
+            rights: [
+              {
+                actor: {
+                  role:
+                    "declarant",
+                },
+
+                ownership_type:
+                  "Власність",
+              },
+            ],
+          },
+        },
+      ],
+
+      relations: [],
+      mentions: [],
+      cross_checks: [],
+      source_documents: [],
+
+      analytics: {
+        yearly: [],
+        transitions: [],
+      },
+    };
+
+    const result =
+      await createSubjectChatResponse({
+        subjectId:
+          "subject-1",
+
+        message:
+          "Проаналізуй грошові активи декларанта у 2025 році та оціни ризики",
+
+        client:
+          fakeClient,
+
+        model:
+          "test-model",
+
+        subjectLoader:
+          async () => {
+            subjectCalls += 1;
+
+            throw new Error(
+              "SUBJECT_PREFLIGHT_SHOULD_NOT_RUN"
+            );
+          },
+
+        cashContextLoader:
+          async () => {
+            cashCalls += 1;
+
+            throw new Error(
+              "CASH_PREFLIGHT_SHOULD_NOT_RUN"
+            );
+          },
+
+        knowledgeLoader:
+          async () => {
+            knowledgeCalls += 1;
+
+            return fakeKnowledge;
+          },
+
+        retriever:
+          () => {
+            retrieverCalls += 1;
+
+            return fakeContext;
+          },
+      });
+
+    assert.equal(
+      result.answer,
+      "Аналітична відповідь",
+    );
+
+    assert.equal(
+      result.model,
+      "test-model",
+    );
+
+    assert.equal(
+      result.retrieval.version,
+      "subject-retrieval-v1",
+    );
+
+    assert.equal(
+      subjectCalls,
+      0,
+    );
+
+    assert.equal(
+      cashCalls,
+      0,
+    );
+
+    assert.equal(
+      knowledgeCalls,
+      1,
+    );
+
+    assert.equal(
+      retrieverCalls,
+      1,
+    );
+
+    assert.equal(
+      modelCalls,
+      1,
+    );
+  },
+);
+
+test(
   "uses vehicle preflight without loading full subject knowledge",
   async () => {
     let knowledgeCalls = 0;

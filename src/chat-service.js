@@ -1,4 +1,5 @@
 import {
+  loadDeterministicCashContext,
   loadDeterministicEmploymentContext,
   loadDeterministicFamilyContext,
   loadDeterministicIncomeContext,
@@ -4945,6 +4946,8 @@ export async function createSubjectChatResponse({
     loadSubjectKnowledge,
   subjectLoader =
     getSubject,
+  cashContextLoader =
+    loadDeterministicCashContext,
   employmentContextLoader =
     loadDeterministicEmploymentContext,
   familyContextLoader =
@@ -4973,6 +4976,107 @@ export async function createSubjectChatResponse({
       message,
       history
     );
+
+  /*
+   * Fast-path для factual cash-asset
+   * запиту за одним конкретним роком.
+   *
+   * Завантажуємо лише cash_asset facts
+   * канонічної декларації року.
+   */
+  if (
+    isCashAssetListQuestion(
+      contextualQuestion
+    )
+  ) {
+    const cashYears =
+      [
+        ...new Set(
+          String(
+            contextualQuestion ??
+            ""
+          ).match(
+            /\b(?:19|20)\d{2}\b/g
+          ) ?? []
+        ),
+      ]
+        .map(Number)
+        .filter(
+          Number.isInteger
+        );
+
+    if (
+      cashYears.length === 1
+    ) {
+      const subject =
+        await subjectLoader(
+          subjectId
+        );
+
+      if (!subject) {
+        throw new Error(
+          "SUBJECT_NOT_FOUND",
+        );
+      }
+
+      const entityId =
+        subject.entity_id ??
+        subject.id;
+
+      const fastContext =
+        await cashContextLoader(
+          entityId,
+          cashYears[0]
+        );
+
+      if (fastContext) {
+        const fastAnswer =
+          buildDeterministicCashAssetAnswer(
+            contextualQuestion,
+            fastContext,
+            fastContext.facts
+          );
+
+        if (fastAnswer) {
+          return {
+            answer:
+              fastAnswer,
+
+            model:
+              "person-monitor-facts",
+
+            retrieval: {
+              version:
+                "deterministic-cash-assets-v1",
+
+              detected_years:
+                fastContext
+                  .detected_years ??
+                cashYears,
+
+              counts: {
+                facts:
+                  fastContext
+                    .facts
+                    ?.length ??
+                  0,
+
+                source_documents:
+                  fastContext
+                    .source_documents
+                    ?.length ??
+                  0,
+
+                mentions: 0,
+                relations: 0,
+                cross_checks: 0,
+              },
+            },
+          };
+        }
+      }
+    }
+  }
 
   /*
    * Fast-path для factual vehicle-list
