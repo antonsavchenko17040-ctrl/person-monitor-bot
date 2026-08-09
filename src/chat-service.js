@@ -2908,6 +2908,293 @@ export function buildDeterministicCashAssetAnswer(
   return answer;
 }
 
+function isDeclarationSubmissionQuestion(
+  question
+) {
+  const q =
+    String(question ?? "")
+      .toLowerCase();
+
+  const hasDomain =
+    /деклараці|декларуван|подан[а-яіїєґ’']*\s+документ/.test(
+      q
+    );
+
+  const hasListIntent =
+    /які|яка|який|перелік|список|покажи|скільки|подавав|подала|подані|подано|було|були/.test(
+      q
+    );
+
+  const hasAnalyticalIntent =
+    /аналіз|проаналіз|порівн|динамік|ризик|аномал|чому|що\s+означ|виснов|оцін/.test(
+      q
+    );
+
+  return Boolean(
+    hasDomain &&
+    hasListIntent &&
+    !hasAnalyticalIntent
+  );
+}
+
+export function buildDeterministicDeclarationSubmissionAnswer(
+  question,
+  context,
+  allFacts = null
+) {
+  if (
+    !isDeclarationSubmissionQuestion(
+      question
+    )
+  ) {
+    return null;
+  }
+
+  const years =
+    (
+      context
+        ?.detected_years ??
+      []
+    )
+      .map(Number)
+      .filter(
+        Number.isInteger
+      );
+
+  /*
+   * Поки працюємо лише
+   * з одним конкретним роком.
+   */
+  if (years.length !== 1) {
+    return null;
+  }
+
+  const year =
+    years[0];
+
+  const yearlyAnalytics =
+    (
+      context
+        ?.analytics
+        ?.yearly ??
+      []
+    ).find(
+      (item) =>
+        Number(item?.year) ===
+        year
+    );
+
+  const canonicalSourceId =
+    yearlyAnalytics
+      ?.sourceDocumentId ??
+    null;
+
+  const facts =
+    Array.isArray(allFacts)
+      ? allFacts
+      : (
+          context?.facts ??
+          []
+        );
+
+  const seen =
+    new Set();
+
+  const rows = [];
+
+  for (const fact of facts) {
+    if (
+      fact?.fact_type !==
+      "declaration_submission"
+    ) {
+      continue;
+    }
+
+    const value =
+      fact.value_json ??
+      {};
+
+    const declarationYear =
+      Number(
+        value.declaration_year
+      );
+
+    if (
+      declarationYear !==
+      year
+    ) {
+      continue;
+    }
+
+    const documentGuid =
+      String(
+        value.document_guid ??
+        ""
+      ).trim();
+
+    const url =
+      String(
+        value.url ??
+        ""
+      ).trim();
+
+    const publishedAt =
+      String(
+        value.published_at ??
+        ""
+      ).trim();
+
+    const registry =
+      String(
+        value.registry ??
+        ""
+      ).trim();
+
+    if (
+      !documentGuid &&
+      !url
+    ) {
+      continue;
+    }
+
+    const key =
+      documentGuid ||
+      url;
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+
+    rows.push({
+      documentGuid,
+      url,
+      publishedAt,
+      registry,
+
+      canonical:
+        Boolean(
+          canonicalSourceId &&
+          String(
+            fact.source_document_id ??
+            ""
+          ) ===
+            String(
+              canonicalSourceId
+            )
+        ),
+    });
+  }
+
+  if (!rows.length) {
+    return null;
+  }
+
+  rows.sort(
+    (a, b) =>
+      String(
+        b.publishedAt
+      ).localeCompare(
+        String(
+          a.publishedAt
+        )
+      )
+  );
+
+  const count =
+    rows.length;
+
+  let answer =
+    `Декларації за ${year} рік: **${count}**.\n\n`;
+
+  answer +=
+    rows
+      .map(
+        (row, index) => {
+          const lines = [
+            `${index + 1}. **${row.documentGuid || "GUID не зазначено"}**`,
+          ];
+
+          if (row.publishedAt) {
+            const date =
+              new Date(
+                row.publishedAt
+              );
+
+            const formatted =
+              Number.isNaN(
+                date.getTime()
+              )
+                ? row.publishedAt
+                : date
+                    .toLocaleString(
+                      "uk-UA",
+                      {
+                        timeZone:
+                          "Europe/Kyiv",
+
+                        year:
+                          "numeric",
+
+                        month:
+                          "2-digit",
+
+                        day:
+                          "2-digit",
+
+                        hour:
+                          "2-digit",
+
+                        minute:
+                          "2-digit",
+                      }
+                    )
+                    .replace(
+                      /[,\u00a0\u202f]/g,
+                      " "
+                    )
+                    .replace(
+                      /\s+/g,
+                      " "
+                    )
+                    .trim();
+
+            lines.push(
+              `   - Подано/опубліковано: ${formatted}`
+            );
+          }
+
+          if (row.registry) {
+            lines.push(
+              `   - Реєстр: ${row.registry}`
+            );
+          }
+
+          if (row.canonical) {
+            lines.push(
+              `   - **Основне джерело Person Monitor для аналітики цього року**`
+            );
+          }
+
+          if (row.url) {
+            lines.push(
+              `   - [Відкрити декларацію НАЗК](${row.url})`
+            );
+          }
+
+          return lines.join(
+            "\n"
+          );
+        }
+      )
+      .join(
+        "\n\n"
+      );
+
+  return answer;
+}
+
 function isEmploymentListQuestion(
   question
 ) {
@@ -4583,6 +4870,13 @@ export async function createSubjectChatResponse({
       knowledge?.facts
     );
 
+  const deterministicDeclarationSubmissionAnswer =
+    buildDeterministicDeclarationSubmissionAnswer(
+      contextualQuestion,
+      context,
+      knowledge?.facts
+    );
+
   const deterministicOrganizationRelationsAnswer =
     buildDeterministicOrganizationRelationsAnswer(
       contextualQuestion,
@@ -4597,6 +4891,7 @@ export async function createSubjectChatResponse({
     deterministicCashAssetAnswer ??
     deterministicFamilyMemberAnswer ??
     deterministicEmploymentAnswer ??
+    deterministicDeclarationSubmissionAnswer ??
     deterministicOrganizationRelationsAnswer;
 
   if (deterministicAnswer) {

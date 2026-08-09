@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   buildDeterministicAnalyticsAnswer,
   buildDeterministicCashAssetAnswer,
+  buildDeterministicDeclarationSubmissionAnswer,
   buildDeterministicEmploymentAnswer,
   buildDeterministicFamilyMemberAnswer,
   buildDeterministicIncomeDetailAnswer,
@@ -786,6 +787,348 @@ test(
         "Покажи повний документ декларації за 2025 рік"
       ),
       true,
+    );
+  },
+);
+
+test(
+  "builds deterministic declaration submission list for one year",
+  () => {
+    const answer =
+      buildDeterministicDeclarationSubmissionAnswer(
+        "Які декларації були подані у 2025 році?",
+        {
+          detected_years:
+            [2025],
+
+          analytics: {
+            yearly: [
+              {
+                year:
+                  2025,
+
+                sourceDocumentId:
+                  "doc-canonical",
+              },
+            ],
+          },
+        },
+
+        [
+          {
+            fact_type:
+              "declaration_submission",
+
+            source_document_id:
+              "doc-old",
+
+            value_json: {
+              declaration_year:
+                2025,
+
+              document_guid:
+                "guid-old",
+
+              url:
+                "https://example.test/guid-old",
+
+              registry:
+                "Тестовий реєстр",
+
+              published_at:
+                "2025-10-03T18:11:33.000Z",
+            },
+          },
+
+          {
+            fact_type:
+              "declaration_submission",
+
+            source_document_id:
+              "doc-canonical",
+
+            value_json: {
+              declaration_year:
+                2025,
+
+              document_guid:
+                "guid-canonical",
+
+              url:
+                "https://example.test/guid-canonical",
+
+              registry:
+                "Тестовий реєстр",
+
+              published_at:
+                "2026-03-30T17:07:13.000Z",
+            },
+          },
+
+          {
+            fact_type:
+              "declaration_submission",
+
+            source_document_id:
+              "doc-middle",
+
+            value_json: {
+              declaration_year:
+                2025,
+
+              document_guid:
+                "guid-middle",
+
+              url:
+                "https://example.test/guid-middle",
+
+              registry:
+                "Тестовий реєстр",
+
+              published_at:
+                "2025-10-03T18:13:35.000Z",
+            },
+          },
+
+          /*
+           * Інший рік не повинен
+           * потрапити у відповідь.
+           */
+          {
+            fact_type:
+              "declaration_submission",
+
+            source_document_id:
+              "doc-2024",
+
+            value_json: {
+              declaration_year:
+                2024,
+
+              document_guid:
+                "guid-2024",
+
+              url:
+                "https://example.test/guid-2024",
+            },
+          },
+        ]
+      );
+
+    assert.match(
+      answer,
+      /Декларації за 2025 рік: \*\*3\*\*/,
+    );
+
+    assert.match(
+      answer,
+      /guid-canonical/,
+    );
+
+    assert.match(
+      answer,
+      /guid-middle/,
+    );
+
+    assert.match(
+      answer,
+      /guid-old/,
+    );
+
+    assert.doesNotMatch(
+      answer,
+      /guid-2024/,
+    );
+
+    const canonicalIndex =
+      answer.indexOf(
+        "guid-canonical"
+      );
+
+    const middleIndex =
+      answer.indexOf(
+        "guid-middle"
+      );
+
+    const oldIndex =
+      answer.indexOf(
+        "guid-old"
+      );
+
+    assert.ok(
+      canonicalIndex <
+      middleIndex
+    );
+
+    assert.ok(
+      middleIndex <
+      oldIndex
+    );
+
+    const canonicalMarks =
+      answer.match(
+        /Основне джерело Person Monitor для аналітики цього року/g
+      ) ?? [];
+
+    assert.equal(
+      canonicalMarks.length,
+      1,
+    );
+
+    assert.match(
+      answer,
+      /https:\/\/example\.test\/guid-canonical/,
+    );
+  },
+);
+
+test(
+  "deduplicates declaration submissions by document GUID",
+  () => {
+    const answer =
+      buildDeterministicDeclarationSubmissionAnswer(
+        "Скільки декларацій було подано у 2025 році?",
+        {
+          detected_years:
+            [2025],
+
+          analytics: {
+            yearly: [
+              {
+                year:
+                  2025,
+
+                sourceDocumentId:
+                  "doc-one",
+              },
+            ],
+          },
+        },
+
+        [
+          {
+            fact_type:
+              "declaration_submission",
+
+            source_document_id:
+              "doc-one",
+
+            value_json: {
+              declaration_year:
+                2025,
+
+              document_guid:
+                "same-guid",
+
+              url:
+                "https://example.test/same-guid",
+
+              published_at:
+                "2026-03-30T17:07:13.000Z",
+            },
+          },
+
+          {
+            fact_type:
+              "declaration_submission",
+
+            source_document_id:
+              "doc-copy",
+
+            value_json: {
+              declaration_year:
+                2025,
+
+              document_guid:
+                "same-guid",
+
+              url:
+                "https://example.test/same-guid-copy",
+
+              published_at:
+                "2026-03-30T17:07:13.000Z",
+            },
+          },
+        ]
+      );
+
+    assert.match(
+      answer,
+      /Декларації за 2025 рік: \*\*1\*\*/,
+    );
+
+    const matches =
+      answer.match(
+        /same-guid/g
+      ) ?? [];
+
+    /*
+     * GUID є один раз у заголовку
+     * одного запису; URL теж може
+     * містити цей текст, тому
+     * перевіряємо кількість рядків.
+     */
+    const numberedRows =
+      answer
+        .split("\n")
+        .filter(
+          (line) =>
+            /^\d+\.\s/.test(
+              line.trim()
+            )
+        );
+
+    assert.equal(
+      numberedRows.length,
+      1,
+    );
+
+    assert.ok(
+      matches.length >= 1
+    );
+  },
+);
+
+test(
+  "keeps analytical declaration question on AI path",
+  () => {
+    const answer =
+      buildDeterministicDeclarationSubmissionAnswer(
+        "Проаналізуй декларації за 2024 та 2025 роки і поясни зміни",
+        {
+          detected_years:
+            [2024, 2025],
+
+          analytics: {
+            yearly: [],
+          },
+        },
+
+        [
+          {
+            fact_type:
+              "declaration_submission",
+
+            source_document_id:
+              "doc-2025",
+
+            value_json: {
+              declaration_year:
+                2025,
+
+              document_guid:
+                "guid-2025",
+
+              url:
+                "https://example.test/guid-2025",
+            },
+          },
+        ]
+      );
+
+    assert.equal(
+      answer,
+      null,
     );
   },
 );
