@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   createChatApiHandler,
+  resolveChatProviderConfig,
 } from "../src/chat-api.js";
 
 function createResponse() {
@@ -40,6 +41,48 @@ function createResponse() {
 }
 
 test(
+  "resolves local Ollama provider",
+  () => {
+    const config =
+      resolveChatProviderConfig({
+        CHAT_PROVIDER:
+          "ollama",
+      });
+
+    assert.equal(
+      config.provider,
+      "ollama",
+    );
+
+    assert.equal(
+      config.baseURL,
+      "http://127.0.0.1:11434/v1",
+    );
+
+    assert.equal(
+      config.model,
+      "qwen3:4b-instruct",
+    );
+  },
+);
+
+test(
+  "OpenAI provider requires API key",
+  () => {
+    const config =
+      resolveChatProviderConfig({
+        CHAT_PROVIDER:
+          "openai",
+      });
+
+    assert.equal(
+      config,
+      null,
+    );
+  },
+);
+
+test(
   "rejects non-POST requests",
   async () => {
     const handler =
@@ -70,8 +113,8 @@ test(
     const handler =
       createChatApiHandler({
         env: {
-          OPENAI_API_KEY:
-            "test-key",
+          CHAT_PROVIDER:
+            "ollama",
         },
       });
 
@@ -99,7 +142,7 @@ test(
 );
 
 test(
-  "requires API key when enabled",
+  "requires configured provider when enabled",
   async () => {
     const handler =
       createChatApiHandler({
@@ -141,8 +184,8 @@ test(
           CHAT_API_ENABLED:
             "true",
 
-          OPENAI_API_KEY:
-            "test-key",
+          CHAT_PROVIDER:
+            "ollama",
         },
       });
 
@@ -179,7 +222,7 @@ test(
 test(
   "returns chat response through injected service",
   async () => {
-    let receivedApiKey =
+    let receivedConfig =
       null;
 
     let receivedRequest =
@@ -195,18 +238,21 @@ test(
           CHAT_API_ENABLED:
             "true",
 
-          OPENAI_API_KEY:
-            "SECRET_TEST_KEY",
+          CHAT_PROVIDER:
+            "ollama",
 
-          OPENAI_CHAT_MODEL:
+          OLLAMA_BASE_URL:
+            "http://127.0.0.1:11434/v1",
+
+          OLLAMA_CHAT_MODEL:
             "test-model",
         },
 
         clientFactory(
-          apiKey,
+          config,
         ) {
-          receivedApiKey =
-            apiKey;
+          receivedConfig =
+            config;
 
           return fakeClient;
         },
@@ -281,8 +327,18 @@ test(
     );
 
     assert.equal(
-      receivedApiKey,
-      "SECRET_TEST_KEY",
+      receivedConfig.provider,
+      "ollama",
+    );
+
+    assert.equal(
+      receivedConfig.apiKey,
+      "ollama",
+    );
+
+    assert.equal(
+      receivedConfig.baseURL,
+      "http://127.0.0.1:11434/v1",
     );
 
     assert.equal(
@@ -299,7 +355,7 @@ test(
       JSON.stringify(
         response.state.body,
       ).includes(
-        "SECRET_TEST_KEY",
+        "ollama",
       ),
       false,
     );

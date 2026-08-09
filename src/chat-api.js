@@ -44,6 +44,71 @@ function parseRequestBody(
   );
 }
 
+export function resolveChatProviderConfig(
+  env = process.env,
+) {
+  const provider =
+    String(
+      env.CHAT_PROVIDER ??
+      "",
+    )
+      .trim()
+      .toLowerCase();
+
+  if (provider === "ollama") {
+    return {
+      provider:
+        "ollama",
+
+      apiKey:
+        "ollama",
+
+      baseURL:
+        String(
+          env.OLLAMA_BASE_URL ??
+          "http://127.0.0.1:11434/v1",
+        ).trim(),
+
+      model:
+        String(
+          env.OLLAMA_CHAT_MODEL ??
+          "qwen3:4b-instruct",
+        ).trim(),
+    };
+  }
+
+  if (provider === "openai") {
+    const apiKey =
+      String(
+        env.OPENAI_API_KEY ??
+        "",
+      ).trim();
+
+    if (!apiKey) {
+      return null;
+    }
+
+    return {
+      provider:
+        "openai",
+
+      apiKey,
+
+      baseURL:
+        null,
+
+      model:
+        String(
+          env.OPENAI_CHAT_MODEL ??
+          "",
+        ).trim() ||
+        undefined,
+    };
+  }
+
+  return null;
+}
+
 function sendJson(
   response,
   status,
@@ -58,9 +123,19 @@ export function createChatApiHandler({
   env = process.env,
 
   clientFactory =
-    (apiKey) =>
+    (config) =>
       new OpenAI({
-        apiKey,
+        apiKey:
+          config.apiKey,
+
+        ...(
+          config.baseURL
+            ? {
+                baseURL:
+                  config.baseURL,
+              }
+            : {}
+        ),
       }),
 
   chatResponder =
@@ -107,13 +182,12 @@ export function createChatApiHandler({
       );
     }
 
-    const apiKey =
-      String(
-        env.OPENAI_API_KEY ??
-        "",
-      ).trim();
+    const providerConfig =
+      resolveChatProviderConfig(
+        env,
+      );
 
-    if (!apiKey) {
+    if (!providerConfig) {
       return sendJson(
         response,
         503,
@@ -233,7 +307,7 @@ export function createChatApiHandler({
     try {
       const client =
         clientFactory(
-          apiKey,
+          providerConfig,
         );
 
       const result =
@@ -244,8 +318,7 @@ export function createChatApiHandler({
           client,
 
           model:
-            env.OPENAI_CHAT_MODEL ||
-            undefined,
+            providerConfig.model,
         });
 
       return sendJson(
