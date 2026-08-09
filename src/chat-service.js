@@ -1,5 +1,6 @@
 import {
   loadDeterministicEmploymentContext,
+  loadDeterministicOrganizationRelationsContext,
   loadSubjectKnowledge,
 } from "./chat-context.js";
 
@@ -3801,7 +3802,7 @@ function isOrganizationRelationListQuestion(
     );
 
   const hasListIntent =
-    /які|перелік|список|назви|назвати|покажи|має|мав|мала/.test(
+    /які|якими|перелік|список|назви|назвати|покажи|має|мав|мала/.test(
       q
     );
 
@@ -4929,6 +4930,8 @@ export async function createSubjectChatResponse({
     getSubject,
   employmentContextLoader =
     loadDeterministicEmploymentContext,
+  organizationRelationsContextLoader =
+    loadDeterministicOrganizationRelationsContext,
   retriever =
     retrieveSubjectContext,
 }) {
@@ -5039,6 +5042,108 @@ export async function createSubjectChatResponse({
 
                 mentions: 0,
                 relations: 0,
+                cross_checks: 0,
+              },
+            },
+          };
+        }
+      }
+    }
+  }
+
+  /*
+   * Fast-path для factual-запиту
+   * про зв'язки з організаціями
+   * за одним конкретним роком.
+   *
+   * Не завантажуємо весь subject
+   * knowledge і не запускаємо AI.
+   */
+  if (
+    isOrganizationRelationListQuestion(
+      contextualQuestion
+    )
+  ) {
+    const organizationYears =
+      [
+        ...new Set(
+          String(
+            contextualQuestion ??
+            ""
+          ).match(
+            /\b(?:19|20)\d{2}\b/g
+          ) ?? []
+        ),
+      ]
+        .map(Number)
+        .filter(
+          Number.isInteger
+        );
+
+    if (
+      organizationYears.length === 1
+    ) {
+      const subject =
+        await subjectLoader(
+          subjectId
+        );
+
+      if (!subject) {
+        throw new Error(
+          "SUBJECT_NOT_FOUND",
+        );
+      }
+
+      const entityId =
+        subject.entity_id ??
+        subject.id;
+
+      const fastContext =
+        await organizationRelationsContextLoader(
+          entityId,
+          organizationYears[0]
+        );
+
+      if (fastContext) {
+        const fastAnswer =
+          buildDeterministicOrganizationRelationsAnswer(
+            contextualQuestion,
+            fastContext
+          );
+
+        if (fastAnswer) {
+          return {
+            answer:
+              fastAnswer,
+
+            model:
+              "person-monitor-facts",
+
+            retrieval: {
+              version:
+                "deterministic-organization-relations-v1",
+
+              detected_years:
+                fastContext
+                  .detected_years ??
+                organizationYears,
+
+              counts: {
+                facts: 0,
+
+                relations:
+                  fastContext
+                    .relations
+                    ?.length ??
+                  0,
+
+                source_documents:
+                  fastContext
+                    .source_documents
+                    ?.length ??
+                  0,
+
+                mentions: 0,
                 cross_checks: 0,
               },
             },

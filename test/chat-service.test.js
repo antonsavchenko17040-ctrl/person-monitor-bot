@@ -3096,6 +3096,62 @@ test(
 );
 
 test(
+  "recognizes instrumental organization relation wording",
+  () => {
+    const answer =
+      buildDeterministicOrganizationRelationsAnswer(
+        "З якими організаціями був пов’язаний декларант у 2025 році?",
+        {
+          detected_years:
+            [2025],
+
+          relations: [
+            {
+              relation_type:
+                "third_party_rightsholder",
+
+              relation_scope:
+                "second_hop",
+
+              from_entity_type:
+                "asset",
+
+              from_name:
+                "Квартира · 100 м²",
+
+              to_entity_type:
+                "organization",
+
+              to_name:
+                "Тестова Організація",
+            },
+          ],
+
+          source_documents: [],
+
+          analytics: {
+            yearly: [],
+          },
+        }
+      );
+
+    assert.ok(
+      answer
+    );
+
+    assert.match(
+      answer,
+      /Тестова Організація/,
+    );
+
+    assert.match(
+      answer,
+      /Зв’язки декларанта з організаціями за 2025 рік/,
+    );
+  },
+);
+
+test(
   "keeps analytical relation question on AI path",
   () => {
     const answer =
@@ -4495,6 +4551,394 @@ test(
 
     assert.equal(
       subjectCalls,
+      0,
+    );
+
+    assert.equal(
+      knowledgeCalls,
+      1,
+    );
+
+    assert.equal(
+      retrieverCalls,
+      1,
+    );
+
+    assert.equal(
+      modelCalls,
+      1,
+    );
+  },
+);
+
+test(
+  "uses organization relations preflight without loading full subject knowledge",
+  async () => {
+    let knowledgeCalls = 0;
+    let subjectCalls = 0;
+    let organizationCalls = 0;
+    let retrieverCalls = 0;
+    let modelCalls = 0;
+
+    const fakeClient = {
+      responses: {
+        async create() {
+          modelCalls += 1;
+
+          throw new Error(
+            "MODEL_SHOULD_NOT_BE_CALLED"
+          );
+        },
+      },
+    };
+
+    const result =
+      await createSubjectChatResponse({
+        subjectId:
+          "subject-1",
+
+        message:
+          "З якими організаціями був пов’язаний декларант у 2025 році?",
+
+        client:
+          fakeClient,
+
+        model:
+          "test-model",
+
+        subjectLoader:
+          async (subjectId) => {
+            subjectCalls += 1;
+
+            assert.equal(
+              subjectId,
+              "subject-1",
+            );
+
+            return {
+              id:
+                "subject-1",
+
+              entity_id:
+                "entity-1",
+
+              full_name:
+                "Тестова Особа",
+            };
+          },
+
+        organizationRelationsContextLoader:
+          async (
+            entityId,
+            year
+          ) => {
+            organizationCalls += 1;
+
+            assert.equal(
+              entityId,
+              "entity-1",
+            );
+
+            assert.equal(
+              year,
+              2025,
+            );
+
+            return {
+              detected_years:
+                [2025],
+
+              relations: [
+                {
+                  relation_type:
+                    "third_party_rightsholder",
+
+                  relation_scope:
+                    "second_hop",
+
+                  from_entity_type:
+                    "asset",
+
+                  from_name:
+                    "Квартира · 100 м²",
+
+                  to_entity_type:
+                    "organization",
+
+                  to_name:
+                    "Тестова Організація",
+                },
+              ],
+
+              analytics: {
+                yearly: [
+                  {
+                    year:
+                      2025,
+
+                    sourceDocumentId:
+                      "doc-2025",
+                  },
+                ],
+              },
+
+              source_documents: [
+                {
+                  id:
+                    "doc-2025",
+
+                  url:
+                    "https://example.test/declaration-2025",
+                },
+              ],
+            };
+          },
+
+        knowledgeLoader:
+          async () => {
+            knowledgeCalls += 1;
+
+            throw new Error(
+              "FULL_KNOWLEDGE_SHOULD_NOT_LOAD"
+            );
+          },
+
+        retriever:
+          () => {
+            retrieverCalls += 1;
+
+            throw new Error(
+              "RETRIEVER_SHOULD_NOT_RUN"
+            );
+          },
+      });
+
+    assert.equal(
+      result.model,
+      "person-monitor-facts",
+    );
+
+    assert.equal(
+      result.retrieval.version,
+      "deterministic-organization-relations-v1",
+    );
+
+    assert.deepEqual(
+      result.retrieval
+        .detected_years,
+      [2025],
+    );
+
+    assert.equal(
+      result.retrieval
+        .counts.facts,
+      0,
+    );
+
+    assert.equal(
+      result.retrieval
+        .counts.relations,
+      1,
+    );
+
+    assert.equal(
+      result.retrieval
+        .counts.source_documents,
+      1,
+    );
+
+    assert.match(
+      result.answer,
+      /Тестова Організація/,
+    );
+
+    assert.match(
+      result.answer,
+      /Квартира · 100 м²/,
+    );
+
+    assert.match(
+      result.answer,
+      /declaration-2025/,
+    );
+
+    assert.equal(
+      subjectCalls,
+      1,
+    );
+
+    assert.equal(
+      organizationCalls,
+      1,
+    );
+
+    assert.equal(
+      knowledgeCalls,
+      0,
+    );
+
+    assert.equal(
+      retrieverCalls,
+      0,
+    );
+
+    assert.equal(
+      modelCalls,
+      0,
+    );
+  },
+);
+
+test(
+  "falls back to full knowledge pipeline for analytical organization relation question",
+  async () => {
+    let knowledgeCalls = 0;
+    let subjectCalls = 0;
+    let organizationCalls = 0;
+    let retrieverCalls = 0;
+    let modelCalls = 0;
+
+    const fakeClient = {
+      responses: {
+        async create() {
+          modelCalls += 1;
+
+          return {
+            output_text:
+              "Аналітична відповідь",
+          };
+        },
+      },
+    };
+
+    const fakeKnowledge = {
+      subject: {
+        full_name:
+          "Тестова Особа",
+      },
+    };
+
+    const fakeContext = {
+      retrieval_version:
+        "subject-retrieval-v1",
+
+      detected_years:
+        [2025],
+
+      counts: {
+        facts: 0,
+        relations: 1,
+        mentions: 0,
+        cross_checks: 0,
+        source_documents: 0,
+      },
+
+      subject:
+        fakeKnowledge.subject,
+
+      facts: [],
+
+      relations: [
+        {
+          relation_type:
+            "third_party_rightsholder",
+
+          relation_scope:
+            "second_hop",
+
+          from_entity_type:
+            "asset",
+
+          from_name:
+            "Квартира · 100 м²",
+
+          to_entity_type:
+            "organization",
+
+          to_name:
+            "Тестова Організація",
+        },
+      ],
+
+      mentions: [],
+      cross_checks: [],
+      source_documents: [],
+
+      analytics: {
+        yearly: [],
+        transitions: [],
+      },
+    };
+
+    const result =
+      await createSubjectChatResponse({
+        subjectId:
+          "subject-1",
+
+        message:
+          "Проаналізуй зв’язки декларанта з організаціями у 2025 році та оціни ризики",
+
+        client:
+          fakeClient,
+
+        model:
+          "test-model",
+
+        subjectLoader:
+          async () => {
+            subjectCalls += 1;
+
+            throw new Error(
+              "SUBJECT_PREFLIGHT_SHOULD_NOT_RUN"
+            );
+          },
+
+        organizationRelationsContextLoader:
+          async () => {
+            organizationCalls += 1;
+
+            throw new Error(
+              "ORGANIZATION_PREFLIGHT_SHOULD_NOT_RUN"
+            );
+          },
+
+        knowledgeLoader:
+          async () => {
+            knowledgeCalls += 1;
+
+            return fakeKnowledge;
+          },
+
+        retriever:
+          () => {
+            retrieverCalls += 1;
+
+            return fakeContext;
+          },
+      });
+
+    assert.equal(
+      result.answer,
+      "Аналітична відповідь",
+    );
+
+    assert.equal(
+      result.model,
+      "test-model",
+    );
+
+    assert.equal(
+      result.retrieval.version,
+      "subject-retrieval-v1",
+    );
+
+    assert.equal(
+      subjectCalls,
+      0,
+    );
+
+    assert.equal(
+      organizationCalls,
       0,
     );
 
