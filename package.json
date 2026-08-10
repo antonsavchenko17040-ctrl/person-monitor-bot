@@ -40,7 +40,8 @@
     "familygraph:build": "node --env-file=.env scripts/build-family-third-party-graph.js",
     "subjectgraph:verify": "node --env-file=.env scripts/verify-subject-graph.js",
     "db:migrate:edr": "node --env-file=.env scripts/migrate-edr-schema.js",
-    "db:verify:edr": "node --env-file=.env scripts/migrate-edr-schema.js --verify-only"
+    "db:verify:edr": "node --env-file=.env scripts/migrate-edr-schema.js --verify-only",
+    "edr:integration": "node --env-file=.env scripts/verify-edr-neon-integration.js"
   },
   "engines": {
     "node": ">=22"
