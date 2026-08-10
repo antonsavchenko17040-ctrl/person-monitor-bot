@@ -36,7 +36,12 @@ import {
 
 import {
   getSubject,
+  listMentions,
 } from "./store.js";
+
+import {
+  loadReportSourceDocuments,
+} from "./source-documents-context.js";
 
 export const REPORT_MODEL_SCHEMA_VERSION =
   "report-model-v1";
@@ -2294,6 +2299,8 @@ function isReportPersonType(value) {
 export function buildThirdPartyPeopleSection({
   relations = null,
   analytics = null,
+  mentions = null,
+  sources = null,
 } = {}) {
   const items = [];
 
@@ -3135,6 +3142,48 @@ export function buildReportAnalyticsSection({
 }
 
 
+export function buildMentionsSection({ rows = [] } = {}) {
+  const items = (Array.isArray(rows) ? rows : []).map((row) => ({
+    source_document_id: row.source_document_id ?? null,
+    provider: row.provider ?? null,
+    source: row.source ?? null,
+    title: row.title ?? null,
+    snippet: row.snippet ?? null,
+    url: row.url ?? null,
+    published_at: row.published_at ?? null,
+    first_seen_at: row.first_seen_at ?? null,
+    match_score: row.match_score == null ? null : Number(row.match_score),
+    match_level: row.match_level ?? null,
+    reasons: Array.isArray(row.reasons) ? row.reasons : [],
+  }));
+
+  return { total: items.length, items };
+}
+
+export function buildSourcesSection({ rows = [] } = {}) {
+  const seen = new Set();
+  const items = [];
+
+  for (const row of (Array.isArray(rows) ? rows : [])) {
+    const id = row?.id ?? null;
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+
+    items.push({
+      source_document_id: id,
+      source_type: row.source_type ?? null,
+      provider: row.source_name ?? null,
+      external_id: row.external_id ?? null,
+      title: row.title ?? null,
+      url: row.url ?? null,
+      published_at: row.published_at ?? null,
+      observed_at: row.fetched_at ?? null,
+    });
+  }
+
+  return { items };
+}
+
 export function buildSubjectReportModelPayload({
   subject,
   generatedAt = new Date(),
@@ -3147,6 +3196,8 @@ export function buildSubjectReportModelPayload({
   relatedPeople = null,
   relations = null,
   analytics = null,
+  mentions = null,
+  sources = null,
 } = {}) {
   if (!subject) {
     return null;
@@ -3347,12 +3398,12 @@ export function buildSubjectReportModelPayload({
       analyticsSection,
 
     mentions: {
-      total: null,
-      items: [],
+      total: mentions?.total ?? null,
+      items: Array.isArray(mentions?.items) ? mentions.items : [],
     },
 
     sources: {
-      items: [],
+      items: Array.isArray(sources?.items) ? sources.items : [],
     },
 
     methodology: {
@@ -3673,6 +3724,37 @@ export async function buildSubjectReportModel(
     ),
   };
 
+  const mentionsLoader =
+    options.mentionsLoader ??
+    listMentions;
+
+  const sourceDocumentsLoader =
+    options.sourceDocumentsLoader ??
+    loadReportSourceDocuments;
+
+  const mentionRows =
+    await mentionsLoader(
+      subject.id,
+      options.mentionsLimit ?? 10000,
+    );
+
+  const sourceDocumentRows =
+    await sourceDocumentsLoader(
+      subject.id,
+      subject.entity_id,
+      options.sourceDocumentsOptions ?? {},
+    );
+
+  const mentions =
+    buildMentionsSection({
+      rows: mentionRows,
+    });
+
+  const sources =
+    buildSourcesSection({
+      rows: sourceDocumentRows,
+    });
+
   const reportAnalytics =
     buildReportAnalyticsSection({
       availableYears,
@@ -3705,5 +3787,8 @@ export async function buildSubjectReportModel(
 
     analytics:
       reportAnalytics,
+
+    mentions,
+    sources,
   });
 }
