@@ -12,11 +12,15 @@ export function defineSourceAdapter({
   id,
   name,
   source_type,
+  source_name,
+  provider,
   collect,
 } = {}) {
   const adapterId = requiredText(id, "id");
   const adapterName = requiredText(name, "name");
   const sourceType = requiredText(source_type, "source_type");
+  const sourceName = requiredText(source_name, "source_name");
+  const providerName = requiredText(provider, "provider");
 
   if (typeof collect !== "function") {
     throw new TypeError("collect must be a function");
@@ -27,6 +31,8 @@ export function defineSourceAdapter({
     id: adapterId,
     name: adapterName,
     source_type: sourceType,
+    source_name: sourceName,
+    provider: providerName,
     collect,
   });
 }
@@ -38,6 +44,8 @@ export function isSourceAdapter(value) {
     typeof value.id === "string" &&
     typeof value.name === "string" &&
     typeof value.source_type === "string" &&
+    typeof value.source_name === "string" &&
+    typeof value.provider === "string" &&
     typeof value.collect === "function"
   );
 }

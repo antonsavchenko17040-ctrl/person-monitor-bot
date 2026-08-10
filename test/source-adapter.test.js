@@ -13,6 +13,8 @@ test("defines valid source adapter", () => {
     id: "example",
     name: "Example Source",
     source_type: "external",
+    source_name: "Example Registry",
+    provider: "example-provider",
     collect,
   });
 
@@ -23,6 +25,8 @@ test("defines valid source adapter", () => {
   assert.equal(adapter.id, "example");
   assert.equal(adapter.name, "Example Source");
   assert.equal(adapter.source_type, "external");
+  assert.equal(adapter.source_name, "Example Registry");
+  assert.equal(adapter.provider, "example-provider");
   assert.equal(adapter.collect, collect);
   assert.equal(isSourceAdapter(adapter), true);
   assert.equal(Object.isFrozen(adapter), true);
@@ -33,6 +37,8 @@ test("rejects missing required text fields", () => {
     () => defineSourceAdapter({
       name: "Example",
       source_type: "external",
+    source_name: "Example Registry",
+    provider: "example-provider",
       collect: async () => [],
     }),
     /id is required/,
@@ -42,6 +48,8 @@ test("rejects missing required text fields", () => {
     () => defineSourceAdapter({
       id: "example",
       source_type: "external",
+    source_name: "Example Registry",
+    provider: "example-provider",
       collect: async () => [],
     }),
     /name is required/,
@@ -51,9 +59,35 @@ test("rejects missing required text fields", () => {
     () => defineSourceAdapter({
       id: "example",
       name: "Example",
+      source_name: "Example Registry",
+      provider: "example-provider",
       collect: async () => [],
     }),
     /source_type is required/,
+  );
+});
+
+test("rejects missing source provenance", () => {
+  assert.throws(
+    () => defineSourceAdapter({
+      id: "example",
+      name: "Example",
+      source_type: "external",
+      provider: "example-provider",
+      collect: async () => [],
+    }),
+    /source_name is required/,
+  );
+
+  assert.throws(
+    () => defineSourceAdapter({
+      id: "example",
+      name: "Example",
+      source_type: "external",
+      source_name: "Example Registry",
+      collect: async () => [],
+    }),
+    /provider is required/,
   );
 });
 
@@ -63,6 +97,8 @@ test("rejects adapter without collect function", () => {
       id: "example",
       name: "Example",
       source_type: "external",
+    source_name: "Example Registry",
+    provider: "example-provider",
     }),
     /collect must be a function/,
   );
@@ -77,6 +113,8 @@ test("detects invalid adapter shapes", () => {
       id: "example",
       name: "Example",
       source_type: "external",
+    source_name: "Example Registry",
+    provider: "example-provider",
       collect: null,
     }),
     false,
