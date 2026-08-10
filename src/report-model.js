@@ -3146,6 +3146,7 @@ export function buildSubjectReportModelPayload({
   career = null,
   relatedPeople = null,
   relations = null,
+  analytics = null,
 } = {}) {
   if (!subject) {
     return null;
