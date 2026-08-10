@@ -48,6 +48,8 @@
     "dejavu-fonts-ttf": "^2.37.3",
     "exceljs": "^4.4.0",
     "openai": "^7.4.0",
-    "pdfkit": "^0.17.2"
+    "pdfkit": "^0.17.2",
+    "sax": "^1.6.1",
+    "unzipper": "^0.12.5"
   }
 }
