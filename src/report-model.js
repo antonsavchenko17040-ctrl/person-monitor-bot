@@ -2299,8 +2299,6 @@ function isReportPersonType(value) {
 export function buildThirdPartyPeopleSection({
   relations = null,
   analytics = null,
-  mentions = null,
-  sources = null,
 } = {}) {
   const items = [];
 
