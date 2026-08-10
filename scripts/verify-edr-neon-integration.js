@@ -28,6 +28,11 @@ import {
   runEdrSnapshotWithFailureGuard,
 } from "../src/edr-snapshot-failure.js";
 
+import {
+  findActiveEdrRecords,
+  findActiveEdrRelations,
+} from "../src/edr-index.js";
+
 function assert(condition, message) {
   if (!condition) {
     throw new Error(
@@ -346,6 +351,146 @@ try {
     activeAfterSuccess?.id ===
       successSnapshotId,
     "successful snapshot must become active",
+  );
+
+  console.log(
+    "=== ACTIVE INDEX LOOKUPS ===",
+  );
+
+  const byName =
+    await findActiveEdrRecords(
+      sql,
+      {
+        name:
+          "  ТОВ   ІНТЕГРАЦІЙНИЙ ТЕСТ ОДИН  ",
+      },
+    );
+
+  const byEdrpou =
+    await findActiveEdrRecords(
+      sql,
+      {
+        edrpou: "00000001",
+        recordType:
+          "organization",
+      },
+    );
+
+  const combined =
+    await findActiveEdrRecords(
+      sql,
+      {
+        name:
+          "ТОВ ІНТЕГРАЦІЙНИЙ ТЕСТ ОДИН",
+        edrpou: "00000001",
+      },
+    );
+
+  const wrongCombined =
+    await findActiveEdrRecords(
+      sql,
+      {
+        name:
+          "ТОВ ІНТЕГРАЦІЙНИЙ ТЕСТ ОДИН",
+        edrpou: "99999999",
+      },
+    );
+
+  const fopByName =
+    await findActiveEdrRecords(
+      sql,
+      {
+        name:
+          "ІНТЕГРАЦІЙНИЙ ФОП",
+        recordType: "fop",
+      },
+    );
+
+  const founderMatches =
+    await findActiveEdrRelations(
+      sql,
+      {
+        value:
+          "  ІНТЕГРАЦІЙНИЙ   ЗАСНОВНИК  ",
+        relationTypes: [
+          "founder",
+        ],
+      },
+    );
+
+  const wrongRelationType =
+    await findActiveEdrRelations(
+      sql,
+      {
+        value:
+          "ІНТЕГРАЦІЙНИЙ ЗАСНОВНИК",
+        relationTypes: [
+          "beneficiary",
+        ],
+      },
+    );
+
+  assert(
+    byName.length === 1 &&
+      byName[0].snapshot_id ===
+        successSnapshotId,
+    "name lookup must return one active snapshot record",
+  );
+
+  assert(
+    byEdrpou.length === 1 &&
+      byEdrpou[0].edrpou ===
+        "00000001",
+    "EDRPOU lookup must return the organization",
+  );
+
+  assert(
+    combined.length === 1,
+    "combined name and EDRPOU lookup must match",
+  );
+
+  assert(
+    wrongCombined.length === 0,
+    "wrong combined lookup must not match",
+  );
+
+  assert(
+    fopByName.length === 1 &&
+      fopByName[0].record_type ===
+        "fop",
+    "FOP name lookup must match active FOP",
+  );
+
+  assert(
+    founderMatches.length === 1 &&
+      founderMatches[0].relation_type ===
+        "founder" &&
+      founderMatches[0].snapshot_id ===
+        successSnapshotId,
+    "founder relation lookup must match active snapshot",
+  );
+
+  assert(
+    wrongRelationType.length === 0,
+    "wrong relation type must not match",
+  );
+
+  console.log({
+    by_name: byName.length,
+    by_edrpou: byEdrpou.length,
+    combined: combined.length,
+    wrong_combined:
+      wrongCombined.length,
+    fop_by_name:
+      fopByName.length,
+    founder_matches:
+      founderMatches.length,
+    wrong_relation_type:
+      wrongRelationType.length,
+  });
+
+  console.log(
+    "EDR active index integration: PASS",
   );
 
   const [successState] =
