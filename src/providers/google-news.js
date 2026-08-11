@@ -246,6 +246,7 @@ export async function searchGoogleNewsRssDetailed(
 
   const rejected = [];
   const rejectedIdentity = [];
+  const unverifiedFullText = [];
   const errors = [];
 
   let requests = 0;
@@ -371,15 +372,13 @@ export async function searchGoogleNewsRssDetailed(
           ) {
             fullTextReviewAccepted +=
               1;
-          } else {
-            fullTextReviewRejected +=
-              1;
-          }
-
-          if (
+          } else if (
             verification.review_failed
           ) {
             fullTextReviewFailures +=
+              1;
+          } else {
+            fullTextReviewRejected +=
               1;
           }
         }
@@ -387,7 +386,7 @@ export async function searchGoogleNewsRssDetailed(
         if (
           !verification.accepted
         ) {
-          rejectedIdentity.push({
+          const rejectedItem = {
             title:
               item.title,
 
@@ -402,7 +401,21 @@ export async function searchGoogleNewsRssDetailed(
               verification.item
                 ?.fullTextReview ??
               null,
-          });
+          };
+
+          if (
+            verification.review_failed
+          ) {
+            unverifiedFullText.push(
+              rejectedItem,
+            );
+
+            continue;
+          }
+
+          rejectedIdentity.push(
+            rejectedItem,
+          );
 
           continue;
         }
@@ -485,6 +498,9 @@ export async function searchGoogleNewsRssDetailed(
     rejected_identity:
       rejectedIdentity,
 
+    unverified_full_text:
+      unverifiedFullText,
+
     errors,
     plan,
 
@@ -520,6 +536,9 @@ export async function searchGoogleNewsRssDetailed(
 
       full_text_review_failures:
         fullTextReviewFailures,
+
+      unverified_full_text:
+        unverifiedFullText.length,
 
       unique_results:
         deduped.size,

@@ -349,3 +349,81 @@ test(
     );
   },
 );
+
+test(
+  "google news keeps inaccessible full text separate from identity rejection",
+  async () => {
+    const output =
+      await searchGoogleNewsRssDetailed(
+        subject(),
+        {
+          maxQueries:
+            1,
+
+          fetchTextFn:
+            async () =>
+              rss([
+                item(
+                  "Савченко Антон Віталійович",
+                  "https://example.com/blocked-news",
+                  "НАБУ розслідує хабар.",
+                ),
+              ]),
+
+          fullTextReviewFn:
+            async () => {
+              throw new Error(
+                "HTTP 403",
+              );
+            },
+        },
+      );
+
+    assert.equal(
+      output.results.length,
+      0,
+    );
+
+    assert.equal(
+      output.rejected_identity.length,
+      0,
+    );
+
+    assert.equal(
+      output.unverified_full_text.length,
+      1,
+    );
+
+    assert.equal(
+      output.stats
+        .full_text_review_failures,
+      1,
+    );
+
+    assert.equal(
+      output.stats
+        .full_text_review_rejected,
+      0,
+    );
+
+    assert.equal(
+      output.stats
+        .filtered_identity_mismatch,
+      0,
+    );
+
+    assert.equal(
+      output.stats
+        .unverified_full_text,
+      1,
+    );
+
+    assert.equal(
+      output.unverified_full_text[0]
+        .fullTextReview
+        .error
+        .message,
+      "HTTP 403",
+    );
+  },
+);

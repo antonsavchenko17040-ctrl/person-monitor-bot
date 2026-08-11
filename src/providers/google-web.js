@@ -203,6 +203,7 @@ export async function searchGoogleWebDetailed(
 
   const accepted = [];
   const rejectedIdentity = [];
+  const unverifiedFullText = [];
 
   let fullTextReviewRequests = 0;
   let fullTextReviewAccepted = 0;
@@ -251,15 +252,13 @@ export async function searchGoogleWebDetailed(
       ) {
         fullTextReviewAccepted +=
           1;
-      } else {
-        fullTextReviewRejected +=
-          1;
-      }
-
-      if (
+      } else if (
         verification.review_failed
       ) {
         fullTextReviewFailures +=
+          1;
+      } else {
+        fullTextReviewRejected +=
           1;
       }
     }
@@ -274,7 +273,7 @@ export async function searchGoogleWebDetailed(
       continue;
     }
 
-    rejectedIdentity.push({
+    const rejectedItem = {
       title:
         item.title,
 
@@ -290,7 +289,21 @@ export async function searchGoogleWebDetailed(
         verification.item
           ?.fullTextReview ??
         null,
-    });
+    };
+
+    if (
+      verification.review_failed
+    ) {
+      unverifiedFullText.push(
+        rejectedItem,
+      );
+
+      continue;
+    }
+
+    rejectedIdentity.push(
+      rejectedItem,
+    );
   }
 
   return {
@@ -304,6 +317,9 @@ export async function searchGoogleWebDetailed(
 
     rejected_identity:
       rejectedIdentity,
+
+    unverified_full_text:
+      unverifiedFullText,
 
     stats: {
       ...output.stats,
@@ -337,6 +353,9 @@ export async function searchGoogleWebDetailed(
 
       full_text_review_failures:
         fullTextReviewFailures,
+
+      unverified_full_text:
+        unverifiedFullText.length,
 
       unique_results:
         accepted.length,
