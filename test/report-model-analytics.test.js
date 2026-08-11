@@ -697,3 +697,457 @@ test(
     );
   },
 );
+
+
+test(
+  "executive summary resolves evidence through canonical sources",
+  () => {
+    const report =
+      buildSubjectReportModelPayload({
+        subject: {
+          id:
+            "11111111-1111-4111-8111-111111111111",
+
+          full_name:
+            "Тестова Особа",
+        },
+
+        analytics: {
+          findings: [
+            {
+              rule_code:
+                "PM_CANONICAL_EVIDENCE_V1",
+
+              domain:
+                "financial_dynamics",
+
+              result:
+                "review",
+
+              severity:
+                "review",
+
+              score:
+                90,
+
+              message:
+                "Потрібна перевірка.",
+
+              details: {
+                from_year:
+                  2024,
+
+                to_year:
+                  2025,
+              },
+
+              statement_type:
+                "heuristic_signal",
+
+              evidence: [
+                {
+                  source_document_id:
+                    "source-1",
+
+                  provider:
+                    "untrusted-provider",
+
+                  url:
+                    "https://untrusted.example/source-1",
+
+                  observed_at:
+                    "1999-01-01T00:00:00.000Z",
+
+                  statement_type:
+                    "source_fact",
+                },
+
+                {
+                  source_document_id:
+                    "missing-source",
+
+                  provider:
+                    "untrusted-provider",
+
+                  url:
+                    "https://untrusted.example/missing",
+
+                  observed_at:
+                    null,
+
+                  statement_type:
+                    "source_fact",
+                },
+              ],
+            },
+          ],
+        },
+
+        sources: {
+          items: [
+            {
+              source_document_id:
+                "source-1",
+
+              source_type:
+                "declaration",
+
+              provider:
+                "nazk",
+
+              external_id:
+                "doc-1",
+
+              title:
+                "Canonical source",
+
+              url:
+                "https://canonical.example/source-1",
+
+              published_at:
+                "2025-01-01T00:00:00.000Z",
+
+              observed_at:
+                "2025-01-02T00:00:00.000Z",
+            },
+          ],
+        },
+      });
+
+    assert.deepEqual(
+      report
+        .executive_summary
+        .items[0]
+        .evidence,
+      [
+        {
+          source_document_id:
+            "source-1",
+
+          provider:
+            "nazk",
+
+          url:
+            "https://canonical.example/source-1",
+
+          observed_at:
+            "2025-01-02T00:00:00.000Z",
+
+          statement_type:
+            "source_fact",
+        },
+      ],
+    );
+
+    assert.equal(
+      JSON.stringify(
+        report.executive_summary,
+      ).includes(
+        "untrusted.example",
+      ),
+      false,
+    );
+
+    assert.equal(
+      JSON.stringify(
+        report.executive_summary,
+      ).includes(
+        "missing-source",
+      ),
+      false,
+    );
+  },
+);
+
+
+test(
+  "executive summary omits findings without canonical evidence",
+  () => {
+    const finding = {
+      rule_code:
+        "PM_UNRESOLVED_EVIDENCE_V1",
+
+      domain:
+        "financial_dynamics",
+
+      result:
+        "review",
+
+      severity:
+        "review",
+
+      score:
+        95,
+
+      message:
+        "Сигнал залишається в analytics.",
+
+      details: {
+        from_year:
+          2024,
+
+        to_year:
+          2025,
+      },
+
+      statement_type:
+        "heuristic_signal",
+
+      evidence: [
+        {
+          source_document_id:
+            "missing-source",
+
+          provider:
+            "untrusted-provider",
+
+          url:
+            "https://untrusted.example/missing",
+
+          observed_at:
+            null,
+
+          statement_type:
+            "source_fact",
+        },
+      ],
+    };
+
+    const report =
+      buildSubjectReportModelPayload({
+        subject: {
+          id:
+            "11111111-1111-4111-8111-111111111111",
+
+          full_name:
+            "Тестова Особа",
+        },
+
+        analytics: {
+          findings: [
+            finding,
+          ],
+        },
+
+        sources: {
+          items: [],
+        },
+      });
+
+    assert.deepEqual(
+      report.executive_summary,
+      {
+        status:
+          "not_generated",
+
+        items: [],
+      },
+    );
+
+    assert.equal(
+      report
+        .analytics
+        .findings
+        .length,
+      1,
+    );
+
+    assert.equal(
+      report
+        .analytics
+        .findings[0]
+        .rule_code,
+      "PM_UNRESOLVED_EVIDENCE_V1",
+    );
+  },
+);
+
+
+test(
+  "executive summary filters unresolved evidence before top eight limit",
+  () => {
+    const supportedFindings =
+      Array.from(
+        {
+          length:
+            9,
+        },
+        (_, index) => ({
+          rule_code:
+            `PM_SUPPORTED_${index}_V1`,
+
+          domain:
+            "asset_dynamics",
+
+          result:
+            "change",
+
+          severity:
+            "info",
+
+          score:
+            100 - index,
+
+          message:
+            `Supported ${index}`,
+
+          details: {
+            from_year:
+              2024,
+
+            to_year:
+              2025,
+          },
+
+          statement_type:
+            "heuristic_signal",
+
+          evidence: [
+            {
+              source_document_id:
+                `source-${index}`,
+
+              provider:
+                "untrusted-provider",
+
+              url:
+                `https://untrusted.example/source-${index}`,
+
+              observed_at:
+                null,
+
+              statement_type:
+                "source_fact",
+            },
+          ],
+        }),
+      );
+
+    const unresolvedReview = {
+      rule_code:
+        "PM_UNRESOLVED_REVIEW_V1",
+
+      domain:
+        "financial_dynamics",
+
+      result:
+        "review",
+
+      severity:
+        "review",
+
+      score:
+        999,
+
+      message:
+        "Unsupported review signal",
+
+      details: {
+        from_year:
+          2024,
+
+        to_year:
+          2025,
+      },
+
+      statement_type:
+        "heuristic_signal",
+
+      evidence: [
+        {
+          source_document_id:
+            "missing-source",
+
+          provider:
+            "untrusted-provider",
+
+          url:
+            "https://untrusted.example/missing",
+
+          observed_at:
+            null,
+
+          statement_type:
+            "source_fact",
+        },
+      ],
+    };
+
+    const report =
+      buildSubjectReportModelPayload({
+        subject: {
+          id:
+            "11111111-1111-4111-8111-111111111111",
+
+          full_name:
+            "Тестова Особа",
+        },
+
+        analytics: {
+          findings: [
+            unresolvedReview,
+            ...supportedFindings,
+          ],
+        },
+
+        sources: {
+          items:
+            supportedFindings.map(
+              (_, index) => ({
+                source_document_id:
+                  `source-${index}`,
+
+                provider:
+                  "nazk",
+
+                url:
+                  `https://canonical.example/source-${index}`,
+
+                observed_at:
+                  null,
+              }),
+            ),
+        },
+      });
+
+    assert.equal(
+      report
+        .executive_summary
+        .items
+        .length,
+      8,
+    );
+
+    assert.deepEqual(
+      report
+        .executive_summary
+        .items
+        .map(
+          (item) =>
+            item.rule_code,
+        ),
+      [
+        "PM_SUPPORTED_0_V1",
+        "PM_SUPPORTED_1_V1",
+        "PM_SUPPORTED_2_V1",
+        "PM_SUPPORTED_3_V1",
+        "PM_SUPPORTED_4_V1",
+        "PM_SUPPORTED_5_V1",
+        "PM_SUPPORTED_6_V1",
+        "PM_SUPPORTED_7_V1",
+      ],
+    );
+
+    assert.equal(
+      report
+        .executive_summary
+        .items
+        .some(
+          (item) =>
+            item.rule_code ===
+            "PM_UNRESOLVED_REVIEW_V1",
+        ),
+      false,
+    );
+  },
+);

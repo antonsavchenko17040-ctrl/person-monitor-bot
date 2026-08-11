@@ -3225,6 +3225,113 @@ function safeExecutiveSummaryDetails(
 }
 
 
+function resolveExecutiveSummaryEvidence(
+  evidence,
+  sources,
+) {
+  const normalizedEvidence =
+    reportEvidence(
+      evidence,
+    );
+
+  if (
+    !sources ||
+    typeof sources !== "object"
+  ) {
+    return normalizedEvidence;
+  }
+
+  const sourceItems =
+    Array.isArray(
+      sources?.items,
+    )
+      ? sources.items
+      : [];
+
+  const sourcesById =
+    new Map(
+      sourceItems
+        .filter(
+          (item) =>
+            item
+              ?.source_document_id,
+        )
+        .map(
+          (item) => [
+            item
+              .source_document_id,
+            item,
+          ],
+        ),
+    );
+
+  const seen =
+    new Set();
+
+  const resolved = [];
+
+  for (
+    const item
+    of normalizedEvidence
+  ) {
+    const sourceId =
+      item
+        ?.source_document_id ??
+      null;
+
+    const source =
+      sourceId
+        ? sourcesById.get(
+            sourceId,
+          )
+        : null;
+
+    if (!source) {
+      continue;
+    }
+
+    const statementType =
+      item
+        ?.statement_type ??
+      "source_fact";
+
+    const key =
+      `${sourceId}::${statementType}`;
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+
+    resolved.push({
+      source_document_id:
+        sourceId,
+
+      provider:
+        source
+          ?.provider ??
+        null,
+
+      url:
+        source
+          ?.url ??
+        null,
+
+      observed_at:
+        source
+          ?.observed_at ??
+        null,
+
+      statement_type:
+        statementType,
+    });
+  }
+
+  return resolved;
+}
+
+
 export function buildSubjectReportModelPayload({
   subject,
   generatedAt = new Date(),
@@ -3362,147 +3469,163 @@ export function buildSubjectReportModelPayload({
         : [],
   };
 
-  const executiveSummarySection =
-    analyticsSection
-      .findings
-      .length
-      ? {
-          status:
-            "generated",
+  const requireCanonicalSummaryEvidence =
+  sources &&
+  typeof sources ===
+    "object";
 
-          items:
-            analyticsSection
-              .findings
-              .map(
-                (finding, index) => ({
-                  finding,
-                  index,
-                }),
-              )
-              .sort(
-                (left, right) => {
-                  const severityPriority = {
-                    review:
-                      2,
+  const executiveSummaryItems =
+  analyticsSection
+    .findings
+    .map(
+      (finding, index) => ({
+        finding,
+        index,
 
-                    info:
-                      1,
-                  };
+        evidence:
+          resolveExecutiveSummaryEvidence(
+            finding?.evidence,
+            sources,
+          ),
+      }),
+    )
+    .filter(
+      ({ evidence }) =>
+        !requireCanonicalSummaryEvidence ||
+        evidence.length > 0,
+    )
+    .sort(
+      (left, right) => {
+        const severityPriority = {
+          review:
+            2,
 
-                  const leftSeverity =
-                    severityPriority[
-                      left
-                        .finding
-                        ?.severity
-                    ] ?? 0;
-
-                  const rightSeverity =
-                    severityPriority[
-                      right
-                        .finding
-                        ?.severity
-                    ] ?? 0;
-
-                  if (
-                    leftSeverity !==
-                    rightSeverity
-                  ) {
-                    return (
-                      rightSeverity -
-                      leftSeverity
-                    );
-                  }
-
-                  const leftScore =
-                    numericValue(
-                      left
-                        .finding
-                        ?.score,
-                    ) ?? -Infinity;
-
-                  const rightScore =
-                    numericValue(
-                      right
-                        .finding
-                        ?.score,
-                    ) ?? -Infinity;
-
-                  if (
-                    leftScore !==
-                    rightScore
-                  ) {
-                    return (
-                      rightScore -
-                      leftScore
-                    );
-                  }
-
-                  return (
-                    left.index -
-                    right.index
-                  );
-                },
-              )
-              .slice(
-                0,
-                8,
-              )
-              .map(
-                ({ finding }) => ({
-                  rule_code:
-                    cleanValue(
-                      finding?.rule_code,
-                    ),
-
-                  domain:
-                    cleanValue(
-                      finding?.domain,
-                    ),
-
-                  result:
-                    cleanValue(
-                      finding?.result,
-                    ),
-
-                  severity:
-                    cleanValue(
-                      finding?.severity,
-                    ),
-
-                  score:
-                    numericValue(
-                      finding?.score,
-                    ),
-
-                  message:
-                    cleanValue(
-                      finding?.message,
-                    ),
-
-                  details:
-                    safeExecutiveSummaryDetails(
-                      finding?.details,
-                    ),
-
-                  statement_type:
-                    cleanValue(
-                      finding
-                        ?.statement_type,
-                    ),
-
-                  evidence:
-                    reportEvidence(
-                      finding?.evidence,
-                    ),
-                }),
-              ),
-        }
-      : {
-          status:
-            "not_generated",
-
-          items: [],
+          info:
+            1,
         };
+
+        const leftSeverity =
+          severityPriority[
+            left
+              .finding
+              ?.severity
+          ] ?? 0;
+
+        const rightSeverity =
+          severityPriority[
+            right
+              .finding
+              ?.severity
+          ] ?? 0;
+
+        if (
+          leftSeverity !==
+          rightSeverity
+        ) {
+          return (
+            rightSeverity -
+            leftSeverity
+          );
+        }
+
+        const leftScore =
+          numericValue(
+            left
+              .finding
+              ?.score,
+          ) ?? -Infinity;
+
+        const rightScore =
+          numericValue(
+            right
+              .finding
+              ?.score,
+          ) ?? -Infinity;
+
+        if (
+          leftScore !==
+          rightScore
+        ) {
+          return (
+            rightScore -
+            leftScore
+          );
+        }
+
+        return (
+          left.index -
+          right.index
+        );
+      },
+    )
+    .slice(
+      0,
+      8,
+    )
+    .map(
+      ({
+        finding,
+        evidence,
+      }) => ({
+        rule_code:
+          cleanValue(
+            finding?.rule_code,
+          ),
+
+        domain:
+          cleanValue(
+            finding?.domain,
+          ),
+
+        result:
+          cleanValue(
+            finding?.result,
+          ),
+
+        severity:
+          cleanValue(
+            finding?.severity,
+          ),
+
+        score:
+          numericValue(
+            finding?.score,
+          ),
+
+        message:
+          cleanValue(
+            finding?.message,
+          ),
+
+        details:
+          safeExecutiveSummaryDetails(
+            finding?.details,
+          ),
+
+        statement_type:
+          cleanValue(
+            finding?.statement_type,
+          ),
+
+        evidence,
+      }),
+    );
+
+  const executiveSummarySection =
+  executiveSummaryItems.length
+    ? {
+        status:
+          "generated",
+
+        items:
+          executiveSummaryItems,
+      }
+    : {
+        status:
+          "not_generated",
+
+        items: [],
+      };
 
   return {
     schema_version:
