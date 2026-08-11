@@ -1,8 +1,8 @@
 # Person Monitor — функціональна модель, поточний стан і дорожня карта
 
 **Дата фіксації:** 12.08.2026
-**Базова точка:** блок 5.4E2 «Canonical manual-review manifest v1» закрито; canonical report має reference-only `manual_review` manifest для явних human-review сигналів у `related_people`, побудований на stable opaque `item_ref`.
-**Технічний стан:** 571/571 тестів пройдено; `MANUAL_REVIEW_MANIFEST_VERSION` і top-level `manual_review` є частиною canonical report contract; manifest не копіює ПІБ/evidence/URL, deduplicate/filter виконується за валідним `item_ref`, а media `review_status` не трактуються як human review. EDR та identity human-review сигнали ще не проєктуються в цей manifest; persistence/Manual Review Queue UI, `report_id` та audit trail ще не реалізовані.
+**Базова точка:** блок 5.4E3a «Timeless EDR relations loader» закрито; окремий report-side loader без declaration-year semantics безпечно завантажує subject→organization зв’язки ЄДР як timeless relations, не змішуючи їх із річними declaration relations.
+**Технічний стан:** 575/575 тестів пройдено; `loadTimelessEdrRelations()` використовує canonical `EDR_GRAPH_RELATION_TYPES`, приймає лише timeless EDR relations для поточного subject і organization target, зберігає `verification_status` та allowlisted metadata і defensively відсіює malformed IDs, dated/non-EDR/unsupported rows. Loader ще не підключений до canonical `relations` або `manual_review`; EDR human-review projection у report буде окремим 5.4E3b. Identity review, persistence/Manual Review Queue UI, `report_id` та audit trail ще не реалізовані.
 
 ## 1. Що повинен вміти портал
 
