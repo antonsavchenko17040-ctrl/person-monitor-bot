@@ -3,6 +3,8 @@ import { db } from "./db.js";
 export const GRAPH_RELATION_LABELS = {
   employed_by: "Місце роботи",
   declared_asset: "Задекларований об’єкт",
+  asset_appeared_in_declaration: "З’явився у декларації",
+  asset_disappeared_from_declaration: "Вибув із декларації",
   income_from: "Джерело доходу",
   family_member_observed: "Член сім’ї",
   third_party_rightsholder: "Третя сторона / правовласник",
@@ -149,6 +151,17 @@ export function safeRelationMetadata(
     "identity_status",
     "identity_decision",
     "review_required",
+    "transition_event",
+    "asset_key",
+    "from_year",
+    "to_year",
+    "year_gap",
+    "temporal_precision",
+    "financial_status",
+    "transaction_status",
+    "declared_cost_uah",
+    "cost_income_ratio",
+    "disposal_candidate_count",
   ];
 
   for (const key of scalarKeys) {
@@ -166,6 +179,8 @@ export function safeRelationMetadata(
     "income_types",
     "ownership_types",
     "holder_roles",
+    "signal_codes",
+    "source_document_ids",
   ];
 
   for (const key of arrayKeys) {

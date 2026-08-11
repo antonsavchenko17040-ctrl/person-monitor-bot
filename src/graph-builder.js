@@ -1239,7 +1239,7 @@ export async function persistRelationsGraph(
 
         ${relation.confidence},
 
-        'source_extracted',
+        ${relation.verificationStatus ?? "source_extracted"},
 
         ${JSON.stringify(
           metadata,
