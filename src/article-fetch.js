@@ -33,6 +33,18 @@ export const ARTICLE_FETCH_LIMITS =
       3,
   });
 
+export const ARTICLE_FETCH_REQUEST_HEADERS =
+  Object.freeze({
+    accept:
+      "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+
+    acceptLanguage:
+      "uk-UA,uk;q=0.9,en;q=0.5",
+
+    userAgent:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Safari/605.1.15",
+  });
+
 function positiveInteger(
   value,
   fallback,
@@ -844,6 +856,14 @@ export async function fetchArticleHtml(
 
     lookupFn =
       dnsLookup,
+
+    userAgent =
+      ARTICLE_FETCH_REQUEST_HEADERS
+        .userAgent,
+
+    acceptLanguage =
+      ARTICLE_FETCH_REQUEST_HEADERS
+        .acceptLanguage,
   } = {},
 ) {
   if (
@@ -909,10 +929,22 @@ export async function fetchArticleHtml(
 
       const requestHeaders = {
         accept:
-          "text/html,application/xhtml+xml;q=0.9",
+          ARTICLE_FETCH_REQUEST_HEADERS
+            .accept,
+
+        "accept-language":
+          String(
+            acceptLanguage ||
+            ARTICLE_FETCH_REQUEST_HEADERS
+              .acceptLanguage,
+          ),
 
         "user-agent":
-          "PersonMonitorBot/1.0 public-information-monitoring",
+          String(
+            userAgent ||
+            ARTICLE_FETCH_REQUEST_HEADERS
+              .userAgent,
+          ),
       };
 
       const response =

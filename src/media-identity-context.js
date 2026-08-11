@@ -110,8 +110,14 @@ function tokenMatches(
 function subjectNames(
   subject,
 ) {
-  const names = [
-    subject?.full_name,
+  const candidates = [
+    {
+      value:
+        subject?.full_name,
+
+      minTokens:
+        2,
+    },
 
     ...(
       Array.isArray(
@@ -119,21 +125,49 @@ function subjectNames(
       )
         ? subject.aliases
         : []
-    ),
-  ]
-    .map(
-      (value) =>
-        String(
-          value ?? "",
-        )
-          .trim(),
     )
-    .filter(
-      (value) =>
-        identityWords(
+      .map(
+        (value) => ({
           value,
-        ).length >= 3,
-    );
+
+          minTokens:
+            3,
+        }),
+      ),
+  ];
+
+  const names =
+    candidates
+      .map(
+        ({
+          value,
+          minTokens,
+        }) => ({
+          value:
+            String(
+              value ?? "",
+            )
+              .trim(),
+
+          minTokens,
+        }),
+      )
+      .filter(
+        ({
+          value,
+          minTokens,
+        }) =>
+          identityWords(
+            value,
+          ).length >=
+          minTokens,
+      )
+      .map(
+        ({
+          value,
+        }) =>
+          value,
+      );
 
   const unique =
     new Map();

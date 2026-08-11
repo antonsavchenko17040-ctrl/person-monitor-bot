@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   ARTICLE_FETCH_VERSION,
   ARTICLE_FETCH_LIMITS,
+  ARTICLE_FETCH_REQUEST_HEADERS,
   validateArticleUrl,
   validateArticleDns,
   createPinnedLookup,
@@ -790,6 +791,75 @@ test(
               4,
           },
         ]),
+    );
+  },
+);
+
+test(
+  "uses browser-compatible headers for public HTML",
+  async () => {
+    let requestOptions =
+      null;
+
+    await fetchArticleHtml(
+      "https://example.com/news",
+      {
+        lookupFn:
+          publicLookup,
+
+        fetchFn:
+          async (
+            _url,
+            options,
+          ) => {
+            requestOptions =
+              options;
+
+            return response(
+              "<html><article>Текст</article></html>",
+              {
+                headers: {
+                  "content-type":
+                    "text/html",
+                },
+              },
+            );
+          },
+      },
+    );
+
+    assert.equal(
+      requestOptions
+        .headers[
+          "user-agent"
+        ],
+      ARTICLE_FETCH_REQUEST_HEADERS
+        .userAgent,
+    );
+
+    assert.match(
+      requestOptions
+        .headers[
+          "user-agent"
+        ],
+      /^Mozilla\/5\.0/u,
+    );
+
+    assert.equal(
+      requestOptions
+        .headers[
+          "accept-language"
+        ],
+      ARTICLE_FETCH_REQUEST_HEADERS
+        .acceptLanguage,
+    );
+
+    assert.equal(
+      requestOptions
+        .headers
+        .accept,
+      ARTICLE_FETCH_REQUEST_HEADERS
+        .accept,
     );
   },
 );

@@ -171,3 +171,36 @@ test(
     );
   },
 );
+
+test(
+  "supports two-token primary subject name",
+  () => {
+    const output =
+      extractMediaIdentityContext(
+        {
+          full_name:
+            "Олексій Чернишов",
+
+          aliases:
+            [],
+        },
+        "Міністр розвитку громад та територій України Олексій Чернишов підписав меморандум.",
+      );
+
+    assert.match(
+      output.text,
+      /Олексій Чернишов/u,
+    );
+
+    assert.match(
+      output.text,
+      /Міністр розвитку громад/u,
+    );
+
+    assert.equal(
+      output.stats
+        .mention_windows,
+      1,
+    );
+  },
+);
