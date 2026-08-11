@@ -79,25 +79,53 @@ export async function searchSerperQuery(query, options = {}) {
 
 export async function searchGoogleQuery(query, options = {}) {
   const settings = config();
-  if (!settings.serpApiKey && !settings.serperApiKey) return [];
 
-  if (settings.serpApiKey) {
+  if (
+    !settings.serperApiKey &&
+    !settings.serpApiKey
+  ) {
+    return [];
+  }
+
+  if (settings.serperApiKey) {
     try {
-      return await searchSerpApiQuery(query, options);
-    } catch (serpApiError) {
-      if (!settings.serperApiKey) throw serpApiError;
+      return await searchSerperQuery(
+        query,
+        options,
+      );
+    } catch (serperError) {
+      if (!settings.serpApiKey) {
+        throw serperError;
+      }
+
       try {
-        return await searchSerperQuery(query, options);
-      } catch (serperError) {
+        return await searchSerpApiQuery(
+          query,
+          options,
+        );
+      } catch (serpApiError) {
         throw new Error(
-          `SerpApi: ${serpApiError instanceof Error ? serpApiError.message : String(serpApiError)}; ` +
-          `Serper.dev: ${serperError instanceof Error ? serperError.message : String(serperError)}`,
+          "Serper.dev: " +
+          (
+            serperError instanceof Error
+              ? serperError.message
+              : String(serperError)
+          ) +
+          "; SerpApi: " +
+          (
+            serpApiError instanceof Error
+              ? serpApiError.message
+              : String(serpApiError)
+          ),
         );
       }
     }
   }
 
-  return searchSerperQuery(query, options);
+  return searchSerpApiQuery(
+    query,
+    options,
+  );
 }
 
 export async function searchGoogleWebDetailed(
