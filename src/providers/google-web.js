@@ -2,6 +2,8 @@ import { config } from "../config.js";
 import { fetchJson } from "./http.js";
 import { buildNameQuery } from "./query.js";
 import { searchSmartGoogleWeb } from "../smart-google-web.js";
+import { buildCorruptionSearchPlan } from "../corruption-search-plan.js";
+import { assessCorruptionRelevance } from "../corruption-relevance.js";
 
 function safeDate(value) {
   if (!value) return undefined;
@@ -128,7 +130,7 @@ export async function searchGoogleQuery(query, options = {}) {
   );
 }
 
-export async function searchGoogleWebDetailed(
+async function searchGoogleWebDetailedRaw(
   subject,
   {
     searchQuery = searchGoogleQuery,
@@ -144,6 +146,9 @@ export async function searchGoogleWebDetailed(
         maxQueries ??
         settings.maxGoogleWebQueries,
 
+      planBuilder:
+        buildCorruptionSearchPlan,
+
       searchQuery:
         (query, options) =>
           searchQuery(
@@ -155,6 +160,70 @@ export async function searchGoogleWebDetailed(
           ),
     },
   );
+}
+
+export async function searchGoogleWebDetailed(
+  subject,
+  options = {},
+) {
+  const output =
+    await searchGoogleWebDetailedRaw(
+      subject,
+      options,
+    );
+
+  const accepted = [];
+  const rejected = [];
+
+  for (const item of output.results) {
+    const corruptionRelevance =
+      assessCorruptionRelevance(
+        item,
+      );
+
+    if (
+      corruptionRelevance.relevant
+    ) {
+      accepted.push({
+        ...item,
+        corruptionRelevance,
+      });
+    } else {
+      rejected.push({
+        title:
+          item.title,
+        url:
+          item.url,
+        corruptionRelevance,
+      });
+    }
+  }
+
+  return {
+    ...output,
+
+    results:
+      accepted,
+
+    rejected_non_corruption:
+      rejected,
+
+    stats: {
+      ...output.stats,
+
+      unique_results_before_corruption_filter:
+        output.stats.unique_results,
+
+      unique_results:
+        accepted.length,
+
+      corruption_relevant_results:
+        accepted.length,
+
+      filtered_non_corruption:
+        rejected.length,
+    },
+  };
 }
 
 export async function searchGoogleWeb(

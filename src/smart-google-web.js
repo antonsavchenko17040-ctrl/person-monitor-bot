@@ -55,6 +55,8 @@ export async function searchSmartGoogleWeb(
     searchQuery,
     maxQueries = 4,
     topics,
+    planBuilder =
+      buildSubjectSearchPlan,
   } = {},
 ) {
   if (
@@ -67,7 +69,7 @@ export async function searchSmartGoogleWeb(
   }
 
   const plan =
-    buildSubjectSearchPlan(
+    planBuilder(
       subject,
       {
         maxQueries,

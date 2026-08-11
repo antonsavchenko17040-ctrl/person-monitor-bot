@@ -145,3 +145,45 @@ test(
     );
   },
 );
+
+test(
+  "google web rejects result without corruption context",
+  async () => {
+    const output =
+      await searchGoogleWebDetailed(
+        subject(),
+        {
+          maxQueries: 1,
+
+          searchQuery:
+            async () => [
+              {
+                title:
+                  "Звичайна біографія посадовця",
+
+                url:
+                  "https://example.com/profile",
+
+                snippet:
+                  "Інформація про освіту та професійну діяльність.",
+              },
+            ],
+        },
+      );
+
+    assert.equal(
+      output.results.length,
+      0,
+    );
+
+    assert.equal(
+      output.rejected_non_corruption.length,
+      1,
+    );
+
+    assert.equal(
+      output.stats.filtered_non_corruption,
+      1,
+    );
+  },
+);
