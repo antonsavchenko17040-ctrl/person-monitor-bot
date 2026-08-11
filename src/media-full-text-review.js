@@ -15,6 +15,10 @@ import {
 } from "./media-identity.js";
 
 import {
+  extractMediaIdentityContext,
+} from "./media-identity-context.js";
+
+import {
   MEDIA_REVIEW_DECISIONS,
   decideMediaReview,
 } from "./media-review-policy.js";
@@ -249,6 +253,12 @@ export async function reviewMediaResultFullText(
     )
       .trim();
 
+  const identityContext =
+    extractMediaIdentityContext(
+      subject,
+      articleText,
+    );
+
   const article = {
     url:
       fetched?.url ??
@@ -264,6 +274,14 @@ export async function reviewMediaResultFullText(
     text_stats:
       extracted?.stats ??
       null,
+
+    identity_context: {
+      version:
+        identityContext.version,
+
+      stats:
+        identityContext.stats,
+    },
   };
 
   if (!articleText) {
@@ -280,7 +298,7 @@ export async function reviewMediaResultFullText(
     });
   }
 
-  const fullTextResult = {
+  const fullTextCorruptionResult = {
     ...result,
 
     url:
@@ -290,21 +308,37 @@ export async function reviewMediaResultFullText(
       articleText,
   };
 
-  delete fullTextResult
+  delete fullTextCorruptionResult
     .corruptionRelevance;
 
-  delete fullTextResult
+  delete fullTextCorruptionResult
+    .mediaIdentity;
+
+  const fullTextIdentityResult = {
+    ...result,
+
+    url:
+      article.url,
+
+    snippet:
+      identityContext.text,
+  };
+
+  delete fullTextIdentityResult
+    .corruptionRelevance;
+
+  delete fullTextIdentityResult
     .mediaIdentity;
 
   const fullTextCorruption =
     assessCorruptionRelevance(
-      fullTextResult,
+      fullTextCorruptionResult,
     );
 
   const fullTextIdentity =
     assessMediaIdentity(
       subject,
-      fullTextResult,
+      fullTextIdentityResult,
     );
 
   const finalPolicy =

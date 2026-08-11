@@ -90,6 +90,11 @@ export function compactMediaFullTextReview(
               article
                 .text_stats ??
               null,
+
+            identity_context:
+              article
+                .identity_context ??
+              null,
           }
         : null,
   };

@@ -311,3 +311,99 @@ test(
     );
   },
 );
+
+test(
+  "does not confirm target from distant context belonging to another person",
+  async () => {
+    const result =
+      await reviewMediaResultFullText(
+        subject(),
+        probableResult(),
+        {
+          fetchArticleFn:
+            async () => ({
+              url:
+                "https://example.com/multi-person",
+
+              html:
+                "<article>" +
+                "<p>Савченко Антон Віталійович згадується у матеріалі.</p>" +
+                "<p>" +
+                "X".repeat(
+                  2500,
+                ) +
+                "</p>" +
+                "<p>Петренко Іван Іванович працює у Національному агентстві з питань запобігання корупції та є головним спеціалістом.</p>" +
+                "<p>НАБУ розслідує хабар.</p>" +
+                "</article>",
+
+              metadata: {
+                bytes:
+                  3000,
+              },
+            }),
+        },
+      );
+
+    assert.equal(
+      result.review_status,
+      "reviewed",
+    );
+
+    assert.equal(
+      result.full_text
+        .corruption_relevance
+        .relevant,
+      true,
+    );
+
+    assert.equal(
+      result.full_text
+        .media_identity
+        .level,
+      "probable",
+    );
+
+    assert.equal(
+      result.full_text
+        .media_identity
+        .evidence
+        .organization_matches,
+      0,
+    );
+
+    assert.equal(
+      result.full_text
+        .media_identity
+        .evidence
+        .position_matches,
+      0,
+    );
+
+    assert.equal(
+      result.accepted,
+      false,
+    );
+
+    assert.equal(
+      result.full_text
+        .article
+        .identity_context
+        .stats
+        .mention_windows,
+      1,
+    );
+
+    assert.ok(
+      result.full_text
+        .article
+        .identity_context
+        .stats
+        .context_chars <
+      result.full_text
+        .article
+        .text_stats
+        .output_chars,
+    );
+  },
+);
