@@ -5,6 +5,7 @@ import { searchSmartGoogleWeb } from "../smart-google-web.js";
 import { buildCorruptionSearchPlan } from "../corruption-search-plan.js";
 import { assessCorruptionRelevance } from "../corruption-relevance.js";
 import { assessMediaIdentity } from "../media-identity.js";
+import { verifyMediaResultForProvider } from "../media-provider-review.js";
 
 function safeDate(value) {
   if (!value) return undefined;
@@ -203,6 +204,11 @@ export async function searchGoogleWebDetailed(
   const accepted = [];
   const rejectedIdentity = [];
 
+  let fullTextReviewRequests = 0;
+  let fullTextReviewAccepted = 0;
+  let fullTextReviewRejected = 0;
+  let fullTextReviewFailures = 0;
+
   for (
     const item
     of corruptionAccepted
@@ -213,28 +219,78 @@ export async function searchGoogleWebDetailed(
         item,
       );
 
+    const verification =
+      await verifyMediaResultForProvider(
+        subject,
+        {
+          ...item,
+          mediaIdentity,
+        },
+        {
+          enabled:
+            options.fullTextReview !==
+            false,
+
+          reviewFn:
+            options.fullTextReviewFn,
+
+          reviewOptions:
+            options.fullTextReviewOptions ??
+            {},
+        },
+      );
+
     if (
-      mediaIdentity.level ===
-      "confirmed"
+      verification.review_attempted
     ) {
-      accepted.push({
-        ...item,
-        mediaIdentity,
-      });
-    } else {
-      rejectedIdentity.push({
-        title:
-          item.title,
+      fullTextReviewRequests +=
+        1;
 
-        url:
-          item.url,
+      if (
+        verification.accepted
+      ) {
+        fullTextReviewAccepted +=
+          1;
+      } else {
+        fullTextReviewRejected +=
+          1;
+      }
 
-        corruptionRelevance:
-          item.corruptionRelevance,
-
-        mediaIdentity,
-      });
+      if (
+        verification.review_failed
+      ) {
+        fullTextReviewFailures +=
+          1;
+      }
     }
+
+    if (
+      verification.accepted
+    ) {
+      accepted.push(
+        verification.item,
+      );
+
+      continue;
+    }
+
+    rejectedIdentity.push({
+      title:
+        item.title,
+
+      url:
+        item.url,
+
+      corruptionRelevance:
+        item.corruptionRelevance,
+
+      mediaIdentity,
+
+      fullTextReview:
+        verification.item
+          ?.fullTextReview ??
+        null,
+    });
   }
 
   return {
@@ -269,6 +325,18 @@ export async function searchGoogleWebDetailed(
 
       filtered_identity_mismatch:
         rejectedIdentity.length,
+
+      full_text_review_requests:
+        fullTextReviewRequests,
+
+      full_text_review_accepted:
+        fullTextReviewAccepted,
+
+      full_text_review_rejected:
+        fullTextReviewRejected,
+
+      full_text_review_failures:
+        fullTextReviewFailures,
 
       unique_results:
         accepted.length,

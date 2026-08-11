@@ -245,6 +245,9 @@ test(
         {
           maxQueries: 1,
 
+          fullTextReview:
+            false,
+
           fetchTextFn:
             async () =>
               rss([
@@ -272,6 +275,77 @@ test(
         .mediaIdentity
         .level,
       "probable",
+    );
+  },
+);
+
+test(
+  "google news upgrades probable identity from full article",
+  async () => {
+    const output =
+      await searchGoogleNewsRssDetailed(
+        subject(),
+        {
+          maxQueries:
+            1,
+
+          fetchTextFn:
+            async () =>
+              rss([
+                item(
+                  "Савченко Антон Віталійович",
+                  "https://example.com/news-full-text",
+                  "НАБУ розслідує хабар.",
+                ),
+              ]),
+
+          fullTextReviewOptions: {
+            fetchArticleFn:
+              async () => ({
+                url:
+                  "https://example.com/news-full-text",
+
+                html:
+                  "<article><p>Савченко Антон Віталійович — працівник Національного агентства з питань запобігання корупції.</p><p>НАБУ розслідує неправомірну вигоду.</p></article>",
+
+                metadata: {
+                  bytes:
+                    240,
+                },
+              }),
+          },
+        },
+      );
+
+    assert.equal(
+      output.results.length,
+      1,
+    );
+
+    assert.equal(
+      output.results[0]
+        .mediaIdentity
+        .level,
+      "confirmed",
+    );
+
+    assert.equal(
+      output.results[0]
+        .fullTextReview
+        .review_status,
+      "reviewed",
+    );
+
+    assert.equal(
+      output.stats
+        .full_text_review_requests,
+      1,
+    );
+
+    assert.equal(
+      output.stats
+        .full_text_review_accepted,
+      1,
     );
   },
 );

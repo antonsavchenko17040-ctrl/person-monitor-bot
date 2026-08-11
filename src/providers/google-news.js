@@ -14,6 +14,10 @@ import {
 } from "../media-identity.js";
 
 import {
+  verifyMediaResultForProvider,
+} from "../media-provider-review.js";
+
+import {
   fetchText,
 } from "./http.js";
 
@@ -204,6 +208,14 @@ export async function searchGoogleNewsRssDetailed(
     fetchTextFn = fetchText,
     maxQueries = 4,
     maxResults,
+
+    fullTextReview =
+      true,
+
+    fullTextReviewFn,
+
+    fullTextReviewOptions =
+      {},
   } = {},
 ) {
   const settings =
@@ -240,6 +252,10 @@ export async function searchGoogleNewsRssDetailed(
   let rawResults = 0;
   let corruptionRelevantResults = 0;
   let confirmedIdentityResults = 0;
+  let fullTextReviewRequests = 0;
+  let fullTextReviewAccepted = 0;
+  let fullTextReviewRejected = 0;
+  let fullTextReviewFailures = 0;
 
   for (
     const planned
@@ -323,9 +339,53 @@ export async function searchGoogleNewsRssDetailed(
             item,
           );
 
+        const verification =
+          await verifyMediaResultForProvider(
+            subject,
+            {
+              ...item,
+              corruptionRelevance,
+              mediaIdentity,
+            },
+            {
+              enabled:
+                fullTextReview !==
+                false,
+
+              reviewFn:
+                fullTextReviewFn,
+
+              reviewOptions:
+                fullTextReviewOptions,
+            },
+          );
+
         if (
-          mediaIdentity.level !==
-          "confirmed"
+          verification.review_attempted
+        ) {
+          fullTextReviewRequests +=
+            1;
+
+          if (
+            verification.accepted
+          ) {
+            fullTextReviewAccepted +=
+              1;
+          } else {
+            fullTextReviewRejected +=
+              1;
+          }
+
+          if (
+            verification.review_failed
+          ) {
+            fullTextReviewFailures +=
+              1;
+          }
+        }
+
+        if (
+          !verification.accepted
         ) {
           rejectedIdentity.push({
             title:
@@ -337,6 +397,11 @@ export async function searchGoogleNewsRssDetailed(
             corruptionRelevance,
 
             mediaIdentity,
+
+            fullTextReview:
+              verification.item
+                ?.fullTextReview ??
+              null,
           });
 
           continue;
@@ -345,9 +410,12 @@ export async function searchGoogleNewsRssDetailed(
         confirmedIdentityResults +=
           1;
 
+        const acceptedItem =
+          verification.item;
+
         const key =
           stableFingerprint(
-            item.url,
+            acceptedItem.url,
           );
 
         if (
@@ -355,11 +423,7 @@ export async function searchGoogleNewsRssDetailed(
         ) {
           deduped.set(
             key,
-            {
-              ...item,
-              corruptionRelevance,
-              mediaIdentity,
-            },
+            acceptedItem,
           );
 
           continue;
@@ -444,6 +508,18 @@ export async function searchGoogleNewsRssDetailed(
 
       filtered_identity_mismatch:
         rejectedIdentity.length,
+
+      full_text_review_requests:
+        fullTextReviewRequests,
+
+      full_text_review_accepted:
+        fullTextReviewAccepted,
+
+      full_text_review_rejected:
+        fullTextReviewRejected,
+
+      full_text_review_failures:
+        fullTextReviewFailures,
 
       unique_results:
         deduped.size,
