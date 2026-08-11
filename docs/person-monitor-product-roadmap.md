@@ -1,8 +1,8 @@
 # Person Monitor — функціональна модель, поточний стан і дорожня карта
 
 **Дата фіксації:** 11.08.2026  
-**Базова точка:** блок 4.6 «Класифікація ролі суб’єкта в корупційному матеріалі» закрито; наступний пріоритет — unified dossier orchestrator.
-**Технічний стан:** 541/541 тестів пройдено; role classification інтегровано у full-text/provider pipeline з класами `adverse_context / anti_corruption_activity / related_mention` та інваріантом `wrongdoing_inferred: false`.
+**Базова точка:** блок 5.1 «Каркас unified dossier orchestrator» закрито; orchestration core об’єднує завантаження суб’єкта, refresh джерел і побудову canonical report в один workflow.
+**Технічний стан:** 546/546 тестів пройдено; `dossier-orchestrator-v1` підтримує `completed / partial / failed`, не блокує побудову наявного досьє при refresh failure та контрольовано обробляє subject/report failure.
 
 ## 1. Що повинен вміти портал
 
@@ -83,7 +83,7 @@ Person Monitor має бути не просто пошуковим сайтом
 
 ## 7. Пріоритет після паузи
 
-Не підключати нові великі джерела одразу. Оптимальна послідовність: **unified dossier orchestrator → фінальна структура аналітичної довідки → evidence/manual review/versioning → після цього AUTO.RIA / нерухомість / OpenDataBot.**
+Не підключати нові великі джерела одразу. Оптимальна послідовність: **розширення unified dossier orchestrator → фінальна структура аналітичної довідки → evidence/manual review/versioning → після цього AUTO.RIA / нерухомість / OpenDataBot.**
 
 Причина: технічних “двигунів” уже багато. Найбільша потреба зараз — зібрати їх в один завершений користувацький сценарій, щоб кожне наступне джерело автоматично потрапляло у граф, аналітику, чат, довідку, PDF та Excel.
 
