@@ -43,6 +43,10 @@ import {
   loadReportSourceDocuments,
 } from "./source-documents-context.js";
 
+import {
+  stableFingerprint,
+} from "./utils.js";
+
 export const REPORT_MODEL_SCHEMA_VERSION =
   "report-model-v1";
 
@@ -57,6 +61,9 @@ export const ANALYTICAL_BRIEF_VERSION =
 
 export const REPORT_EVIDENCE_POLICY_VERSION =
   "report-evidence-policy-v1";
+
+export const RELATED_PERSON_REF_VERSION =
+  "related-person-ref-v1";
 
 export const REPORT_MODEL_LIMITATIONS = [
   "Відкриті джерела можуть бути неповними.",
@@ -1815,6 +1822,33 @@ export function buildCareerSection({
 }
 
 
+function buildRelatedPersonItemRef(
+  kind,
+  ...parts
+) {
+  if (
+    !kind ||
+    parts.some(
+      (part) =>
+        part === null ||
+        part === undefined ||
+        String(part).trim() === "",
+    )
+  ) {
+    return null;
+  }
+
+  return (
+    `${RELATED_PERSON_REF_VERSION}:` +
+    stableFingerprint(
+      RELATED_PERSON_REF_VERSION,
+      kind,
+      ...parts,
+    )
+  );
+}
+
+
 export function buildRelatedPeopleSection({
   familyContexts = [],
 } = {}) {
@@ -1893,7 +1927,20 @@ export function buildRelatedPeopleSection({
         canonicalSourceId ??
         null;
 
+      const itemRef =
+        buildRelatedPersonItemRef(
+          "family_member",
+          sourceDocumentId,
+          cleanValue(
+            value.person_ref,
+          ),
+          year,
+        );
+
       items.push({
+        item_ref:
+          itemRef,
+
         entity_id:
           null,
 
@@ -2351,7 +2398,17 @@ export function buildThirdPartyPeopleSection({
         continue;
       }
 
+      const itemRef =
+        buildRelatedPersonItemRef(
+          "third_party_rightsholder",
+          relation.relation_id,
+          side,
+        );
+
       items.push({
+        item_ref:
+          itemRef,
+
         entity_id:
           null,
 

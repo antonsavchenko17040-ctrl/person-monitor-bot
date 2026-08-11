@@ -1,8 +1,8 @@
 # Person Monitor — функціональна модель, поточний стан і дорожня карта
 
 **Дата фіксації:** 12.08.2026
-**Базова точка:** блок 5.4D «Report contract versioning» закрито; presentation manifest та evidence policy мають явні версії в canonical report methodology.
-**Технічний стан:** 566/566 тестів пройдено; `ANALYTICAL_BRIEF_VERSION` і `REPORT_EVIDENCE_POLICY_VERSION` є явними canonical constants, `analytical_brief.version` не захардкоджений окремо, а `methodology` експонує версії presentation/evidence contract; persistence, `report_id` та audit trail ще не реалізовані.
+**Базова точка:** блок 5.4E1 «Stable canonical related-person references» закрито; family і third-party projections мають deterministic opaque `item_ref`, придатні для стабільних manual-review references без array indexes або ПІБ у ключі.
+**Технічний стан:** 568/568 тестів пройдено; `RELATED_PERSON_REF_VERSION` задає versioned opaque references: family ref базується на source document/person provenance та році, third-party ref — на canonical `relation_id` і стороні relation; недостатній provenance не має fallback на ПІБ. Manual Review Queue, persistence, `report_id` та audit trail ще не реалізовані.
 
 ## 1. Що повинен вміти портал
 
