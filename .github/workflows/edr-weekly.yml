@@ -1,0 +1,59 @@
+name: EDR Weekly Check
+
+on:
+  workflow_dispatch:
+
+  schedule:
+    - cron: "17 6 * * 1"
+      timezone: "Europe/Kyiv"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: edr-weekly-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check official EDR dataset
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run test suite
+        run: npm test
+
+      - name: Verify DATABASE_URL secret
+        shell: bash
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "DATABASE_URL repository secret is not configured."
+            exit 1
+          fi
+
+      - name: Verify EDR database schema
+        run: node scripts/migrate-edr-schema.js --verify-only
+
+      - name: Check official EDR dataset
+        run: node scripts/check-edr-weekly-sync.js
+
+      - name: Confirm import guard
+        run: |
+          echo "Weekly workflow is check-only."
+          echo "Full EDR ZIP download/import remains disabled."
