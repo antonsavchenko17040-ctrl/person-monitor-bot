@@ -167,7 +167,14 @@ export function buildSubjectSearchPlan(
         priority:
           nameIndex === 0
             ? 100
-            : 85,
+            : (
+                name
+                  .split(/\\s+/)
+                  .filter(Boolean)
+                  .length >= 3
+                  ? 85
+                  : 60
+              ),
       },
     );
   }

@@ -1,6 +1,7 @@
 import { config } from "../config.js";
 import { fetchJson } from "./http.js";
 import { buildNameQuery } from "./query.js";
+import { searchSmartGoogleWeb } from "../smart-google-web.js";
 
 function safeDate(value) {
   if (!value) return undefined;
@@ -99,6 +100,51 @@ export async function searchGoogleQuery(query, options = {}) {
   return searchSerperQuery(query, options);
 }
 
-export async function searchGoogleWeb(subject) {
-  return searchGoogleQuery(buildNameQuery(subject));
+export async function searchGoogleWebDetailed(
+  subject,
+  {
+    searchQuery = searchGoogleQuery,
+    maxQueries,
+  } = {},
+) {
+  const settings = config();
+
+  return searchSmartGoogleWeb(
+    subject,
+    {
+      maxQueries:
+        maxQueries ??
+        settings.maxGoogleWebQueries,
+
+      searchQuery:
+        (query, options) =>
+          searchQuery(
+            query,
+            {
+              ...options,
+              keepOperators: true,
+            },
+          ),
+    },
+  );
+}
+
+export async function searchGoogleWeb(
+  subject,
+  options = {},
+) {
+  const output =
+    await searchGoogleWebDetailed(
+      subject,
+      options,
+    );
+
+  if (output.errors.length) {
+    console.warn(
+      "[google-web] failed queries:",
+      output.errors.length,
+    );
+  }
+
+  return output.results;
 }

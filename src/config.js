@@ -24,6 +24,7 @@ export function config() {
     courtIndexFile: path.resolve("./data/court-open-data/index.json"),
     lookbackDays: numberEnv("MONITOR_LOOKBACK_DAYS", 7, 1, 30),
     maxResultsPerProvider: numberEnv("MONITOR_MAX_RESULTS_PER_PROVIDER", 30, 5, 100),
+    maxGoogleWebQueries: numberEnv("MONITOR_GOOGLE_WEB_MAX_QUERIES", 4, 1, 16),
     defaultMatchThreshold: numberEnv("DEFAULT_MATCH_THRESHOLD", 75, 50, 95),
     serpApiKey: process.env.SERPAPI_API_KEY?.trim() || null,
     serperApiKey: process.env.SERPER_API_KEY?.trim() || null,
