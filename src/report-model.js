@@ -52,6 +52,12 @@ export const REPORT_ANALYTICS_VERSION =
 export const REPORT_RULES_VERSION =
   "report-rules-v1";
 
+export const ANALYTICAL_BRIEF_VERSION =
+  "analytical-brief-v1";
+
+export const REPORT_EVIDENCE_POLICY_VERSION =
+  "report-evidence-policy-v1";
+
 export const REPORT_MODEL_LIMITATIONS = [
   "Відкриті джерела можуть бути неповними.",
   "Відсутність запису не доводить відсутність факту.",
@@ -3335,7 +3341,7 @@ function resolveExecutiveSummaryEvidence(
 function buildAnalyticalBriefManifest() {
   return {
     version:
-      "analytical-brief-v1",
+      ANALYTICAL_BRIEF_VERSION,
 
     sections: [
       {
@@ -3836,6 +3842,12 @@ export function buildSubjectReportModelPayload({
 
       rules_version:
         REPORT_RULES_VERSION,
+
+      analytical_brief_version:
+        ANALYTICAL_BRIEF_VERSION,
+
+      evidence_policy_version:
+        REPORT_EVIDENCE_POLICY_VERSION,
 
       notes: [],
 

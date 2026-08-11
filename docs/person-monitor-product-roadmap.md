@@ -1,8 +1,8 @@
 # Person Monitor — функціональна модель, поточний стан і дорожня карта
 
 **Дата фіксації:** 12.08.2026
-**Базова точка:** блок 5.4C «Analytical brief presentation manifest» закрито; canonical report model має стабільну ordered-структуру аналітичної довідки без дублювання фактів.
-**Технічний стан:** 565/565 тестів пройдено; `analytical_brief` версії `analytical-brief-v1` задає стабільний порядок presentation sections через `source_paths`, посилається лише на canonical top-level sections і не створює паралельну модель фактів.
+**Базова точка:** блок 5.4D «Report contract versioning» закрито; presentation manifest та evidence policy мають явні версії в canonical report methodology.
+**Технічний стан:** 566/566 тестів пройдено; `ANALYTICAL_BRIEF_VERSION` і `REPORT_EVIDENCE_POLICY_VERSION` є явними canonical constants, `analytical_brief.version` не захардкоджений окремо, а `methodology` експонує версії presentation/evidence contract; persistence, `report_id` та audit trail ще не реалізовані.
 
 ## 1. Що повинен вміти портал
 
@@ -49,7 +49,7 @@ Person Monitor має бути не просто пошуковим сайтом
 | 19 | Декларації третіх осіб | 🟡 Частково | Треті особи вже витягуються; автоматичний пошук їх декларацій ще потрібен. |
 | 20 | Пул новин пов’язаних із суб’єктом | 🟡 Сильно просунуто | Google Web/News, corruption gate, identity gate, full-text verification і класифікація ролі суб’єкта готові. Далі — фінальне збереження/представлення у досьє. |
 | 21 | Формування метрик | 🟡 Частково | Analytics/metrics/findings є; затвердити фінальний набір і шкалу ризиків/сигналів. |
-| 22 | Структура на кроки + аналітична довідка | 🟡 Частково | Canonical model, orchestration core, authenticated POST API, evidence-backed executive summary та `analytical_brief` presentation manifest є; потрібні narrative, evidence UI та фінальне представлення досьє. |
+| 22 | Структура на кроки + аналітична довідка | 🟡 Частково | Canonical model, orchestration core, authenticated POST API, evidence-backed executive summary, `analytical_brief` manifest і versioned presentation/evidence contract є; потрібні narrative, evidence UI та фінальне представлення досьє. |
 | 23 | Математичні правила порівняння | 🟡 Частково | Частина правил є; потрібна формалізована rule matrix для всіх ключових типів даних. |
 | 24 | Зробити PDF | 🔁 Дублікат | Об’єднати з пунктом №3. |
 
