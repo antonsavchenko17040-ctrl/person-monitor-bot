@@ -37,6 +37,18 @@ import {
   resolveActiveEdrSubjectMatch,
 } from "../src/edr-subject-resolution.js";
 
+import {
+  buildEdrSubjectRelationPlan,
+} from "../src/edr-relation-graph.js";
+
+import {
+  persistEdrSubjectRelationPlan,
+} from "../src/edr-relation-store.js";
+
+import {
+  loadSubjectGraph,
+} from "../src/subject-graph.js";
+
 function assert(condition, message) {
   if (!condition) {
     throw new Error(
@@ -150,6 +162,9 @@ const runId =
 
 let successSnapshotId = null;
 let failureSnapshotId = null;
+
+let graphSubjectId = null;
+let graphSubjectEntityId = null;
 
 try {
   console.log(
@@ -664,6 +679,265 @@ try {
     "EDR subject matching integration: PASS",
   );
 
+  console.log(
+    "=== EDR GRAPH PERSISTENCE ===",
+  );
+
+  graphSubjectEntityId =
+    randomUUID();
+
+  graphSubjectId =
+    randomUUID();
+
+  await sql`
+    INSERT INTO entities (
+      id,
+      entity_type,
+      canonical_name,
+      status,
+      metadata
+    )
+    VALUES (
+      ${graphSubjectEntityId},
+      ${"person"},
+      ${"ІНТЕГРАЦІЙНИЙ ЗАСНОВНИК"},
+      ${"active"},
+      ${JSON.stringify({
+        integration_test: true,
+        run_id: runId,
+      })}::jsonb
+    )
+  `;
+
+  await sql`
+    INSERT INTO subjects (
+      id,
+      full_name,
+      entity_id
+    )
+    VALUES (
+      ${graphSubjectId},
+      ${"ІНТЕГРАЦІЙНИЙ ЗАСНОВНИК"},
+      ${graphSubjectEntityId}
+    )
+  `;
+
+  const graphPlan =
+    buildEdrSubjectRelationPlan({
+      subjectEntityId:
+        graphSubjectEntityId,
+      resolution:
+        ambiguousFounder,
+    });
+
+  assert(
+    graphPlan.nodes.length === 1 &&
+      graphPlan.relations.length === 1,
+    "founder resolution must create one graph organization and one relation",
+  );
+
+  graphPlan.nodes[0].metadata = {
+    ...graphPlan.nodes[0].metadata,
+    integration_test: true,
+    run_id: runId,
+  };
+
+  graphPlan.relations[0].metadata = {
+    ...graphPlan.relations[0].metadata,
+    integration_test: true,
+    run_id: runId,
+  };
+
+  const graphOrganizationId =
+    graphPlan.nodes[0].id;
+
+  const graphRelationId =
+    graphPlan.relations[0].id;
+
+  const [beforeGraphPersist] =
+    await sql`
+      SELECT
+        (
+          SELECT count(*)::int
+          FROM entities
+          WHERE id =
+            ${graphOrganizationId}
+        ) AS organizations,
+
+        (
+          SELECT count(*)::int
+          FROM relations
+          WHERE id =
+            ${graphRelationId}
+        ) AS relations
+    `;
+
+  assert(
+    beforeGraphPersist.organizations === 0 &&
+      beforeGraphPersist.relations === 0,
+    "synthetic graph ids must be unused before persistence",
+  );
+
+  const firstGraphPersist =
+    await persistEdrSubjectRelationPlan(
+      graphPlan,
+      { sql },
+    );
+
+  assert(
+    firstGraphPersist.nodesInserted === 1 &&
+      firstGraphPersist.identifiersInserted === 1 &&
+      firstGraphPersist.relationsInserted === 1,
+    "first graph persistence must insert node identifier and relation",
+  );
+
+  const secondGraphPersist =
+    await persistEdrSubjectRelationPlan(
+      graphPlan,
+      { sql },
+    );
+
+  assert(
+    secondGraphPersist.nodesInserted === 0 &&
+      secondGraphPersist.nodesUpdated === 1 &&
+      secondGraphPersist.identifiersInserted === 0 &&
+      secondGraphPersist.relationsInserted === 0 &&
+      secondGraphPersist.relationsUpdated === 1,
+    "second graph persistence must be idempotent",
+  );
+
+  const [storedGraph] =
+    await sql`
+      SELECT
+        (
+          SELECT count(*)::int
+          FROM entities
+          WHERE id =
+            ${graphOrganizationId}
+        ) AS organizations,
+
+        (
+          SELECT count(*)::int
+          FROM entity_identifiers
+          WHERE
+            entity_id =
+              ${graphOrganizationId}
+            AND identifier_type =
+              ${"edrpou"}
+            AND normalized_value =
+              ${"00000001"}
+        ) AS identifiers,
+
+        (
+          SELECT count(*)::int
+          FROM relations
+          WHERE id =
+            ${graphRelationId}
+        ) AS relations,
+
+        (
+          SELECT verification_status
+          FROM relations
+          WHERE id =
+            ${graphRelationId}
+        ) AS verification_status,
+
+        (
+          SELECT metadata
+          FROM relations
+          WHERE id =
+            ${graphRelationId}
+        ) AS relation_metadata
+    `;
+
+  assert(
+    storedGraph.organizations === 1 &&
+      storedGraph.identifiers === 1 &&
+      storedGraph.relations === 1,
+    "idempotent persistence must leave exactly one graph node identifier and relation",
+  );
+
+  assert(
+    storedGraph.verification_status ===
+      "manual_review",
+    "EDR graph relation must remain manual review",
+  );
+
+  const storedGraphMetadata =
+    storedGraph.relation_metadata ?? {};
+
+  assert(
+    Array.isArray(
+      storedGraphMetadata.observation_ids,
+    ) &&
+      storedGraphMetadata.observation_ids.length ===
+        1,
+    "repeated persistence must not duplicate observation evidence",
+  );
+
+  assert(
+    Array.isArray(
+      storedGraphMetadata.snapshot_ids,
+    ) &&
+      storedGraphMetadata.snapshot_ids.length ===
+        1 &&
+      storedGraphMetadata.snapshot_ids[0] ===
+        successSnapshotId,
+    "repeated persistence must keep one active snapshot provenance entry",
+  );
+
+  const subjectGraph =
+    await loadSubjectGraph(
+      graphSubjectId,
+      { sql },
+    );
+
+  assert(
+    subjectGraph?.year === null &&
+      subjectGraph.available_years.length === 0,
+    "EDR-only subject graph must work without declaration year",
+  );
+
+  assert(
+    subjectGraph.nodes.length === 2 &&
+      subjectGraph.edges.length === 1,
+    "EDR-only subject graph must contain subject organization and relation",
+  );
+
+  const edrGraphEdge =
+    subjectGraph.edges[0];
+
+  assert(
+    edrGraphEdge.type ===
+      "edr_founder_of" &&
+      edrGraphEdge.verification_status ===
+        "manual_review" &&
+      edrGraphEdge.metadata?.source ===
+        "edr" &&
+      edrGraphEdge.metadata?.review_required ===
+        true,
+    "subject graph must expose EDR founder relation as manual review",
+  );
+
+  console.log({
+    first_persist:
+      firstGraphPersist,
+    second_persist:
+      secondGraphPersist,
+    graph_nodes:
+      subjectGraph.nodes.length,
+    graph_edges:
+      subjectGraph.edges.length,
+    relation_type:
+      edrGraphEdge.type,
+    verification_status:
+      edrGraphEdge.verification_status,
+  });
+
+  console.log(
+    "EDR graph persistence integration: PASS",
+  );
+
   const [successState] =
     await sql`
       SELECT
@@ -805,6 +1079,32 @@ try {
     "=== CLEANUP ===",
   );
 
+  await sql`
+    DELETE FROM relations
+    WHERE
+      jsonb_extract_path_text(
+        metadata,
+        ${"run_id"}
+      ) = ${runId}
+  `;
+
+  if (graphSubjectId) {
+    await sql`
+      DELETE FROM subjects
+      WHERE id =
+        ${graphSubjectId}
+    `;
+  }
+
+  await sql`
+    DELETE FROM entities
+    WHERE
+      jsonb_extract_path_text(
+        metadata,
+        ${"run_id"}
+      ) = ${runId}
+  `;
+
   await restoreActiveSnapshot(
     sql,
     previousActive,
@@ -848,7 +1148,34 @@ try {
           WHERE s.metadata ->>
             'run_id' =
             ${runId}
-        ) AS records
+        ) AS records,
+
+        (
+          SELECT count(*)::int
+          FROM relations
+          WHERE
+            jsonb_extract_path_text(
+              metadata,
+              ${"run_id"}
+            ) = ${runId}
+        ) AS graph_relations,
+
+        (
+          SELECT count(*)::int
+          FROM entities
+          WHERE
+            jsonb_extract_path_text(
+              metadata,
+              ${"run_id"}
+            ) = ${runId}
+        ) AS graph_entities,
+
+        (
+          SELECT count(*)::int
+          FROM subjects
+          WHERE id =
+            ${graphSubjectId}
+        ) AS graph_subjects
     `;
 
   assert(
@@ -861,6 +1188,13 @@ try {
     "integration records must be removed",
   );
 
+  assert(
+    leftovers.graph_relations === 0 &&
+      leftovers.graph_entities === 0 &&
+      leftovers.graph_subjects === 0,
+    "integration graph rows must be removed",
+  );
+
   console.log({
     restored_active_snapshot:
       activeAfterCleanup?.id ?? null,
@@ -868,5 +1202,11 @@ try {
       leftovers.snapshots,
     integration_records_left:
       leftovers.records,
+    integration_graph_relations_left:
+      leftovers.graph_relations,
+    integration_graph_entities_left:
+      leftovers.graph_entities,
+    integration_graph_subjects_left:
+      leftovers.graph_subjects,
   });
 }
