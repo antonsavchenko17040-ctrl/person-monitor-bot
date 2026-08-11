@@ -287,7 +287,7 @@ test("inserts new EDR node identifier and relation", async () => {
           "INSERT INTO entity_identifiers",
         ) &&
         text.includes(
-          "edr",
+          "'edr'",
         ),
     ),
   );
@@ -299,7 +299,7 @@ test("inserts new EDR node identifier and relation", async () => {
           "INSERT INTO relations",
         ) &&
         text.includes(
-          "manual_review",
+          "'manual_review'",
         ),
     ),
   );
@@ -447,5 +447,61 @@ test("empty plan performs no database writes", async () => {
       relationsInserted: 0,
       relationsUpdated: 0,
     },
+  );
+});
+
+
+test("writes quoted SQL literals for EDR graph persistence", async () => {
+  const sql =
+    fakeSql();
+
+  await persistEdrSubjectRelationPlan(
+    graphPlan(),
+    { sql },
+  );
+
+  const quote =
+    String.fromCharCode(39);
+
+  const entityInsert =
+    sql.calls.find(
+      ({ text }) =>
+        text.includes(
+          "INSERT INTO entities",
+        ),
+    );
+
+  const identifierInsert =
+    sql.calls.find(
+      ({ text }) =>
+        text.includes(
+          "INSERT INTO entity_identifiers",
+        ),
+    );
+
+  const relationInsert =
+    sql.calls.find(
+      ({ text }) =>
+        text.includes(
+          "INSERT INTO relations",
+        ),
+    );
+
+  assert.ok(
+    entityInsert.text.includes(
+      quote + "active" + quote,
+    ),
+  );
+
+  assert.ok(
+    identifierInsert.text.includes(
+      quote + "edr" + quote,
+    ),
+  );
+
+  assert.ok(
+    relationInsert.text.includes(
+      quote + "manual_review" + quote,
+    ),
   );
 });

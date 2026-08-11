@@ -212,7 +212,7 @@ async function persistNode(
       ${normalizeText(
         node.canonicalName,
       )},
-      active,
+      'active',
       ${JSON.stringify(
         metadata,
       )}::jsonb
@@ -267,7 +267,7 @@ async function persistNode(
         ${node.identifier.type},
         ${node.identifier.value},
         ${node.identifier.normalized},
-        edr,
+        'edr',
         ${node.identifier.confidence},
         true,
         NULL,
@@ -344,7 +344,7 @@ async function persistRelation(
       ${relation.validFrom}::date,
       ${relation.validTo}::date,
       ${confidence},
-      manual_review,
+      'manual_review',
       ${JSON.stringify(
         metadata,
       )}::jsonb
