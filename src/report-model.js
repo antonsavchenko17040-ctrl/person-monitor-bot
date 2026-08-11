@@ -3332,6 +3332,120 @@ function resolveExecutiveSummaryEvidence(
 }
 
 
+function buildAnalyticalBriefManifest() {
+  return {
+    version:
+      "analytical-brief-v1",
+
+    sections: [
+      {
+        code:
+          "overview",
+
+        title:
+          "Профіль та декларації",
+
+        source_paths: [
+          "meta",
+          "subject",
+          "identity",
+          "declarations",
+        ],
+      },
+
+      {
+        code:
+          "key_findings",
+
+        title:
+          "Ключові сигнали",
+
+        source_paths: [
+          "executive_summary",
+        ],
+      },
+
+      {
+        code:
+          "career_relations",
+
+        title:
+          "Кар’єра та зв’язки",
+
+        source_paths: [
+          "career",
+          "related_people",
+          "relations",
+        ],
+      },
+
+      {
+        code:
+          "finances",
+
+        title:
+          "Доходи та грошові активи",
+
+        source_paths: [
+          "income",
+          "cash_assets",
+        ],
+      },
+
+      {
+        code:
+          "assets",
+
+        title:
+          "Нерухомість та транспорт",
+
+        source_paths: [
+          "real_estate",
+          "vehicles",
+        ],
+      },
+
+      {
+        code:
+          "analytics",
+
+        title:
+          "Аналітика та зміни",
+
+        source_paths: [
+          "analytics",
+        ],
+      },
+
+      {
+        code:
+          "media",
+
+        title:
+          "Релевантні згадки",
+
+        source_paths: [
+          "mentions",
+        ],
+      },
+
+      {
+        code:
+          "evidence",
+
+        title:
+          "Джерела та методологія",
+
+        source_paths: [
+          "sources",
+          "methodology",
+        ],
+      },
+    ],
+  };
+}
+
+
 export function buildSubjectReportModelPayload({
   subject,
   generatedAt = new Date(),
@@ -3673,6 +3787,9 @@ export function buildSubjectReportModelPayload({
 
     executive_summary:
       executiveSummarySection,
+
+    analytical_brief:
+      buildAnalyticalBriefManifest(),
 
     declarations:
       declarationSection,
