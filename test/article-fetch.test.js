@@ -685,3 +685,112 @@ test(
   },
 );
 
+test(
+  "rejects non-public and reserved IPv4 ranges",
+  () => {
+    const blocked = [
+      "100.64.0.1",
+      "100.127.255.254",
+      "192.0.0.1",
+      "192.0.2.1",
+      "192.88.99.1",
+      "198.18.0.1",
+      "198.19.255.254",
+      "198.51.100.1",
+      "203.0.113.1",
+      "224.0.0.1",
+      "239.255.255.255",
+      "240.0.0.1",
+      "255.255.255.255",
+    ];
+
+    for (
+      const address
+      of blocked
+    ) {
+      assert.throws(
+        () =>
+          validateArticleUrl(
+            "http://" +
+            address +
+            "/article",
+          ),
+      );
+    }
+  },
+);
+
+test(
+  "rejects DNS resolution to non-public IPv4 range",
+  async () => {
+    await assert.rejects(
+      () =>
+        validateArticleDns(
+          "https://example.com/article",
+          {
+            lookupFn:
+              async () => [
+                {
+                  address:
+                    "100.64.1.2",
+
+                  family:
+                    4,
+                },
+              ],
+          },
+        ),
+    );
+
+    await assert.rejects(
+      () =>
+        validateArticleDns(
+          "https://example.com/article",
+          {
+            lookupFn:
+              async () => [
+                {
+                  address:
+                    "198.18.0.10",
+
+                  family:
+                    4,
+                },
+              ],
+          },
+        ),
+    );
+  },
+);
+
+test(
+  "pinned lookup rejects reserved IPv4 defensively",
+  () => {
+    assert.throws(
+      () =>
+        createPinnedLookup([
+          {
+            address:
+              "203.0.113.10",
+
+            family:
+              4,
+          },
+        ]),
+    );
+
+    assert.throws(
+      () =>
+        createPinnedLookup([
+          {
+            address:
+              "224.0.0.1",
+
+            family:
+              4,
+          },
+        ]),
+    );
+  },
+);
+
