@@ -3182,6 +3182,49 @@ export function buildSourcesSection({ rows = [] } = {}) {
   return { items };
 }
 
+function safeExecutiveSummaryDetails(
+  value,
+) {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value)
+  ) {
+    return null;
+  }
+
+  const allowed = [
+    "from_year",
+    "to_year",
+    "cash_uah_delta",
+    "current_income_uah",
+    "ratio",
+    "income_delta_uah",
+    "income_delta_percent",
+    "count_delta",
+    "previous_count",
+    "current_count",
+    "organization_changed",
+    "position_changed",
+  ];
+
+  return Object.fromEntries(
+    allowed
+      .filter(
+        (key) =>
+          value[key] !== null &&
+          value[key] !== undefined,
+      )
+      .map(
+        (key) => [
+          key,
+          value[key],
+        ],
+      ),
+  );
+}
+
+
 export function buildSubjectReportModelPayload({
   subject,
   generatedAt = new Date(),
@@ -3319,6 +3362,148 @@ export function buildSubjectReportModelPayload({
         : [],
   };
 
+  const executiveSummarySection =
+    analyticsSection
+      .findings
+      .length
+      ? {
+          status:
+            "generated",
+
+          items:
+            analyticsSection
+              .findings
+              .map(
+                (finding, index) => ({
+                  finding,
+                  index,
+                }),
+              )
+              .sort(
+                (left, right) => {
+                  const severityPriority = {
+                    review:
+                      2,
+
+                    info:
+                      1,
+                  };
+
+                  const leftSeverity =
+                    severityPriority[
+                      left
+                        .finding
+                        ?.severity
+                    ] ?? 0;
+
+                  const rightSeverity =
+                    severityPriority[
+                      right
+                        .finding
+                        ?.severity
+                    ] ?? 0;
+
+                  if (
+                    leftSeverity !==
+                    rightSeverity
+                  ) {
+                    return (
+                      rightSeverity -
+                      leftSeverity
+                    );
+                  }
+
+                  const leftScore =
+                    numericValue(
+                      left
+                        .finding
+                        ?.score,
+                    ) ?? -Infinity;
+
+                  const rightScore =
+                    numericValue(
+                      right
+                        .finding
+                        ?.score,
+                    ) ?? -Infinity;
+
+                  if (
+                    leftScore !==
+                    rightScore
+                  ) {
+                    return (
+                      rightScore -
+                      leftScore
+                    );
+                  }
+
+                  return (
+                    left.index -
+                    right.index
+                  );
+                },
+              )
+              .slice(
+                0,
+                8,
+              )
+              .map(
+                ({ finding }) => ({
+                  rule_code:
+                    cleanValue(
+                      finding?.rule_code,
+                    ),
+
+                  domain:
+                    cleanValue(
+                      finding?.domain,
+                    ),
+
+                  result:
+                    cleanValue(
+                      finding?.result,
+                    ),
+
+                  severity:
+                    cleanValue(
+                      finding?.severity,
+                    ),
+
+                  score:
+                    numericValue(
+                      finding?.score,
+                    ),
+
+                  message:
+                    cleanValue(
+                      finding?.message,
+                    ),
+
+                  details:
+                    safeExecutiveSummaryDetails(
+                      finding?.details,
+                    ),
+
+                  statement_type:
+                    cleanValue(
+                      finding
+                        ?.statement_type,
+                    ),
+
+                  evidence:
+                    reportEvidence(
+                      finding?.evidence,
+                    ),
+                }),
+              ),
+        }
+      : {
+          status:
+            "not_generated",
+
+          items: [],
+        };
+
   return {
     schema_version:
       REPORT_MODEL_SCHEMA_VERSION,
@@ -3363,10 +3548,8 @@ export function buildSubjectReportModelPayload({
       reasons: [],
     },
 
-    executive_summary: {
-      status: "not_generated",
-      items: [],
-    },
+    executive_summary:
+      executiveSummarySection,
 
     declarations:
       declarationSection,

@@ -1,8 +1,8 @@
 # Person Monitor — функціональна модель, поточний стан і дорожня карта
 
-**Дата фіксації:** 11.08.2026  
-**Базова точка:** блок 5.3 «Authenticated dossier API boundary» закрито; unified dossier workflow доступний через authenticated POST endpoint `/api/dossier?subjectId=...`.
-**Технічний стан:** 557/557 тестів пройдено; dossier API має POST-only boundary, portal authentication, UUID validation, `subject_not_found → 404`, safe `500` без витоку внутрішніх exception messages та повертає usable `partial` dossier як `200`.
+**Дата фіксації:** 12.08.2026
+**Базова точка:** блок 5.4A «Deterministic executive summary» закрито; canonical report model формує evidence-backed executive summary без окремого LLM-шару.
+**Технічний стан:** 560/560 тестів пройдено; `executive_summary` детерміновано проєктується з canonical `analytics.findings`, використовує allowlist полів, нормалізоване evidence/provenance, пріоритет `review → info` та ліміт до 8 пунктів.
 
 ## 1. Що повинен вміти портал
 
@@ -49,7 +49,7 @@ Person Monitor має бути не просто пошуковим сайтом
 | 19 | Декларації третіх осіб | 🟡 Частково | Треті особи вже витягуються; автоматичний пошук їх декларацій ще потрібен. |
 | 20 | Пул новин пов’язаних із суб’єктом | 🟡 Сильно просунуто | Google Web/News, corruption gate, identity gate, full-text verification і класифікація ролі суб’єкта готові. Далі — фінальне збереження/представлення у досьє. |
 | 21 | Формування метрик | 🟡 Частково | Analytics/metrics/findings є; затвердити фінальний набір і шкалу ризиків/сигналів. |
-| 22 | Структура на кроки + аналітична довідка | 🟡 Частково | Canonical model, orchestration core та authenticated POST API для формування досьє є; потрібні фінальна структура довідки, narrative, evidence та UI. |
+| 22 | Структура на кроки + аналітична довідка | 🟡 Частково | Canonical model, orchestration core, authenticated POST API та deterministic evidence-backed executive summary є; потрібні повний narrative, evidence UI та фінальне представлення досьє. |
 | 23 | Математичні правила порівняння | 🟡 Частково | Частина правил є; потрібна формалізована rule matrix для всіх ключових типів даних. |
 | 24 | Зробити PDF | 🔁 Дублікат | Об’єднати з пунктом №3. |
 

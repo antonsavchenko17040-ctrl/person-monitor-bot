@@ -5,6 +5,7 @@ import {
   REPORT_ANALYTICS_VERSION,
   REPORT_RULES_VERSION,
   buildReportAnalyticsSection,
+  buildSubjectReportModelPayload,
 } from "../src/report-model.js";
 
 test(
@@ -297,6 +298,402 @@ test(
           "heuristic_signal",
       ),
       true,
+    );
+  },
+);
+
+
+test(
+  "executive summary projects deterministic findings with evidence",
+  () => {
+    const evidence = [
+      {
+        source_document_id:
+          "source-1",
+
+        provider:
+          "nazk",
+
+        url:
+          "https://example.test/source-1",
+
+        observed_at:
+          null,
+
+        statement_type:
+          "source_fact",
+      },
+    ];
+
+    const report =
+      buildSubjectReportModelPayload({
+        subject: {
+          id:
+            "11111111-1111-4111-8111-111111111111",
+
+          full_name:
+            "Тестова Особа",
+        },
+
+        analytics: {
+          metrics: [],
+
+          transitions: [],
+
+          findings: [
+            {
+              rule_code:
+                "PM_TEST_FINDING_V1",
+
+              domain:
+                "financial_dynamics",
+
+              result:
+                "review",
+
+              severity:
+                "review",
+
+              score:
+                88,
+
+              message:
+                "Потрібна додаткова перевірка фінансової динаміки.",
+
+              details: {
+                from_year:
+                  2024,
+
+                to_year:
+                  2025,
+              },
+
+              statement_type:
+                "heuristic_signal",
+
+              evidence,
+            },
+          ],
+        },
+      });
+
+    assert.deepEqual(
+      report.executive_summary,
+      {
+        status:
+          "generated",
+
+        items: [
+          {
+            rule_code:
+              "PM_TEST_FINDING_V1",
+
+            domain:
+              "financial_dynamics",
+
+            result:
+              "review",
+
+            severity:
+              "review",
+
+            score:
+              88,
+
+            message:
+              "Потрібна додаткова перевірка фінансової динаміки.",
+
+            details: {
+              from_year:
+                2024,
+
+              to_year:
+                2025,
+            },
+
+            statement_type:
+              "heuristic_signal",
+
+            evidence,
+          },
+        ],
+      },
+    );
+  },
+);
+
+
+test(
+  "executive summary excludes internal finding and evidence fields",
+  () => {
+    const report =
+      buildSubjectReportModelPayload({
+        subject: {
+          id:
+            "11111111-1111-4111-8111-111111111111",
+
+          full_name:
+            "Тестова Особа",
+        },
+
+        analytics: {
+          findings: [
+            {
+              rule_code:
+                "PM_SAFE_SUMMARY_V1",
+
+              domain:
+                "financial_dynamics",
+
+              result:
+                "review",
+
+              severity:
+                "review",
+
+              score:
+                75,
+
+              message:
+                "Потрібна перевірка.",
+
+              details: {
+                from_year:
+                  2024,
+
+                to_year:
+                  2025,
+              },
+
+              statement_type:
+                "heuristic_signal",
+
+              internal_debug:
+                "must-not-leak",
+
+              evidence: [
+                {
+                  source_document_id:
+                    "source-1",
+
+                  provider:
+                    "nazk",
+
+                  url:
+                    "https://example.test/source-1",
+
+                  observed_at:
+                    null,
+
+                  statement_type:
+                    "source_fact",
+
+                  raw_payload:
+                    "must-not-leak",
+                },
+              ],
+            },
+          ],
+        },
+      });
+
+    assert.deepEqual(
+      report.executive_summary,
+      {
+        status:
+          "generated",
+
+        items: [
+          {
+            rule_code:
+              "PM_SAFE_SUMMARY_V1",
+
+            domain:
+              "financial_dynamics",
+
+            result:
+              "review",
+
+            severity:
+              "review",
+
+            score:
+              75,
+
+            message:
+              "Потрібна перевірка.",
+
+            details: {
+              from_year:
+                2024,
+
+              to_year:
+                2025,
+            },
+
+            statement_type:
+              "heuristic_signal",
+
+            evidence: [
+              {
+                source_document_id:
+                  "source-1",
+
+                provider:
+                  "nazk",
+
+                url:
+                  "https://example.test/source-1",
+
+                observed_at:
+                  null,
+
+                statement_type:
+                  "source_fact",
+              },
+            ],
+          },
+        ],
+      },
+    );
+
+    assert.equal(
+      JSON.stringify(
+        report.executive_summary,
+      ).includes(
+        "must-not-leak",
+      ),
+      false,
+    );
+  },
+);
+
+
+test(
+  "executive summary prioritizes and limits findings",
+  () => {
+    const findings =
+      Array.from(
+        {
+          length:
+            10,
+        },
+        (_, index) => ({
+          rule_code:
+            `PM_INFO_${index}_V1`,
+
+          domain:
+            "asset_dynamics",
+
+          result:
+            "change",
+
+          severity:
+            "info",
+
+          score:
+            100 - index,
+
+          message:
+            `Info ${index}`,
+
+          details: {
+            from_year:
+              2024,
+
+            to_year:
+              2025,
+          },
+
+          statement_type:
+            "heuristic_signal",
+
+          evidence: [],
+        }),
+      );
+
+    findings.push({
+      rule_code:
+        "PM_REVIEW_LOW_SCORE_V1",
+
+      domain:
+        "financial_dynamics",
+
+      result:
+        "review",
+
+      severity:
+        "review",
+
+      score:
+        10,
+
+      message:
+        "Review signal",
+
+      details: {
+        from_year:
+          2024,
+
+        to_year:
+          2025,
+      },
+
+      statement_type:
+        "heuristic_signal",
+
+      evidence: [],
+    });
+
+    const report =
+      buildSubjectReportModelPayload({
+        subject: {
+          id:
+            "11111111-1111-4111-8111-111111111111",
+
+          full_name:
+            "Тестова Особа",
+        },
+
+        analytics: {
+          findings,
+        },
+      });
+
+    assert.equal(
+      report
+        .executive_summary
+        .items
+        .length,
+      8,
+    );
+
+    assert.equal(
+      report
+        .executive_summary
+        .items[0]
+        .rule_code,
+      "PM_REVIEW_LOW_SCORE_V1",
+    );
+
+    assert.deepEqual(
+      report
+        .executive_summary
+        .items
+        .slice(1)
+        .map(
+          (item) =>
+            item.rule_code,
+        ),
+      [
+        "PM_INFO_0_V1",
+        "PM_INFO_1_V1",
+        "PM_INFO_2_V1",
+        "PM_INFO_3_V1",
+        "PM_INFO_4_V1",
+        "PM_INFO_5_V1",
+        "PM_INFO_6_V1",
+      ],
     );
   },
 );
