@@ -529,3 +529,425 @@ test(
     );
   },
 );
+
+
+test(
+  "runs ingestion between refresh and canonical report",
+  async () => {
+    const calls = [];
+
+    const subject = {
+      id: 42,
+      entity_id: "entity-42",
+      full_name: "Олексій Чернишов",
+    };
+
+    const refreshResult = {
+      scanned: 1,
+      mentions: [],
+      newMentions: [],
+      errors: [],
+    };
+
+    const ingestionResult = {
+      facts: 3,
+      relations: 2,
+    };
+
+    const report = {
+      schema_version:
+        "report-model-v1",
+    };
+
+    const result =
+      await runSubjectDossier(
+        42,
+        {
+          subjectLoader:
+            async () => {
+              calls.push(
+                "subject",
+              );
+
+              return subject;
+            },
+
+          refreshSubject:
+            async () => {
+              calls.push(
+                "refresh",
+              );
+
+              return refreshResult;
+            },
+
+          ingestSubject:
+            async (loadedSubject) => {
+              calls.push(
+                "ingest",
+              );
+
+              assert.equal(
+                loadedSubject.id,
+                42,
+              );
+
+              return ingestionResult;
+            },
+
+          reportBuilder:
+            async () => {
+              calls.push(
+                "report",
+              );
+
+              return report;
+            },
+        },
+      );
+
+    assert.deepEqual(
+      calls,
+      [
+        "subject",
+        "refresh",
+        "ingest",
+        "report",
+      ],
+    );
+
+    assert.deepEqual(
+      result.ingestion,
+      ingestionResult,
+    );
+
+    assert.equal(
+      result.steps.ingestion.status,
+      "completed",
+    );
+
+    assert.equal(
+      result.status,
+      "completed",
+    );
+  },
+);
+
+
+test(
+  "builds canonical report when ingestion fails",
+  async () => {
+    let reportCalled =
+      false;
+
+    const subject = {
+      id: 42,
+      entity_id: "entity-42",
+      full_name: "Олексій Чернишов",
+    };
+
+    const refreshResult = {
+      scanned: 1,
+      mentions: [],
+      newMentions: [],
+      errors: [],
+    };
+
+    const report = {
+      schema_version:
+        "report-model-v1",
+    };
+
+    const result =
+      await runSubjectDossier(
+        42,
+        {
+          subjectLoader:
+            async () =>
+              subject,
+
+          refreshSubject:
+            async () =>
+              refreshResult,
+
+          ingestSubject:
+            async () => {
+              throw new Error(
+                "ingestion unavailable",
+              );
+            },
+
+          reportBuilder:
+            async () => {
+              reportCalled =
+                true;
+
+              return report;
+            },
+        },
+      );
+
+    assert.equal(
+      reportCalled,
+      true,
+    );
+
+    assert.equal(
+      result.status,
+      "partial",
+    );
+
+    assert.deepEqual(
+      result.subject,
+      subject,
+    );
+
+    assert.deepEqual(
+      result.refresh,
+      refreshResult,
+    );
+
+    assert.equal(
+      result.ingestion,
+      null,
+    );
+
+    assert.deepEqual(
+      result.report,
+      report,
+    );
+
+    assert.deepEqual(
+      result.steps,
+      {
+        subject: {
+          status: "completed",
+        },
+
+        refresh: {
+          status: "completed",
+        },
+
+        ingestion: {
+          status: "failed",
+        },
+
+        report: {
+          status: "completed",
+        },
+      },
+    );
+
+    assert.deepEqual(
+      result.errors,
+      [
+        {
+          step: "ingestion",
+          code: "ingestion_failed",
+          message:
+            "ingestion unavailable",
+        },
+      ],
+    );
+  },
+);
+
+
+test(
+  "preserves refresh and ingestion errors while building report",
+  async () => {
+    const subject = {
+      id: 42,
+      entity_id: "entity-42",
+      full_name: "Олексій Чернишов",
+    };
+
+    const report = {
+      schema_version:
+        "report-model-v1",
+    };
+
+    const result =
+      await runSubjectDossier(
+        42,
+        {
+          subjectLoader:
+            async () =>
+              subject,
+
+          refreshSubject:
+            async () => {
+              throw new Error(
+                "refresh unavailable",
+              );
+            },
+
+          ingestSubject:
+            async () => {
+              throw new Error(
+                "ingestion unavailable",
+              );
+            },
+
+          reportBuilder:
+            async () =>
+              report,
+        },
+      );
+
+    assert.equal(
+      result.status,
+      "partial",
+    );
+
+    assert.equal(
+      result.refresh,
+      null,
+    );
+
+    assert.equal(
+      result.ingestion,
+      null,
+    );
+
+    assert.deepEqual(
+      result.report,
+      report,
+    );
+
+    assert.deepEqual(
+      result.steps,
+      {
+        subject: {
+          status: "completed",
+        },
+
+        refresh: {
+          status: "failed",
+        },
+
+        ingestion: {
+          status: "failed",
+        },
+
+        report: {
+          status: "completed",
+        },
+      },
+    );
+
+    assert.deepEqual(
+      result.errors,
+      [
+        {
+          step: "refresh",
+          code: "refresh_failed",
+          message:
+            "refresh unavailable",
+        },
+
+        {
+          step: "ingestion",
+          code: "ingestion_failed",
+          message:
+            "ingestion unavailable",
+        },
+      ],
+    );
+  },
+);
+
+
+test(
+  "marks refresh partial when provider errors are returned",
+  async () => {
+    const subject = {
+      id: 42,
+      entity_id: "entity-42",
+      full_name: "Олексій Чернишов",
+    };
+
+    const refreshResult = {
+      scanned: 2,
+      mentions: [],
+      newMentions: [],
+      errors: [
+        {
+          provider:
+            "google_news",
+
+          error:
+            "provider unavailable",
+        },
+      ],
+    };
+
+    const report = {
+      schema_version:
+        "report-model-v1",
+    };
+
+    const result =
+      await runSubjectDossier(
+        42,
+        {
+          subjectLoader:
+            async () =>
+              subject,
+
+          refreshSubject:
+            async () =>
+              refreshResult,
+
+          reportBuilder:
+            async () =>
+              report,
+        },
+      );
+
+    assert.equal(
+      result.status,
+      "partial",
+    );
+
+    assert.deepEqual(
+      result.refresh,
+      refreshResult,
+    );
+
+    assert.deepEqual(
+      result.report,
+      report,
+    );
+
+    assert.deepEqual(
+      result.steps,
+      {
+        subject: {
+          status: "completed",
+        },
+
+        refresh: {
+          status: "partial",
+        },
+
+        report: {
+          status: "completed",
+        },
+      },
+    );
+
+    assert.deepEqual(
+      result.errors,
+      [
+        {
+          step: "refresh",
+          code: "refresh_partial",
+          message:
+            "Refresh completed with provider errors",
+          count: 1,
+        },
+      ],
+    );
+  },
+);

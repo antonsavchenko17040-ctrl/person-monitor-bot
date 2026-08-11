@@ -29,6 +29,11 @@ export async function runSubjectDossier(
     options.reportBuilder ??
     buildSubjectReportModel;
 
+  const ingestSubject =
+    typeof options.ingestSubject === "function"
+      ? options.ingestSubject
+      : null;
+
   const subject =
     await subjectLoader(
       subjectId,
@@ -96,6 +101,34 @@ export async function runSubjectDossier(
       await refreshSubject(
         subject,
       );
+
+    const refreshErrors =
+      Array.isArray(
+        refresh?.errors,
+      )
+        ? refresh.errors
+        : [];
+
+    if (
+      refreshErrors.length > 0
+    ) {
+      refreshStatus =
+        "partial";
+
+      errors.push({
+        step:
+          "refresh",
+
+        code:
+          "refresh_partial",
+
+        message:
+          "Refresh completed with provider errors",
+
+        count:
+          refreshErrors.length,
+      });
+    }
   } catch (error) {
     refreshStatus =
       "failed";
@@ -112,6 +145,39 @@ export async function runSubjectDossier(
           ? error.message
           : String(error),
     });
+  }
+
+  let ingestion =
+    null;
+
+  let ingestionStatus =
+    ingestSubject
+      ? "completed"
+      : null;
+
+  if (ingestSubject) {
+    try {
+      ingestion =
+        await ingestSubject(
+          subject,
+        );
+    } catch (error) {
+      ingestionStatus =
+        "failed";
+
+      errors.push({
+        step:
+          "ingestion",
+
+        code:
+          "ingestion_failed",
+
+        message:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
   }
 
   let report =
@@ -159,6 +225,12 @@ export async function runSubjectDossier(
 
     refresh,
 
+    ...(ingestSubject
+      ? {
+          ingestion,
+        }
+      : {}),
+
     report,
 
     errors,
@@ -173,6 +245,15 @@ export async function runSubjectDossier(
         status:
           refreshStatus,
       },
+
+      ...(ingestSubject
+        ? {
+            ingestion: {
+              status:
+                ingestionStatus,
+            },
+          }
+        : {}),
 
       report: {
         status:

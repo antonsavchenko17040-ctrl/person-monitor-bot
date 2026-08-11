@@ -1,8 +1,8 @@
 # Person Monitor — функціональна модель, поточний стан і дорожня карта
 
 **Дата фіксації:** 11.08.2026  
-**Базова точка:** блок 5.1 «Каркас unified dossier orchestrator» закрито; orchestration core об’єднує завантаження суб’єкта, refresh джерел і побудову canonical report в один workflow.
-**Технічний стан:** 546/546 тестів пройдено; `dossier-orchestrator-v1` підтримує `completed / partial / failed`, не блокує побудову наявного досьє при refresh failure та контрольовано обробляє subject/report failure.
+**Базова точка:** блок 5.2 «Ingestion stage у unified dossier orchestrator» закрито; workflow тепер підтримує послідовність subject → refresh → optional ingestion → canonical report.
+**Технічний стан:** 550/550 тестів пройдено; `dossier-orchestrator-v1` підтримує `completed / partial / failed`, не блокує canonical report при refresh/ingestion failure та позначає provider-level refresh errors як `partial` без підняття сирих provider error strings у верхній orchestration error.
 
 ## 1. Що повинен вміти портал
 
@@ -49,7 +49,7 @@ Person Monitor має бути не просто пошуковим сайтом
 | 19 | Декларації третіх осіб | 🟡 Частково | Треті особи вже витягуються; автоматичний пошук їх декларацій ще потрібен. |
 | 20 | Пул новин пов’язаних із суб’єктом | 🟡 Сильно просунуто | Google Web/News, corruption gate, identity gate, full-text verification і класифікація ролі суб’єкта готові. Далі — фінальне збереження/представлення у досьє. |
 | 21 | Формування метрик | 🟡 Частково | Analytics/metrics/findings є; затвердити фінальний набір і шкалу ризиків/сигналів. |
-| 22 | Структура на кроки + аналітична довідка | 🟡 Частково | Canonical model є; потрібні фінальна структура, narrative, UI та оркестратор. |
+| 22 | Структура на кроки + аналітична довідка | 🟡 Частково | Canonical model і orchestration core з refresh/ingestion stages є; потрібні фінальна структура довідки, narrative, evidence та UI. |
 | 23 | Математичні правила порівняння | 🟡 Частково | Частина правил є; потрібна формалізована rule matrix для всіх ключових типів даних. |
 | 24 | Зробити PDF | 🔁 Дублікат | Об’єднати з пунктом №3. |
 
