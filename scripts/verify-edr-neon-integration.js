@@ -33,6 +33,10 @@ import {
   findActiveEdrRelations,
 } from "../src/edr-index.js";
 
+import {
+  resolveActiveEdrSubjectMatch,
+} from "../src/edr-subject-resolution.js";
+
 function assert(condition, message) {
   if (!condition) {
     throw new Error(
@@ -491,6 +495,173 @@ try {
 
   console.log(
     "EDR active index integration: PASS",
+  );
+
+  console.log(
+    "=== ACTIVE SUBJECT MATCHING ===",
+  );
+
+  const matchedOrganization =
+    await resolveActiveEdrSubjectMatch(
+      sql,
+      {
+        name:
+          "ТОВ ІНТЕГРАЦІЙНИЙ ТЕСТ ОДИН",
+        edrpou:
+          "00000001",
+      },
+    );
+
+  assert(
+    matchedOrganization.status ===
+      "matched" &&
+      matchedOrganization.decision ===
+        "exact_stable_identifier" &&
+      matchedOrganization.review_required ===
+        false,
+    "exact organization EDRPOU must auto-match",
+  );
+
+  assert(
+    matchedOrganization.best?.snapshotId ===
+      successSnapshotId &&
+      matchedOrganization.best?.recordType ===
+        "organization" &&
+      matchedOrganization.best?.hardMatch ===
+        true,
+    "organization match must come from active snapshot hard evidence",
+  );
+
+  assert(
+    matchedOrganization.retrieval?.record_count ===
+      1,
+    "duplicate name and EDRPOU retrieval must collapse to one record",
+  );
+
+  const ambiguousFop =
+    await resolveActiveEdrSubjectMatch(
+      sql,
+      {
+        fullName:
+          "  ІНТЕГРАЦІЙНИЙ   ФОП  ",
+      },
+    );
+
+  assert(
+    ambiguousFop.status ===
+      "ambiguous" &&
+      ambiguousFop.decision ===
+        "manual_review" &&
+      ambiguousFop.review_required ===
+        true,
+    "exact FOP name must require manual review",
+  );
+
+  assert(
+    ambiguousFop.best?.recordType ===
+      "fop" &&
+      ambiguousFop.best?.hardMatch ===
+        false,
+    "FOP name-only evidence must never become hard match",
+  );
+
+  const ambiguousFounder =
+    await resolveActiveEdrSubjectMatch(
+      sql,
+      {
+        fullName:
+          "  ІНТЕГРАЦІЙНИЙ   ЗАСНОВНИК  ",
+      },
+    );
+
+  assert(
+    ambiguousFounder.status ===
+      "ambiguous" &&
+      ambiguousFounder.decision ===
+        "manual_review",
+    "founder name relation must require manual review",
+  );
+
+  assert(
+    ambiguousFounder.best?.candidateKind ===
+      "relation" &&
+      ambiguousFounder.best?.relationType ===
+        "founder" &&
+      ambiguousFounder.best?.snapshotId ===
+        successSnapshotId,
+    "founder evidence must come from active snapshot relation",
+  );
+
+  const conflictingOrganization =
+    await resolveActiveEdrSubjectMatch(
+      sql,
+      {
+        name:
+          "ТОВ ІНТЕГРАЦІЙНИЙ ТЕСТ ОДИН",
+        edrpou:
+          "99999999",
+      },
+    );
+
+  assert(
+    conflictingOrganization.status ===
+      "conflict" &&
+      conflictingOrganization.decision ===
+        "manual_review" &&
+      conflictingOrganization.review_required ===
+        true,
+    "name match with contradictory EDRPOU must become conflict",
+  );
+
+  assert(
+    conflictingOrganization.conflicts?.length ===
+      1,
+    "contradictory EDRPOU must expose one conflict candidate",
+  );
+
+  const missingSubject =
+    await resolveActiveEdrSubjectMatch(
+      sql,
+      {
+        fullName:
+          "НЕІСНУЮЧИЙ ІНТЕГРАЦІЙНИЙ СУБЄКТ",
+      },
+    );
+
+  assert(
+    missingSubject.status ===
+      "unmatched" &&
+      missingSubject.decision ===
+        "no_match" &&
+      missingSubject.review_required ===
+        false,
+    "missing subject must remain unmatched",
+  );
+
+  const activeAfterSubjectMatching =
+    await getActiveEdrSnapshot(sql);
+
+  assert(
+    activeAfterSubjectMatching?.id ===
+      successSnapshotId,
+    "subject matching must not change active snapshot",
+  );
+
+  console.log({
+    organization:
+      matchedOrganization.status,
+    fop:
+      ambiguousFop.status,
+    founder:
+      ambiguousFounder.status,
+    conflicting_edrpou:
+      conflictingOrganization.status,
+    missing:
+      missingSubject.status,
+  });
+
+  console.log(
+    "EDR subject matching integration: PASS",
   );
 
   const [successState] =
