@@ -65,6 +65,9 @@ export const REPORT_EVIDENCE_POLICY_VERSION =
 export const RELATED_PERSON_REF_VERSION =
   "related-person-ref-v1";
 
+export const MANUAL_REVIEW_MANIFEST_VERSION =
+  "manual-review-manifest-v1";
+
 export const REPORT_MODEL_LIMITATIONS = [
   "Відкриті джерела можуть бути неповними.",
   "Відсутність запису не доводить відсутність факту.",
@@ -3395,6 +3398,81 @@ function resolveExecutiveSummaryEvidence(
 }
 
 
+export function buildManualReviewManifest({
+  relatedPeople = null,
+} = {}) {
+  const items = [];
+  const seen = new Set();
+
+  for (
+    const item
+    of (
+      Array.isArray(
+        relatedPeople?.items,
+      )
+        ? relatedPeople.items
+        : []
+    )
+  ) {
+    if (
+      item?.review_required !== true
+    ) {
+      continue;
+    }
+
+    const itemRef =
+      typeof item?.item_ref === "string"
+        ? item.item_ref
+        : "";
+
+    const prefix =
+      `${RELATED_PERSON_REF_VERSION}:`;
+
+    const fingerprint =
+      itemRef.startsWith(
+        prefix,
+      )
+        ? itemRef.slice(
+            prefix.length,
+          )
+        : "";
+
+    if (
+      !/^[a-f0-9]{64}$/.test(
+        fingerprint,
+      ) ||
+      seen.has(
+        itemRef,
+      )
+    ) {
+      continue;
+    }
+
+    seen.add(
+      itemRef,
+    );
+
+    items.push({
+      source_path:
+        "related_people.items",
+
+      item_ref:
+        itemRef,
+
+      review_type:
+        "identity_resolution",
+    });
+  }
+
+  return {
+    version:
+      MANUAL_REVIEW_MANIFEST_VERSION,
+
+    items,
+  };
+}
+
+
 function buildAnalyticalBriefManifest() {
   return {
     version:
@@ -3606,6 +3684,12 @@ export function buildSubjectReportModelPayload({
         ? relatedPeople.items
         : [],
   };
+
+  const manualReviewSection =
+    buildManualReviewManifest({
+      relatedPeople:
+        relatedPeopleSection,
+    });
 
   const relationsSection = {
     items:
@@ -3854,6 +3938,9 @@ export function buildSubjectReportModelPayload({
     analytical_brief:
       buildAnalyticalBriefManifest(),
 
+    manual_review:
+      manualReviewSection,
+
     declarations:
       declarationSection,
 
@@ -3905,6 +3992,9 @@ export function buildSubjectReportModelPayload({
 
       evidence_policy_version:
         REPORT_EVIDENCE_POLICY_VERSION,
+
+      manual_review_manifest_version:
+        MANUAL_REVIEW_MANIFEST_VERSION,
 
       notes: [],
 

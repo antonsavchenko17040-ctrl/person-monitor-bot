@@ -1,8 +1,8 @@
 # Person Monitor — функціональна модель, поточний стан і дорожня карта
 
 **Дата фіксації:** 12.08.2026
-**Базова точка:** блок 5.4E1 «Stable canonical related-person references» закрито; family і third-party projections мають deterministic opaque `item_ref`, придатні для стабільних manual-review references без array indexes або ПІБ у ключі.
-**Технічний стан:** 568/568 тестів пройдено; `RELATED_PERSON_REF_VERSION` задає versioned opaque references: family ref базується на source document/person provenance та році, third-party ref — на canonical `relation_id` і стороні relation; недостатній provenance не має fallback на ПІБ. Manual Review Queue, persistence, `report_id` та audit trail ще не реалізовані.
+**Базова точка:** блок 5.4E2 «Canonical manual-review manifest v1» закрито; canonical report має reference-only `manual_review` manifest для явних human-review сигналів у `related_people`, побудований на stable opaque `item_ref`.
+**Технічний стан:** 571/571 тестів пройдено; `MANUAL_REVIEW_MANIFEST_VERSION` і top-level `manual_review` є частиною canonical report contract; manifest не копіює ПІБ/evidence/URL, deduplicate/filter виконується за валідним `item_ref`, а media `review_status` не трактуються як human review. EDR та identity human-review сигнали ще не проєктуються в цей manifest; persistence/Manual Review Queue UI, `report_id` та audit trail ще не реалізовані.
 
 ## 1. Що повинен вміти портал
 
