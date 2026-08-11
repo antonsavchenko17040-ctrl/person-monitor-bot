@@ -74,6 +74,11 @@ export function compactMediaFullTextReview(
         ?.media_identity ??
       null,
 
+    corruption_role:
+      review?.full_text
+        ?.corruption_role ??
+      null,
+
     article:
       article
         ? {
@@ -93,8 +98,21 @@ export function compactMediaFullTextReview(
 
             identity_context:
               article
-                .identity_context ??
-              null,
+                .identity_context
+                ? {
+                    version:
+                      article
+                        .identity_context
+                        .version ??
+                      null,
+
+                    stats:
+                      article
+                        .identity_context
+                        .stats ??
+                      null,
+                  }
+                : null,
           }
         : null,
   };
@@ -259,6 +277,11 @@ export async function verifyMediaResultForProvider(
       ?.media_identity ??
     null;
 
+  const finalRole =
+    review?.full_text
+      ?.corruption_role ??
+    null;
+
   const accepted =
     review?.accepted ===
       true &&
@@ -290,6 +313,9 @@ export async function verifyMediaResultForProvider(
 
         mediaIdentity:
           finalIdentity,
+
+        corruptionRole:
+          finalRole,
 
         fullTextReview:
           compactReview,

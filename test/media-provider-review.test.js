@@ -137,6 +137,21 @@ test(
                     90,
                 },
 
+                corruption_role: {
+                  version:
+                    "media-corruption-role-v1",
+
+                  role:
+                    "adverse_context",
+
+                  signals: [
+                    "підозра",
+                  ],
+
+                  wrongdoing_inferred:
+                    false,
+                },
+
                 article: {
                   url:
                     "https://example.com/case",
@@ -174,6 +189,36 @@ test(
         .mediaIdentity
         .level,
       "confirmed",
+    );
+
+    assert.equal(
+      output.item
+        .corruptionRole
+        .role,
+      "adverse_context",
+    );
+
+    assert.equal(
+      output.item
+        .corruptionRole
+        .wrongdoing_inferred,
+      false,
+    );
+
+    assert.equal(
+      output.item
+        .fullTextReview
+        .corruption_role
+        .role,
+      "adverse_context",
+    );
+
+    assert.equal(
+      output.item
+        .fullTextReview
+        .corruption_role
+        .wrongdoing_inferred,
+      false,
     );
 
     assert.equal(
@@ -389,6 +434,116 @@ test(
         output,
       ).includes(
         "SECRET",
+      ),
+      false,
+    );
+  },
+);
+
+
+test(
+  "compact review preserves corruption role but strips identity context text",
+  () => {
+    const output =
+      compactMediaFullTextReview({
+        version:
+          "media-full-text-review-v1",
+
+        accepted:
+          true,
+
+        decision:
+          "accept",
+
+        review_status:
+          "reviewed",
+
+        full_text: {
+          corruption_role: {
+            version:
+              "media-corruption-role-v1",
+
+            role:
+              "anti_corruption_activity",
+
+            signals: [
+              "співпраця",
+            ],
+
+            wrongdoing_inferred:
+              false,
+          },
+
+          article: {
+            url:
+              "https://example.com/privacy",
+
+            text:
+              "ARTICLE SECRET",
+
+            identity_context: {
+              version:
+                "media-identity-context-v1",
+
+              text:
+                "LOCAL IDENTITY SECRET",
+
+              stats: {
+                mention_windows:
+                  1,
+
+                context_chars:
+                  120,
+
+                truncated:
+                  false,
+              },
+            },
+          },
+        },
+      });
+
+    assert.equal(
+      output
+        .corruption_role
+        .role,
+      "anti_corruption_activity",
+    );
+
+    assert.equal(
+      output
+        .corruption_role
+        .wrongdoing_inferred,
+      false,
+    );
+
+    assert.equal(
+      output.article.text,
+      undefined,
+    );
+
+    assert.equal(
+      output.article
+        .identity_context
+        .text,
+      undefined,
+    );
+
+    const serialized =
+      JSON.stringify(
+        output,
+      );
+
+    assert.equal(
+      serialized.includes(
+        "ARTICLE SECRET",
+      ),
+      false,
+    );
+
+    assert.equal(
+      serialized.includes(
+        "LOCAL IDENTITY SECRET",
       ),
       false,
     );

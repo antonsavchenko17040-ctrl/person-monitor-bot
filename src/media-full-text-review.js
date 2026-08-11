@@ -19,6 +19,10 @@ import {
 } from "./media-identity-context.js";
 
 import {
+  classifyMediaCorruptionRole,
+} from "./media-corruption-role.js";
+
+import {
   MEDIA_REVIEW_DECISIONS,
   decideMediaReview,
 } from "./media-review-policy.js";
@@ -64,6 +68,7 @@ function rejectedResult({
   article = null,
   fullTextCorruption = null,
   fullTextIdentity = null,
+  fullTextRole = null,
 }) {
   return {
     version:
@@ -88,6 +93,9 @@ function rejectedResult({
 
       media_identity:
         fullTextIdentity,
+
+      corruption_role:
+        fullTextRole,
 
       article,
     },
@@ -298,6 +306,12 @@ export async function reviewMediaResultFullText(
     });
   }
 
+  const fullTextRole =
+    classifyMediaCorruptionRole(
+      subject,
+      identityContext.text,
+    );
+
   const fullTextCorruptionResult = {
     ...result,
 
@@ -379,6 +393,9 @@ export async function reviewMediaResultFullText(
         media_identity:
           fullTextIdentity,
 
+        corruption_role:
+          fullTextRole,
+
         article,
       },
 
@@ -404,5 +421,6 @@ export async function reviewMediaResultFullText(
 
     fullTextCorruption,
     fullTextIdentity,
+    fullTextRole,
   });
 }

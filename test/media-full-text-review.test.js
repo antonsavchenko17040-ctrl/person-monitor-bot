@@ -407,3 +407,110 @@ test(
     );
   },
 );
+
+
+test(
+  "returns anti-corruption activity role from local identity context",
+  async () => {
+    const result =
+      await reviewMediaResultFullText(
+        subject(),
+        probableResult(),
+        {
+          fetchArticleFn:
+            async () => ({
+              url:
+                "https://example.com/cooperation",
+
+              html:
+                "<article>" +
+                "<p>Савченко Антон Віталійович — працівник Національного агентства з питань запобігання корупції.</p>" +
+                "<p>Савченко Антон Віталійович та НАБУ посилюють співпрацю у сфері запобігання та протидії корупційним правопорушенням.</p>" +
+                "</article>",
+
+              metadata: {},
+            }),
+        },
+      );
+
+    assert.equal(
+      result.accepted,
+      true,
+    );
+
+    assert.equal(
+      result.full_text
+        .corruption_role
+        .role,
+      "anti_corruption_activity",
+    );
+
+    assert.equal(
+      result.full_text
+        .corruption_role
+        .wrongdoing_inferred,
+      false,
+    );
+  },
+);
+
+test(
+  "returns adverse role without inferring wrongdoing",
+  async () => {
+    const result =
+      await reviewMediaResultFullText(
+        subject(),
+        probableResult(),
+        {
+          fetchArticleFn:
+            async () => ({
+              url:
+                "https://example.com/suspicion",
+
+              html:
+                "<article>" +
+                "<p>Савченко Антон Віталійович — працівник Національного агентства з питань запобігання корупції.</p>" +
+                "<p>НАБУ повідомило Савченку Антону Віталійовичу про підозру в одержанні неправомірної вигоди.</p>" +
+                "</article>",
+
+              metadata: {},
+            }),
+        },
+      );
+
+    assert.equal(
+      result.accepted,
+      true,
+    );
+
+    assert.equal(
+      result.full_text
+        .corruption_role
+        .role,
+      "adverse_context",
+    );
+
+    assert.ok(
+      result.full_text
+        .corruption_role
+        .signals.includes(
+          "підозра",
+        ),
+    );
+
+    assert.ok(
+      result.full_text
+        .corruption_role
+        .signals.includes(
+          "неправомірна вигода",
+        ),
+    );
+
+    assert.equal(
+      result.full_text
+        .corruption_role
+        .wrongdoing_inferred,
+      false,
+    );
+  },
+);
