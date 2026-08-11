@@ -4,6 +4,7 @@ import { buildNameQuery } from "./query.js";
 import { searchSmartGoogleWeb } from "../smart-google-web.js";
 import { buildCorruptionSearchPlan } from "../corruption-search-plan.js";
 import { assessCorruptionRelevance } from "../corruption-relevance.js";
+import { assessMediaIdentity } from "../media-identity.js";
 
 function safeDate(value) {
   if (!value) return undefined;
@@ -172,8 +173,8 @@ export async function searchGoogleWebDetailed(
       options,
     );
 
-  const accepted = [];
-  const rejected = [];
+  const corruptionAccepted = [];
+  const rejectedCorruption = [];
 
   for (const item of output.results) {
     const corruptionRelevance =
@@ -184,17 +185,54 @@ export async function searchGoogleWebDetailed(
     if (
       corruptionRelevance.relevant
     ) {
-      accepted.push({
+      corruptionAccepted.push({
         ...item,
         corruptionRelevance,
       });
     } else {
-      rejected.push({
+      rejectedCorruption.push({
         title:
           item.title,
         url:
           item.url,
         corruptionRelevance,
+      });
+    }
+  }
+
+  const accepted = [];
+  const rejectedIdentity = [];
+
+  for (
+    const item
+    of corruptionAccepted
+  ) {
+    const mediaIdentity =
+      assessMediaIdentity(
+        subject,
+        item,
+      );
+
+    if (
+      mediaIdentity.level ===
+      "confirmed"
+    ) {
+      accepted.push({
+        ...item,
+        mediaIdentity,
+      });
+    } else {
+      rejectedIdentity.push({
+        title:
+          item.title,
+
+        url:
+          item.url,
+
+        corruptionRelevance:
+          item.corruptionRelevance,
+
+        mediaIdentity,
       });
     }
   }
@@ -206,7 +244,10 @@ export async function searchGoogleWebDetailed(
       accepted,
 
     rejected_non_corruption:
-      rejected,
+      rejectedCorruption,
+
+    rejected_identity:
+      rejectedIdentity,
 
     stats: {
       ...output.stats,
@@ -214,14 +255,23 @@ export async function searchGoogleWebDetailed(
       unique_results_before_corruption_filter:
         output.stats.unique_results,
 
-      unique_results:
-        accepted.length,
-
       corruption_relevant_results:
-        accepted.length,
+        corruptionAccepted.length,
 
       filtered_non_corruption:
-        rejected.length,
+        rejectedCorruption.length,
+
+      unique_results_before_identity_filter:
+        corruptionAccepted.length,
+
+      confirmed_identity_results:
+        accepted.length,
+
+      filtered_identity_mismatch:
+        rejectedIdentity.length,
+
+      unique_results:
+        accepted.length,
     },
   };
 }

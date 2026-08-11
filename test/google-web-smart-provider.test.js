@@ -50,13 +50,13 @@ test(
               return [
                 {
                   title:
-                    "Synthetic result",
+                    "Савченко Антон Віталійович — корупційний матеріал",
 
                   url:
                     "https://example.com/result",
 
                   snippet:
-                    query,
+                    "Савченко Антон Віталійович, працівник Національного агентства з питань запобігання корупції. Повідомляється про хабар.",
                 },
               ];
             },
@@ -113,7 +113,7 @@ test(
                   ),
 
                 snippet:
-                  query,
+                  "Савченко Антон Віталійович, працівник Національного агентства з питань запобігання корупції. Повідомляється про хабар.",
               },
             ],
         },
@@ -184,6 +184,87 @@ test(
     assert.equal(
       output.stats.filtered_non_corruption,
       1,
+    );
+  },
+);
+
+test(
+  "google web rejects corruption article about another person",
+  async () => {
+    const output =
+      await searchGoogleWebDetailed(
+        subject(),
+        {
+          maxQueries: 1,
+
+          searchQuery:
+            async () => [
+              {
+                title:
+                  "Петренко Іван Іванович отримав підозру",
+
+                url:
+                  "https://example.com/other-person",
+
+                snippet:
+                  "НАБУ розслідує одержання неправомірної вигоди.",
+              },
+            ],
+        },
+      );
+
+    assert.equal(
+      output.results.length,
+      0,
+    );
+
+    assert.equal(
+      output.rejected_identity.length,
+      1,
+    );
+
+    assert.equal(
+      output.stats.filtered_identity_mismatch,
+      1,
+    );
+  },
+);
+
+test(
+  "google web accepts corruption article only with confirmed identity",
+  async () => {
+    const output =
+      await searchGoogleWebDetailed(
+        subject(),
+        {
+          maxQueries: 1,
+
+          searchQuery:
+            async () => [
+              {
+                title:
+                  "Савченко Антон Віталійович",
+
+                url:
+                  "https://example.com/confirmed-person",
+
+                snippet:
+                  "Працівник Національного агентства з питань запобігання корупції фігурує у матеріалі про хабар.",
+              },
+            ],
+        },
+      );
+
+    assert.equal(
+      output.results.length,
+      1,
+    );
+
+    assert.equal(
+      output.results[0]
+        .mediaIdentity
+        .level,
+      "confirmed",
     );
   },
 );

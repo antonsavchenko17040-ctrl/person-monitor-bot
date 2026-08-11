@@ -10,6 +10,10 @@ import {
 } from "../corruption-relevance.js";
 
 import {
+  assessMediaIdentity,
+} from "../media-identity.js";
+
+import {
   fetchText,
 } from "./http.js";
 
@@ -229,10 +233,13 @@ export async function searchGoogleNewsRssDetailed(
     new Map();
 
   const rejected = [];
+  const rejectedIdentity = [];
   const errors = [];
 
   let requests = 0;
   let rawResults = 0;
+  let corruptionRelevantResults = 0;
+  let confirmedIdentityResults = 0;
 
   for (
     const planned
@@ -307,6 +314,37 @@ export async function searchGoogleNewsRssDetailed(
           continue;
         }
 
+        corruptionRelevantResults +=
+          1;
+
+        const mediaIdentity =
+          assessMediaIdentity(
+            subject,
+            item,
+          );
+
+        if (
+          mediaIdentity.level !==
+          "confirmed"
+        ) {
+          rejectedIdentity.push({
+            title:
+              item.title,
+
+            url:
+              item.url,
+
+            corruptionRelevance,
+
+            mediaIdentity,
+          });
+
+          continue;
+        }
+
+        confirmedIdentityResults +=
+          1;
+
         const key =
           stableFingerprint(
             item.url,
@@ -320,6 +358,7 @@ export async function searchGoogleNewsRssDetailed(
             {
               ...item,
               corruptionRelevance,
+              mediaIdentity,
             },
           );
 
@@ -379,6 +418,9 @@ export async function searchGoogleNewsRssDetailed(
     rejected_non_corruption:
       rejected,
 
+    rejected_identity:
+      rejectedIdentity,
+
     errors,
     plan,
 
@@ -392,10 +434,16 @@ export async function searchGoogleNewsRssDetailed(
         rawResults,
 
       corruption_relevant_results:
-        deduped.size,
+        corruptionRelevantResults,
 
       filtered_non_corruption:
         rejected.length,
+
+      confirmed_identity_results:
+        confirmedIdentityResults,
+
+      filtered_identity_mismatch:
+        rejectedIdentity.length,
 
       unique_results:
         deduped.size,

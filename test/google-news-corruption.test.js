@@ -11,6 +11,9 @@ function subject() {
       "Савченко Антон Віталійович",
 
     aliases: [],
+
+    organization:
+      "Національне агентство з питань запобігання корупції",
   };
 }
 
@@ -137,9 +140,9 @@ test(
             async () =>
               rss([
                 item(
-                  "Посадовцю повідомили про підозру",
+                  "Савченко Антон Віталійович — повідомлено про підозру",
                   "https://example.com/case",
-                  "НАБУ розслідує одержання неправомірної вигоди.",
+                  "Працівник Національного агентства з питань запобігання корупції. НАБУ розслідує одержання неправомірної вигоди.",
                 ),
               ]),
         },
@@ -172,9 +175,9 @@ test(
             async () =>
               rss([
                 item(
-                  "НАБУ розслідує корупційне правопорушення",
+                  "Савченко Антон Віталійович — НАБУ розслідує корупційне правопорушення",
                   "https://example.com/same-case",
-                  "Посадовцю повідомлено про підозру.",
+                  "Працівник Національного агентства з питань запобігання корупції. Посадовцю повідомлено про підозру.",
                 ),
               ]),
         },
@@ -191,6 +194,84 @@ test(
         .matched_queries
         .length,
       2,
+    );
+  },
+);
+
+test(
+  "google news rejects corruption article about another person",
+  async () => {
+    const output =
+      await searchGoogleNewsRssDetailed(
+        subject(),
+        {
+          maxQueries: 1,
+
+          fetchTextFn:
+            async () =>
+              rss([
+                item(
+                  "Петренко Іван Іванович отримав підозру",
+                  "https://example.com/other-person",
+                  "НАБУ розслідує неправомірну вигоду.",
+                ),
+              ]),
+        },
+      );
+
+    assert.equal(
+      output.results.length,
+      0,
+    );
+
+    assert.equal(
+      output.rejected_identity.length,
+      1,
+    );
+
+    assert.equal(
+      output.stats.filtered_identity_mismatch,
+      1,
+    );
+  },
+);
+
+test(
+  "google news does not auto accept same full name without independent context",
+  async () => {
+    const output =
+      await searchGoogleNewsRssDetailed(
+        subject(),
+        {
+          maxQueries: 1,
+
+          fetchTextFn:
+            async () =>
+              rss([
+                item(
+                  "Савченко Антон Віталійович",
+                  "https://example.com/name-only",
+                  "НАБУ розслідує хабар.",
+                ),
+              ]),
+        },
+      );
+
+    assert.equal(
+      output.results.length,
+      0,
+    );
+
+    assert.equal(
+      output.rejected_identity.length,
+      1,
+    );
+
+    assert.equal(
+      output.rejected_identity[0]
+        .mediaIdentity
+        .level,
+      "probable",
     );
   },
 );
