@@ -7,7 +7,24 @@ export const GRAPH_RELATION_LABELS = {
   family_member_observed: "Член сім’ї",
   third_party_rightsholder: "Третя сторона / правовласник",
   resolved_to: "Ідентифіковано як",
+
+  edr_founder_of: "Засновник (ЄДР)",
+  edr_beneficiary_of: "Бенефіціар (ЄДР)",
+  edr_signer_of: "Підписант (ЄДР)",
+  edr_member_of: "Учасник / член (ЄДР)",
+  edr_executive_power_of: "Керівний орган (ЄДР)",
+  edr_superior_management_of: "Вищий орган управління (ЄДР)",
 };
+
+export const GRAPH_TIMELESS_RELATION_TYPES =
+  Object.freeze([
+    "edr_founder_of",
+    "edr_beneficiary_of",
+    "edr_signer_of",
+    "edr_member_of",
+    "edr_executive_power_of",
+    "edr_superior_management_of",
+  ]);
 
 function asObject(value) {
   if (
@@ -70,6 +87,7 @@ export function safeEntityMetadata(
     "identification",
     "observation",
     "identity_confidence",
+    "source",
   ];
 
   for (const key of allowed) {
@@ -126,6 +144,11 @@ export function safeRelationMetadata(
     "evidence_count",
     "relation_semantics",
     "third_party_kind",
+    "source",
+    "edr_relation_type",
+    "identity_status",
+    "identity_decision",
+    "review_required",
   ];
 
   for (const key of scalarKeys) {
@@ -268,6 +291,10 @@ function relationEdge(
 
     confidence:
       row.confidence ??
+      null,
+
+    verification_status:
+      row.verification_status ??
       null,
 
     metadata:
@@ -548,13 +575,8 @@ export async function loadSubjectGraph(
           null
         );
 
-  let rows = [];
-
-  if (
-    selectedYear !== null
-  ) {
-    rows =
-      await sql`
+  const rows =
+    await sql`
         WITH direct AS (
           SELECT r.*
 
@@ -564,14 +586,31 @@ export async function loadSubjectGraph(
             r.from_entity_id =
               ${subject.entity_id}
 
-            AND r.valid_from
-              IS NOT NULL
+            AND (
+              (
+                ${selectedYear}::int
+                  IS NOT NULL
 
-            AND EXTRACT(
-              YEAR FROM
-              r.valid_from
-            )::int =
-              ${selectedYear}
+                AND r.valid_from
+                  IS NOT NULL
+
+                AND EXTRACT(
+                  YEAR FROM
+                  r.valid_from
+                )::int =
+                  ${selectedYear}
+              )
+
+              OR (
+                r.valid_from
+                  IS NULL
+
+                AND r.relation_type =
+                  ANY(
+                    ${GRAPH_TIMELESS_RELATION_TYPES}::text[]
+                  )
+              )
+            )
         ),
 
         asset_nodes AS (
@@ -628,6 +667,8 @@ export async function loadSubjectGraph(
 
           ge.confidence,
 
+          ge.verification_status,
+
           ge.metadata
             AS relation_metadata,
 
@@ -676,7 +717,6 @@ export async function loadSubjectGraph(
           et.canonical_name,
           ge.id
       `;
-  }
 
   return buildSubjectGraphPayload({
     subject,
