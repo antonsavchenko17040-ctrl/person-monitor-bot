@@ -20,6 +20,18 @@ let activeChatHistory = [];
 let chatRequestPending = false;
 let chatApiAvailable = null;
 
+let portalAuthenticated = false;
+let portalAuthPending = false;
+
+let manualReviewTasks = [];
+let manualReviewLoading = false;
+
+const manualReviewPendingTaskIds =
+  new Set();
+
+const subjectNameById =
+  new Map();
+
 function providerLabel(provider) {
   return PROVIDER_LABELS[provider] ?? provider ?? "Інше джерело";
 }
@@ -63,6 +75,984 @@ function formatMentionDate(value) {
     year: "numeric",
   });
 }
+
+function manualReviewStatusLabel(
+  value
+) {
+  if (value === "open") {
+    return "Відкрито";
+  }
+
+  if (value === "resolved") {
+    return "Вирішено";
+  }
+
+  if (value === "dismissed") {
+    return "Відхилено";
+  }
+
+  return String(
+    value ?? ""
+  );
+}
+
+
+function manualReviewSourceLabel(
+  value
+) {
+  if (
+    value ===
+    "related_people.items"
+  ) {
+    return "Пов’язана особа";
+  }
+
+  if (
+    value ===
+    "relations.items"
+  ) {
+    return "Зв’язок";
+  }
+
+  return String(
+    value ?? ""
+  );
+}
+
+
+function populateManualReviewSubjectFilter() {
+  const select =
+    document.getElementById(
+      "manual-review-subject-filter"
+    );
+
+  if (!select) {
+    return;
+  }
+
+  const selected =
+    select.value;
+
+  select.replaceChildren();
+
+  const all =
+    document.createElement(
+      "option"
+    );
+
+  all.value = "";
+  all.textContent =
+    "Усі суб’єкти";
+
+  select.append(
+    all
+  );
+
+  const entries =
+    [...subjectNameById.entries()]
+      .sort(
+        (left, right) =>
+          String(left[1])
+            .localeCompare(
+              String(right[1]),
+              "uk-UA"
+            )
+      );
+
+  for (
+    const [
+      subjectId,
+      fullName,
+    ]
+    of entries
+  ) {
+    const option =
+      document.createElement(
+        "option"
+      );
+
+    option.value =
+      subjectId;
+
+    option.textContent =
+      fullName ||
+      subjectId;
+
+    select.append(
+      option
+    );
+  }
+
+  if (
+    [...select.options]
+      .some(
+        (option) =>
+          option.value ===
+          selected
+      )
+  ) {
+    select.value =
+      selected;
+  }
+}
+
+
+function renderManualReviewQueue() {
+  const container =
+    document.getElementById(
+      "manual-review-list"
+    );
+
+  const summary =
+    document.getElementById(
+      "manual-review-summary"
+    );
+
+  const refresh =
+    document.getElementById(
+      "manual-review-refresh"
+    );
+
+  if (!container) {
+    return;
+  }
+
+  if (refresh) {
+    refresh.disabled =
+      manualReviewLoading;
+
+    refresh.textContent =
+      manualReviewLoading
+        ? "Завантаження…"
+        : "Оновити";
+  }
+
+  if (manualReviewLoading) {
+    container.textContent =
+      "Завантаження черги…";
+
+    if (summary) {
+      summary.textContent = "";
+    }
+
+    return;
+  }
+
+  container.replaceChildren();
+
+  if (
+    manualReviewTasks.length === 0
+  ) {
+    container.textContent =
+      "Завдань за вибраними фільтрами немає.";
+
+    if (summary) {
+      summary.textContent =
+        "0 завдань";
+    }
+
+    return;
+  }
+
+  if (summary) {
+    summary.textContent =
+      `${manualReviewTasks.length} завдань`;
+  }
+
+  for (
+    const task
+    of manualReviewTasks
+  ) {
+    const card =
+      document.createElement(
+        "div"
+      );
+
+    card.className =
+      "card";
+
+    const top =
+      document.createElement(
+        "div"
+      );
+
+    top.style.display =
+      "flex";
+
+    top.style.alignItems =
+      "flex-start";
+
+    top.style.justifyContent =
+      "space-between";
+
+    top.style.gap =
+      "16px";
+
+    const heading =
+      document.createElement(
+        "div"
+      );
+
+    const subject =
+      document.createElement(
+        "strong"
+      );
+
+    subject.textContent =
+      subjectNameById.get(
+        task.subject_id
+      ) ??
+      task.subject_id ??
+      "Невідомий суб’єкт";
+
+    const source =
+      document.createElement(
+        "div"
+      );
+
+    source.className =
+      "label";
+
+    source.style.marginTop =
+      "6px";
+
+    source.textContent =
+      manualReviewSourceLabel(
+        task.source_path
+      );
+
+    heading.append(
+      subject,
+      source
+    );
+
+    const badge =
+      document.createElement(
+        "span"
+      );
+
+    badge.textContent =
+      manualReviewStatusLabel(
+        task.task_status
+      );
+
+    badge.style.padding =
+      "6px 10px";
+
+    badge.style.border =
+      "1px solid #2a303b";
+
+    badge.style.borderRadius =
+      "999px";
+
+    badge.style.fontSize =
+      "13px";
+
+    top.append(
+      heading,
+      badge
+    );
+
+    const ref =
+      document.createElement(
+        "div"
+      );
+
+    ref.className =
+      "label";
+
+    ref.style.marginTop =
+      "14px";
+
+    ref.style.wordBreak =
+      "break-all";
+
+    ref.textContent =
+      `Ref: ${task.item_ref ?? "—"}`;
+
+    const meta =
+      document.createElement(
+        "div"
+      );
+
+    meta.style.marginTop =
+      "10px";
+
+    meta.style.display =
+      "grid";
+
+    meta.style.gap =
+      "6px";
+
+    const occurrences =
+      document.createElement(
+        "div"
+      );
+
+    occurrences.textContent =
+      `Snapshots: ${
+        task.occurrence_count ?? 0
+      }`;
+
+    const latestVersion =
+      document.createElement(
+        "div"
+      );
+
+    latestVersion.className =
+      "label";
+
+    latestVersion.style.wordBreak =
+      "break-all";
+
+    latestVersion.textContent =
+      task.latest_dossier_version_id
+        ? `Остання версія досьє: ${
+            task.latest_dossier_version_id
+          }`
+        : "Версію досьє не вказано";
+
+    const updated =
+      document.createElement(
+        "div"
+      );
+
+    updated.className =
+      "label";
+
+    updated.textContent =
+      task.updated_at
+        ? `Оновлено: ${
+            formatPortalDateTime(
+              task.updated_at
+            )
+          }`
+        : "Дата оновлення відсутня";
+
+    meta.append(
+      occurrences,
+      latestVersion,
+      updated
+    );
+
+    const actions =
+      document.createElement(
+        "div"
+      );
+
+    actions.style.display =
+      "flex";
+
+    actions.style.flexWrap =
+      "wrap";
+
+    actions.style.gap =
+      "8px";
+
+    actions.style.marginTop =
+      "14px";
+
+    const pending =
+      manualReviewPendingTaskIds.has(
+        task.id
+      );
+
+    const addAction = (
+      label,
+      taskStatus
+    ) => {
+      const button =
+        document.createElement(
+          "button"
+        );
+
+      button.type =
+        "button";
+
+      button.textContent =
+        pending
+          ? "Збереження…"
+          : label;
+
+      button.disabled =
+        pending;
+
+      button.style.padding =
+        "9px 12px";
+
+      button.style.borderRadius =
+        "9px";
+
+      button.style.border =
+        "1px solid #2a303b";
+
+      button.style.background =
+        "#141821";
+
+      button.style.color =
+        "inherit";
+
+      button.style.fontWeight =
+        "700";
+
+      button.style.cursor =
+        pending
+          ? "default"
+          : "pointer";
+
+      button.addEventListener(
+        "click",
+        () => {
+          updateManualReviewTaskStatus(
+            task.id,
+            taskStatus
+          );
+        }
+      );
+
+      actions.append(
+        button
+      );
+    };
+
+    if (
+      task.task_status ===
+      "open"
+    ) {
+      addAction(
+        "Вирішено",
+        "resolved"
+      );
+
+      addAction(
+        "Відхилити",
+        "dismissed"
+      );
+    } else if (
+      task.task_status ===
+        "resolved" ||
+      task.task_status ===
+        "dismissed"
+    ) {
+      addAction(
+        "Повернути у відкриті",
+        "open"
+      );
+    }
+
+    card.append(
+      top,
+      ref,
+      meta,
+      actions
+    );
+
+    container.append(
+      card
+    );
+  }
+}
+
+
+async function updateManualReviewTaskStatus(
+  taskId,
+  taskStatus
+) {
+  if (
+    !portalAuthenticated ||
+    !taskId ||
+    manualReviewPendingTaskIds.has(
+      taskId
+    )
+  ) {
+    return;
+  }
+
+  manualReviewPendingTaskIds.add(
+    taskId
+  );
+
+  renderManualReviewQueue();
+
+  const summary =
+    document.getElementById(
+      "manual-review-summary"
+    );
+
+  try {
+    const response =
+      await fetch(
+        "/api/manual-review",
+        {
+          method:
+            "PATCH",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            Accept:
+              "application/json",
+          },
+
+          body:
+            JSON.stringify({
+              taskId,
+              taskStatus,
+            }),
+        }
+      );
+
+    let data = null;
+
+    try {
+      data =
+        await response.json();
+    } catch {}
+
+    if (
+      response.status === 401
+    ) {
+      portalAuthenticated =
+        false;
+
+      manualReviewTasks = [];
+
+      applyPortalAuthState();
+
+      throw new Error(
+        "Сесія завершилась. Увійдіть повторно."
+      );
+    }
+
+    if (
+      !response.ok ||
+      data?.ok !== true
+    ) {
+      throw new Error(
+        data?.error ??
+        `HTTP ${response.status}`
+      );
+    }
+
+    if (summary) {
+      summary.textContent =
+        "Статус оновлено.";
+    }
+  } catch (error) {
+    console.error(
+      "Manual review status update failed:",
+      error
+    );
+
+    if (summary) {
+      summary.textContent =
+        error?.message ??
+        "Не вдалося змінити статус.";
+    }
+  } finally {
+    manualReviewPendingTaskIds.delete(
+      taskId
+    );
+
+    renderManualReviewQueue();
+  }
+
+  if (portalAuthenticated) {
+    await loadManualReviewQueue();
+  }
+}
+
+
+async function loadManualReviewQueue() {
+  if (
+    !portalAuthenticated ||
+    manualReviewLoading
+  ) {
+    return;
+  }
+
+  const statusSelect =
+    document.getElementById(
+      "manual-review-status-filter"
+    );
+
+  const subjectSelect =
+    document.getElementById(
+      "manual-review-subject-filter"
+    );
+
+  const params =
+    new URLSearchParams();
+
+  params.set(
+    "taskStatus",
+    statusSelect?.value ||
+    "open"
+  );
+
+  if (
+    subjectSelect?.value
+  ) {
+    params.set(
+      "subjectId",
+      subjectSelect.value
+    );
+  }
+
+  params.set(
+    "limit",
+    "100"
+  );
+
+  manualReviewLoading = true;
+  renderManualReviewQueue();
+
+  try {
+    const response =
+      await fetch(
+        `/api/manual-review?${params.toString()}`,
+        {
+          headers: {
+            Accept:
+              "application/json",
+          },
+        }
+      );
+
+    let data = null;
+
+    try {
+      data =
+        await response.json();
+    } catch {}
+
+    if (
+      response.status === 401
+    ) {
+      portalAuthenticated =
+        false;
+
+      manualReviewTasks = [];
+
+      applyPortalAuthState();
+
+      throw new Error(
+        "Сесія завершилась. Увійдіть повторно."
+      );
+    }
+
+    if (
+      !response.ok ||
+      data?.ok !== true
+    ) {
+      throw new Error(
+        data?.error ??
+        `HTTP ${response.status}`
+      );
+    }
+
+    manualReviewTasks =
+      Array.isArray(
+        data.tasks
+      )
+        ? data.tasks
+        : [];
+  } catch (error) {
+    console.error(
+      "Manual review loading failed:",
+      error
+    );
+
+    manualReviewTasks = [];
+
+    const container =
+      document.getElementById(
+        "manual-review-list"
+      );
+
+    if (container) {
+      container.textContent =
+        error?.message ??
+        "Не вдалося завантажити Manual Review Queue.";
+    }
+  } finally {
+    manualReviewLoading = false;
+    renderManualReviewQueue();
+  }
+}
+
+
+function applyPortalAuthState() {
+  const loginCard =
+    document.getElementById(
+      "portal-login-card"
+    );
+
+  const sessionCard =
+    document.getElementById(
+      "portal-session-card"
+    );
+
+  const analystTools =
+    document.getElementById(
+      "analyst-tools"
+    );
+
+  const password =
+    document.getElementById(
+      "portal-password"
+    );
+
+  const submit =
+    document.getElementById(
+      "portal-login-submit"
+    );
+
+  if (loginCard) {
+    loginCard.style.display =
+      portalAuthenticated
+        ? "none"
+        : "block";
+  }
+
+  if (sessionCard) {
+    sessionCard.style.display =
+      portalAuthenticated
+        ? "flex"
+        : "none";
+  }
+
+  if (analystTools) {
+    analystTools.style.display =
+      portalAuthenticated
+        ? "block"
+        : "none";
+  }
+
+  if (password) {
+    password.disabled =
+      portalAuthPending;
+  }
+
+  if (submit) {
+    submit.disabled =
+      portalAuthPending;
+
+    submit.textContent =
+      portalAuthPending
+        ? "Перевірка…"
+        : "Увійти";
+  }
+}
+
+
+async function loadPortalSession() {
+  const status =
+    document.getElementById(
+      "portal-auth-status"
+    );
+
+  try {
+    const response =
+      await fetch(
+        "/api/session",
+        {
+          headers: {
+            Accept:
+              "application/json",
+          },
+        }
+      );
+
+    if (!response.ok) {
+      throw new Error(
+        `HTTP ${response.status}`
+      );
+    }
+
+    const data =
+      await response.json();
+
+    portalAuthenticated =
+      data?.authenticated === true;
+
+    if (
+      portalAuthenticated
+    ) {
+      await loadManualReviewQueue();
+    }
+
+    if (status) {
+      status.textContent =
+        portalAuthenticated
+          ? ""
+          : "Для Manual Review потрібен вхід.";
+    }
+  } catch (error) {
+    console.error(
+      "Portal session check failed:",
+      error
+    );
+
+    portalAuthenticated =
+      false;
+
+    if (status) {
+      status.textContent =
+        "Не вдалося перевірити сесію.";
+    }
+  }
+
+  applyPortalAuthState();
+}
+
+
+async function submitPortalLogin(
+  event
+) {
+  event.preventDefault();
+
+  if (portalAuthPending) {
+    return;
+  }
+
+  const password =
+    document.getElementById(
+      "portal-password"
+    );
+
+  const status =
+    document.getElementById(
+      "portal-auth-status"
+    );
+
+  const value =
+    password?.value ?? "";
+
+  if (!value) {
+    if (status) {
+      status.textContent =
+        "Введіть пароль.";
+    }
+
+    return;
+  }
+
+  portalAuthPending = true;
+  applyPortalAuthState();
+
+  try {
+    const response =
+      await fetch(
+        "/api/login",
+        {
+          method:
+            "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            Accept:
+              "application/json",
+          },
+
+          body:
+            JSON.stringify({
+              password:
+                value,
+            }),
+        }
+      );
+
+    let data = null;
+
+    try {
+      data =
+        await response.json();
+    } catch {}
+
+    if (
+      !response.ok ||
+      data?.ok !== true
+    ) {
+      throw new Error(
+        response.status === 401
+          ? "Невірний пароль."
+          : "Не вдалося виконати вхід."
+      );
+    }
+
+    portalAuthenticated = true;
+
+    await loadManualReviewQueue();
+
+    if (password) {
+      password.value = "";
+    }
+
+    if (status) {
+      status.textContent = "";
+    }
+  } catch (error) {
+    portalAuthenticated = false;
+
+    if (status) {
+      status.textContent =
+        error?.message ??
+        "Помилка авторизації.";
+    }
+  } finally {
+    portalAuthPending = false;
+    applyPortalAuthState();
+  }
+}
+
+
+async function logoutPortal() {
+  if (portalAuthPending) {
+    return;
+  }
+
+  portalAuthPending = true;
+  applyPortalAuthState();
+
+  try {
+    const response =
+      await fetch(
+        "/api/logout",
+        {
+          method:
+            "POST",
+
+          headers: {
+            Accept:
+              "application/json",
+          },
+        }
+      );
+
+    if (!response.ok) {
+      throw new Error(
+        `HTTP ${response.status}`
+      );
+    }
+  } catch (error) {
+    console.error(
+      "Portal logout failed:",
+      error
+    );
+  } finally {
+    portalAuthenticated = false;
+    portalAuthPending = false;
+    manualReviewTasks = [];
+    manualReviewPendingTaskIds.clear();
+    renderManualReviewQueue();
+    applyPortalAuthState();
+  }
+}
+
 
 async function loadHealth() {
   const status = document.getElementById("status");
@@ -783,6 +1773,25 @@ async function loadSubjects() {
     const data = await response.json();
 
     container.replaceChildren();
+
+    subjectNameById.clear();
+
+    for (
+      const subject
+      of data.subjects ?? []
+    ) {
+      if (subject?.id) {
+        subjectNameById.set(
+          subject.id,
+          subject.full_name ??
+          subject.id
+        );
+      }
+    }
+
+    populateManualReviewSubjectFilter();
+
+    renderManualReviewQueue();
 
     for (const subject of data.subjects ?? []) {
       const card = document.createElement("div");
@@ -2553,6 +3562,52 @@ document
     }
   );
 
+document
+  .getElementById(
+    "manual-review-status-filter"
+  )
+  ?.addEventListener(
+    "change",
+    loadManualReviewQueue
+  );
+
+document
+  .getElementById(
+    "manual-review-subject-filter"
+  )
+  ?.addEventListener(
+    "change",
+    loadManualReviewQueue
+  );
+
+document
+  .getElementById(
+    "manual-review-refresh"
+  )
+  ?.addEventListener(
+    "click",
+    loadManualReviewQueue
+  );
+
+document
+  .getElementById(
+    "portal-login-form"
+  )
+  ?.addEventListener(
+    "submit",
+    submitPortalLogin
+  );
+
+document
+  .getElementById(
+    "portal-logout"
+  )
+  ?.addEventListener(
+    "click",
+    logoutPortal
+  );
+
+loadPortalSession();
 loadHealth();
 loadChatAvailability();
 loadSubjects();

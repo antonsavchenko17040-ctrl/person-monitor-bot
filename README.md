@@ -32,7 +32,7 @@ Person Monitor — система для автоматизованого фор
 - canonical JSON SHA-256 integrity hashing;
 - контрольована live Neon persistence verification;
 - reference-only canonical `manual_review` manifest;
-- Manual Review Queue F2a–F2d workflow foundation:
+- Manual Review Queue F2a–F2e workflow + analyst UI:
   - `manual_review_tasks`;
   - `manual_review_task_occurrences`;
   - atomic reference-only store/sync contract;
@@ -40,6 +40,9 @@ Person Monitor — система для автоматизованого фор
   - orchestrator wiring після успішного dossier persistence;
   - production `/api/dossier` підключає dossier persistence та manual-review sync;
   - authenticated `/api/manual-review` для list/filter та explicit analyst status update;
+  - analyst auth shell через `/api/session`, `/api/login`, `/api/logout`;
+  - Manual Review Queue UI з status/subject filters;
+  - analyst actions `resolved / dismissed / reopen` через authenticated PATCH;
 - повний технічний pipeline ЄДР/ФОП:
   discovery → download → parser → normalization → staging → Neon → lookup → matching → graph → weekly check → snapshot diff;
 - timeless EDR relations у canonical report;
@@ -96,17 +99,19 @@ Human-review queue не повинна копіювати ПІБ, факти, ev
 
 Automated media `review_status` — окрема семантика і не є Human Manual Review Queue.
 
-F2a schema foundation, F2b store/sync contract, F2c orchestrator wiring і F2d analyst review status API завершені.
+F2a schema foundation, F2b store/sync contract, F2c orchestrator wiring, F2d analyst review status API і F2e Manual Review Queue UI завершені.
 
 Після успішного збереження `dossier_versions` orchestrator передає `dossier_version.id` та canonical `report.manual_review` у queue sync. Якщо dossier persistence не відбувся, queue sync пропускається. Помилка queue sync не видаляє canonical report або вже persisted dossier snapshot, але workflow повертається як `partial`.
 
 `GET /api/manual-review` повертає reference-only tasks із фільтрами subject/status/limit. `PATCH /api/manual-review` дозволяє analyst явно встановити `open`, `resolved` або `dismissed`; explicit reopen дозволений, але автоматичний sync resolved/dismissed tasks не reopen-ить.
 
+Frontend тепер має analyst auth shell, read-only queue з status/subject filters та явні actions `resolved / dismissed / reopen`. ПІБ використовується лише як UI-join із `/api/subjects` і не копіюється у Human Manual Review persistence. Після status mutation queue перечитується з API, тому UI не підміняє occurrence metadata неповною PATCH-відповіддю.
+
 Наступні блоки:
 
-1. UI Manual Review Queue;
-2. evidence/provenance UI;
-3. фінальна dossier presentation.
+1. evidence/provenance UI;
+2. фінальна dossier presentation;
+3. canonical PDF/Excel та audit/diff.
 
 ## Джерела
 
