@@ -1702,6 +1702,194 @@ function buildMethodology(
   };
 }
 
+function primitiveTextList(
+  value
+) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter(
+      (item) =>
+        typeof item === "string" ||
+        typeof item === "number"
+    )
+    .map(textOrNull)
+    .filter(Boolean);
+}
+
+function buildMeta(report) {
+  const meta =
+    isRecord(report?.meta)
+      ? report.meta
+      : {};
+
+  return {
+    schema_version:
+      textOrNull(
+        meta.schema_version
+      ),
+
+    analytics_version:
+      textOrNull(
+        meta.analytics_version
+      ),
+
+    period: {
+      from_year:
+        safeYear(
+          meta.period?.from_year
+        ),
+
+      to_year:
+        safeYear(
+          meta.period?.to_year
+        ),
+    },
+
+    available_years:
+      (
+        Array.isArray(
+          meta.available_years
+        )
+          ? meta.available_years
+          : []
+      )
+        .map(safeYear)
+        .filter(
+          (year) =>
+            year !== null
+        ),
+
+    freshness:
+      primitiveTextList(
+        meta.freshness
+      ),
+  };
+}
+
+function buildIdentity(report) {
+  const identity =
+    isRecord(report?.identity)
+      ? report.identity
+      : {};
+
+  return {
+    resolution_status:
+      textOrNull(
+        identity.resolution_status
+      ),
+
+    score:
+      numberOrNull(
+        identity.score
+      ),
+
+    hard_match:
+      booleanOrNull(
+        identity.hard_match
+      ),
+
+    review_required:
+      booleanOrNull(
+        identity.review_required
+      ),
+
+    identifiers:
+      primitiveTextList(
+        identity.identifiers
+      ),
+
+    aliases:
+      primitiveTextList(
+        identity.aliases
+      ),
+
+    reasons:
+      primitiveTextList(
+        identity.reasons
+      ),
+  };
+}
+
+function buildDeclarations(
+  report,
+  sourcesById
+) {
+  const section =
+    isRecord(
+      report?.declarations
+    )
+      ? report.declarations
+      : {};
+
+  const items =
+    Array.isArray(section.items)
+      ? section.items
+      : [];
+
+  return {
+    available_years:
+      (
+        Array.isArray(
+          section.available_years
+        )
+          ? section.available_years
+          : []
+      )
+        .map(safeYear)
+        .filter(
+          (year) =>
+            year !== null
+        ),
+
+    items:
+      items
+        .filter(isRecord)
+        .map((item) => ({
+          year:
+            safeYear(
+              item.year
+            ),
+
+          document_guid:
+            textOrNull(
+              item.document_guid
+            ),
+
+          registry:
+            textOrNull(
+              item.registry
+            ),
+
+          published_at:
+            textOrNull(
+              item.published_at
+            ),
+
+          source_url:
+            textOrNull(
+              item.source_url
+            ),
+
+          canonical:
+            booleanOrNull(
+              item.canonical
+            ),
+
+          statement_type:
+            "source_fact",
+
+          evidence:
+            safeEvidence(
+              item.evidence,
+              sourcesById
+            ),
+        })),
+  };
+}
+
 function buildSubject(report) {
   const subject =
     isRecord(
@@ -1729,6 +1917,11 @@ function buildSubject(report) {
     city:
       textOrNull(
         subject.city
+      ),
+
+    status:
+      textOrNull(
+        subject.status
       ),
   };
 }
@@ -1803,9 +1996,25 @@ export function buildDossierExportModel(
         ),
     },
 
+    meta:
+      buildMeta(
+        report
+      ),
+
     subject:
       buildSubject(
         report
+      ),
+
+    identity:
+      buildIdentity(
+        report
+      ),
+
+    declarations:
+      buildDeclarations(
+        report,
+        sourcesById
       ),
 
     brief:

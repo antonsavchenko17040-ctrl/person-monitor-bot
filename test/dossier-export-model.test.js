@@ -36,6 +36,118 @@ function fixture() {
       "2026-08-12T10:01:00.000Z",
 
     report: {
+      meta: {
+        report_id:
+          "hidden-report-id",
+
+        schema_version:
+          "report-model-v1",
+
+        analytics_version:
+          "report-analytics-v1",
+
+        period: {
+          from_year:
+            2024,
+
+          to_year:
+            2025,
+        },
+
+        available_years: [
+          2025,
+          2024,
+        ],
+
+        freshness: [
+          "snapshot",
+
+          {
+            internal:
+              "hidden-freshness-object",
+          },
+        ],
+      },
+
+      identity: {
+        resolution_status:
+          "confirmed",
+
+        score:
+          98,
+
+        hard_match:
+          true,
+
+        review_required:
+          false,
+
+        identifiers: [
+          "public-identifier",
+
+          {
+            internal_ref:
+              "hidden-identity-object",
+          },
+        ],
+
+        aliases: [
+          "Тестовий Псевдонім",
+        ],
+
+        reasons: [
+          "guid_match",
+        ],
+
+        internal_identity_ref:
+          "hidden-identity-ref",
+      },
+
+      declarations: {
+        available_years: [
+          2025,
+          2024,
+        ],
+
+        items: [
+          {
+            year:
+              2025,
+
+            source_document_id:
+              SOURCE_ID,
+
+            document_guid:
+              "public-document-guid",
+
+            registry:
+              "NAZK",
+
+            published_at:
+              "2026-01-01T00:00:00.000Z",
+
+            source_url:
+              "https://example.test/declaration",
+
+            canonical:
+              true,
+
+            internal_declaration_ref:
+              "hidden-declaration-ref",
+
+            evidence: [
+              {
+                source_document_id:
+                  SOURCE_ID,
+
+                statement_type:
+                  "source_fact",
+              },
+            ],
+          },
+        ],
+      },
+
       subject: {
         id:
           "22222222-2222-4222-8222-222222222222",
@@ -51,6 +163,9 @@ function fixture() {
 
         city:
           "Київ",
+
+        status:
+          "active",
       },
 
       analytical_brief: {
@@ -896,6 +1011,83 @@ test(
 );
 
 test(
+  "projects canonical overview safely",
+  () => {
+    const result =
+      buildDossierExportModel(
+        fixture()
+      );
+
+    assert.equal(
+      result.meta
+        .schema_version,
+      "report-model-v1"
+    );
+
+    assert.deepEqual(
+      result.meta
+        .available_years,
+      [
+        2025,
+        2024,
+      ]
+    );
+
+    assert.deepEqual(
+      result.meta.freshness,
+      [
+        "snapshot",
+      ]
+    );
+
+    assert.equal(
+      result.subject.status,
+      "active"
+    );
+
+    assert.equal(
+      result.identity
+        .resolution_status,
+      "confirmed"
+    );
+
+    assert.equal(
+      result.identity.hard_match,
+      true
+    );
+
+    assert.deepEqual(
+      result.identity.identifiers,
+      [
+        "public-identifier",
+      ]
+    );
+
+    assert.equal(
+      result.declarations
+        .items[0]
+        .document_guid,
+      "public-document-guid"
+    );
+
+    assert.equal(
+      result.declarations
+        .items[0]
+        .canonical,
+      true
+    );
+
+    assert.equal(
+      result.declarations
+        .items[0]
+        .evidence[0]
+        .url,
+      "https://example.test/source"
+    );
+  }
+);
+
+test(
   "projects analytics and media safely",
   () => {
     const result =
@@ -1142,6 +1334,13 @@ test(
         "search_query",
         "full_text",
         "provider_article_body",
+        "hidden-report-id",
+        "hidden-freshness-object",
+        "hidden-identity-object",
+        "hidden-identity-ref",
+        "hidden-declaration-ref",
+        "internal_identity_ref",
+        "internal_declaration_ref",
       ]
     ) {
       assert.equal(
