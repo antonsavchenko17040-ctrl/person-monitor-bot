@@ -1,8 +1,4 @@
 import {
-  isPortalAuthenticated,
-} from "../src/auth.js";
-
-import {
   runSubjectDossier,
 } from "../src/dossier-orchestrator.js";
 
@@ -20,10 +16,6 @@ const UUID_RE =
 export function createDossierHandler(
   options = {},
 ) {
-  const isAuthenticated =
-    options.isAuthenticated ??
-    isPortalAuthenticated;
-
   const orchestrateDossier =
     options.orchestrateDossier ??
     runSubjectDossier;
@@ -63,19 +55,6 @@ export function createDossierHandler(
         });
     }
 
-    if (
-      !isAuthenticated(
-        request,
-      )
-    ) {
-      return response
-        .status(401)
-        .json({
-          ok: false,
-          error:
-            "Unauthorized",
-        });
-    }
 
     const subjectId =
       String(

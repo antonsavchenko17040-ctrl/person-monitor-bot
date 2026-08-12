@@ -27,8 +27,8 @@ Person Monitor — система для автоматизованого фор
 - deterministic analytics, findings та evidence-backed executive summary;
 - `analytical_brief` як стабільний presentation manifest;
 - unified dossier orchestrator;
-- authenticated `POST /api/dossier?subjectId=...`;
-- authenticated read-only `GET /api/dossier-version` для latest snapshot за `subjectId` або exact snapshot за `dossierVersionId`;
+- `POST /api/dossier?subjectId=...`;
+- read-only `GET /api/dossier-version` для latest snapshot за `subjectId` або exact snapshot за `dossierVersionId`;
 - versioned dossier persistence у Neon через `dossier_versions`;
 - canonical JSON SHA-256 integrity hashing;
 - контрольована live Neon persistence verification;
@@ -40,10 +40,9 @@ Person Monitor — система для автоматизованого фор
   - idempotent snapshot occurrences без автоматичного reopen `resolved / dismissed`;
   - orchestrator wiring після успішного dossier persistence;
   - production `/api/dossier` підключає dossier persistence та manual-review sync;
-  - authenticated `/api/manual-review` для list/filter та explicit analyst status update;
-  - analyst auth shell через `/api/session`, `/api/login`, `/api/logout`;
+  - `/api/manual-review` для list/filter та explicit analyst status update;
   - Manual Review Queue UI з status/subject filters;
-  - analyst actions `resolved / dismissed / reopen` через authenticated PATCH;
+  - analyst actions `resolved / dismissed / reopen` через explicit PATCH;
   - перехід із Manual Review task до exact persisted snapshot через `latest_dossier_version_id`;
 - persisted canonical dossier presentation G1–G7 завершена:
   - G1 — canonical dossier presentation shell (`b1c485b`);
@@ -61,7 +60,7 @@ Person Monitor — система для автоматизованого фор
   - raw `source_document_id` і `tracking_identity.source_item_ref` не показуються у presentation, але можуть використовуватись внутрішньо для exact evidence/source join;
   - `Dossier version` та SHA-256 залишаються видимою audit/integrity metadata snapshot;
   - вибір subject, відкриття review task та `Оновити перегляд` не викликають автоматичний `POST /api/dossier`;
-  - explicit authenticated action `Сформувати / Оновити досьє` запускає `POST /api/dossier` тільки по analyst click;
+  - explicit action `Сформувати / Оновити досьє` запускає `POST /api/dossier` тільки по analyst click;
   - після успішного `steps.persistence.status = completed` UI перечитує latest persisted snapshot через `GET /api/dossier-version`;
   - `partial` workflow із успішним persistence не втрачає створений snapshot; failed persistence не підміняється frontend-успіхом;
 - повний технічний pipeline ЄДР/ФОП:
@@ -81,8 +80,8 @@ Person Monitor — система для автоматизованого фор
   - shared safe projection `dossier-export-model-v1`;
   - Excel builder `dossier-excel-v1`;
   - PDF builder `dossier-pdf-v1`;
-  - authenticated `GET /api/dossier-excel?dossierVersionId=...`;
-  - authenticated `GET /api/dossier-pdf?dossierVersionId=...`;
+  - `GET /api/dossier-excel?dossierVersionId=...`;
+  - `GET /api/dossier-pdf?dossierVersionId=...`;
   - canonical export endpoints не приймають `subjectId` і не перебудовують live dossier;
   - frontend формує canonical export links лише для exact `activeDossierVersion.id`;
   - legacy `/api/report-excel` та `/api/report-pdf` поки лишаються compatibility exports;
@@ -134,7 +133,7 @@ F2a schema foundation, F2b store/sync contract, F2c orchestrator wiring, F2d ana
 
 `GET /api/manual-review` повертає reference-only tasks із фільтрами subject/status/limit. `PATCH /api/manual-review` дозволяє analyst явно встановити `open`, `resolved` або `dismissed`; explicit reopen дозволений, але автоматичний sync resolved/dismissed tasks не reopen-ить.
 
-Frontend тепер має analyst auth shell, read-only queue з status/subject filters та явні actions `resolved / dismissed / reopen`. ПІБ використовується лише як UI-join із `/api/subjects` і не копіюється у Human Manual Review persistence. Після status mutation queue перечитується з API, тому UI не підміняє occurrence metadata неповною PATCH-відповіддю. Review task може відкрити саме `latest_dossier_version_id`, а подальший refresh зберігає exact-version semantics.
+Frontend тепер має read-only Manual Review Queue з status/subject filters та явні actions `resolved / dismissed / reopen`. ПІБ використовується лише як UI-join із `/api/subjects` і не копіюється у Human Manual Review persistence. Після status mutation queue перечитується з API, тому UI не підміняє occurrence metadata неповною PATCH-відповіддю. Review task може відкрити саме `latest_dossier_version_id`, а подальший refresh зберігає exact-version semantics.
 
 Наступні блоки:
 
@@ -228,5 +227,5 @@ docs/REPORT_MODEL_SPEC.md
 - search query text не є identity evidence;
 - provider output не повинен віддавати користувачу повний текст статті;
 - canonical dossier PDF/Excel працюють від exact immutable `dossier_versions` snapshot; legacy `/api/report-pdf` та `/api/report-excel` залишаються лише compatibility path і не є canonical dossier export;
-- Manual Review Queue має schema foundation, atomic store/sync contract, orchestrator wiring, authenticated analyst status API та analyst UI; actor/note/history audit trail ще не реалізовано;
+- Manual Review Queue має schema foundation, atomic store/sync contract, orchestrator wiring, analyst status API та analyst UI; actor/note/history audit trail ще не реалізовано;
 - AUTO.RIA / нерухомість / OpenDataBot не повинні випереджати завершення dossier, evidence та review workflow.

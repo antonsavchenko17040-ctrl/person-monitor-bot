@@ -1,8 +1,4 @@
 import {
-  isPortalAuthenticated,
-} from "../src/auth.js";
-
-import {
   loadDossierVersionById,
   loadLatestDossierVersion,
 } from "../src/dossier-version-store.js";
@@ -25,10 +21,6 @@ function badRequest(
 export function createDossierVersionHandler(
   options = {},
 ) {
-  const isAuthenticated =
-    options.isAuthenticated ??
-    isPortalAuthenticated;
-
   const loadLatest =
     options.loadLatest ??
     loadLatestDossierVersion;
@@ -58,19 +50,6 @@ export function createDossierVersionHandler(
         });
     }
 
-    if (
-      !isAuthenticated(
-        request,
-      )
-    ) {
-      return response
-        .status(401)
-        .json({
-          ok: false,
-          error:
-            "Unauthorized",
-        });
-    }
 
     const subjectId =
       request.query

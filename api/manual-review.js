@@ -1,8 +1,4 @@
 import {
-  isPortalAuthenticated,
-} from "../src/auth.js";
-
-import {
   listManualReviewTasks,
   setManualReviewTaskStatus,
 } from "../src/manual-review-store.js";
@@ -86,10 +82,6 @@ function parsePatchBody(
 export function createManualReviewHandler(
   options = {},
 ) {
-  const isAuthenticated =
-    options.isAuthenticated ??
-    isPortalAuthenticated;
-
   const listTasks =
     options.listTasks ??
     listManualReviewTasks;
@@ -120,19 +112,6 @@ export function createManualReviewHandler(
         });
     }
 
-    if (
-      !isAuthenticated(
-        request,
-      )
-    ) {
-      return response
-        .status(401)
-        .json({
-          ok: false,
-          error:
-            "Unauthorized",
-        });
-    }
 
     if (
       request.method === "GET"

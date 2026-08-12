@@ -1,8 +1,4 @@
 import {
-  isPortalAuthenticated,
-} from "../src/auth.js";
-
-import {
   loadDossierExportInput,
 } from "../src/dossier-export-input.js";
 
@@ -33,10 +29,6 @@ function badRequest(
 export function createDossierPdfHandler(
   options = {}
 ) {
-  const isAuthenticated =
-    options.isAuthenticated ??
-    isPortalAuthenticated;
-
   const loadExportInput =
     options.loadExportInput ??
     loadDossierExportInput;
@@ -72,19 +64,6 @@ export function createDossierPdfHandler(
         });
     }
 
-    if (
-      !isAuthenticated(
-        request
-      )
-    ) {
-      return response
-        .status(401)
-        .json({
-          ok: false,
-          error:
-            "Unauthorized",
-        });
-    }
 
     const subjectId =
       request.query

@@ -33,7 +33,7 @@ function createResponse() {
 }
 
 test(
-  "authenticated POST runs unified dossier workflow",
+  "POST runs unified dossier workflow",
   async () => {
     const subjectId =
       "11111111-1111-4111-8111-111111111111";
@@ -67,10 +67,6 @@ test(
 
     const handler =
       createDossierHandler({
-        isAuthenticated:
-          () =>
-            true,
-
         runDossier:
           async (receivedSubjectId) => {
             calls.push(
@@ -126,67 +122,6 @@ test(
 );
 
 
-test(
-  "rejects unauthenticated dossier request",
-  async () => {
-    let runCalled =
-      false;
-
-    const handler =
-      createDossierHandler({
-        isAuthenticated:
-          () =>
-            false,
-
-        runDossier:
-          async () => {
-            runCalled =
-              true;
-
-            throw new Error(
-              "workflow must not run",
-            );
-          },
-      });
-
-    const request = {
-      method:
-        "POST",
-
-      query: {
-        subjectId:
-          "11111111-1111-4111-8111-111111111111",
-      },
-    };
-
-    const response =
-      createResponse();
-
-    await handler(
-      request,
-      response,
-    );
-
-    assert.equal(
-      runCalled,
-      false,
-    );
-
-    assert.equal(
-      response.statusCode,
-      401,
-    );
-
-    assert.deepEqual(
-      response.body,
-      {
-        ok: false,
-        error:
-          "Unauthorized",
-      },
-    );
-  },
-);
 
 
 test(
@@ -197,10 +132,6 @@ test(
 
     const handler =
       createDossierHandler({
-        isAuthenticated:
-          () =>
-            true,
-
         runDossier:
           async () => {
             runCalled =
@@ -260,10 +191,6 @@ test(
 
     const handler =
       createDossierHandler({
-        isAuthenticated:
-          () =>
-            true,
-
         runDossier:
           async () => {
             runCalled =
@@ -370,10 +297,6 @@ test(
 
     const handler =
       createDossierHandler({
-        isAuthenticated:
-          () =>
-            true,
-
         runDossier:
           async () =>
             dossier,
@@ -422,10 +345,6 @@ test(
 
     const handler =
       createDossierHandler({
-        isAuthenticated:
-          () =>
-            true,
-
         runDossier:
           async () => {
             throw new Error(
@@ -545,10 +464,6 @@ test(
 
     const handler =
       createDossierHandler({
-        isAuthenticated:
-          () =>
-            true,
-
         runDossier:
           async () =>
             dossier,
@@ -638,10 +553,6 @@ test(
 
     const handler =
       createDossierHandler({
-        isAuthenticated:
-          () =>
-            true,
-
         persistDossier,
 
         syncManualReview,
@@ -743,10 +654,6 @@ test(
 
     const handler =
       createDossierHandler({
-        isAuthenticated:
-          () =>
-            true,
-
         orchestrateDossier:
           async () => {
             orchestratorCalls +=

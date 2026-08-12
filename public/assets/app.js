@@ -20,9 +20,6 @@ let activeChatHistory = [];
 let chatRequestPending = false;
 let chatApiAvailable = null;
 
-let portalAuthenticated = false;
-let portalAuthPending = false;
-
 let manualReviewTasks = [];
 let manualReviewLoading = false;
 
@@ -2947,7 +2944,6 @@ function renderDossierEvidence() {
 
   if (refresh) {
     refresh.disabled =
-      !portalAuthenticated ||
       !activeDossierSubjectId ||
       dossierEvidenceLoading ||
       dossierBuildPending;
@@ -2960,7 +2956,6 @@ function renderDossierEvidence() {
 
   if (build) {
     build.disabled =
-      !portalAuthenticated ||
       !activeDossierSubjectId ||
       dossierEvidenceLoading ||
       dossierBuildPending;
@@ -2978,7 +2973,6 @@ function renderDossierEvidence() {
     ).trim();
 
   const canonicalExportEnabled =
-    portalAuthenticated &&
     Boolean(
       displayedDossierVersionId
     );
@@ -3046,12 +3040,6 @@ function renderDossierEvidence() {
     return;
   }
 
-  if (!portalAuthenticated) {
-    status.textContent =
-      "Увійдіть у режим аналітика для перегляду persisted dossier.";
-
-    return;
-  }
 
   if (dossierEvidenceLoading) {
     status.textContent =
@@ -3697,7 +3685,6 @@ function renderDossierEvidence() {
 
 async function buildActiveDossier() {
   if (
-    !portalAuthenticated ||
     !activeDossierSubjectId ||
     dossierBuildPending ||
     dossierEvidenceLoading
@@ -3745,19 +3732,6 @@ async function buildActiveDossier() {
         await response.json();
     } catch {}
 
-    if (
-      response.status === 401
-    ) {
-      portalAuthenticated =
-        false;
-
-      applyPortalAuthState();
-
-      dossierEvidenceMessage =
-        "Сесія завершилась. Увійдіть повторно.";
-
-      return;
-    }
 
     if (
       !response.ok ||
@@ -3845,7 +3819,6 @@ async function loadDossierEvidence(
   messageAfterLoad = ""
 ) {
   if (
-    !portalAuthenticated ||
     !subjectId
   ) {
     return;
@@ -3912,19 +3885,6 @@ async function loadDossierEvidence(
         await response.json();
     } catch {}
 
-    if (
-      response.status === 401
-    ) {
-      portalAuthenticated =
-        false;
-
-      applyPortalAuthState();
-
-      dossierEvidenceMessage =
-        "Сесія завершилась. Увійдіть повторно.";
-
-      return;
-    }
 
     if (
       response.status === 404
@@ -4486,7 +4446,6 @@ async function updateManualReviewTaskStatus(
   taskStatus
 ) {
   if (
-    !portalAuthenticated ||
     !taskId ||
     manualReviewPendingTaskIds.has(
       taskId
@@ -4538,21 +4497,6 @@ async function updateManualReviewTaskStatus(
     } catch {}
 
     if (
-      response.status === 401
-    ) {
-      portalAuthenticated =
-        false;
-
-      manualReviewTasks = [];
-
-      applyPortalAuthState();
-
-      throw new Error(
-        "Сесія завершилась. Увійдіть повторно."
-      );
-    }
-
-    if (
       !response.ok ||
       data?.ok !== true
     ) {
@@ -4585,15 +4529,12 @@ async function updateManualReviewTaskStatus(
     renderManualReviewQueue();
   }
 
-  if (portalAuthenticated) {
-    await loadManualReviewQueue();
-  }
+  await loadManualReviewQueue();
 }
 
 
 async function loadManualReviewQueue() {
   if (
-    !portalAuthenticated ||
     manualReviewLoading
   ) {
     return;
@@ -4655,21 +4596,6 @@ async function loadManualReviewQueue() {
     } catch {}
 
     if (
-      response.status === 401
-    ) {
-      portalAuthenticated =
-        false;
-
-      manualReviewTasks = [];
-
-      applyPortalAuthState();
-
-      throw new Error(
-        "Сесія завершилась. Увійдіть повторно."
-      );
-    }
-
-    if (
       !response.ok ||
       data?.ok !== true
     ) {
@@ -4706,281 +4632,6 @@ async function loadManualReviewQueue() {
   } finally {
     manualReviewLoading = false;
     renderManualReviewQueue();
-  }
-}
-
-
-function applyPortalAuthState() {
-  const loginCard =
-    document.getElementById(
-      "portal-login-card"
-    );
-
-  const sessionCard =
-    document.getElementById(
-      "portal-session-card"
-    );
-
-  const analystTools =
-    document.getElementById(
-      "analyst-tools"
-    );
-
-  const password =
-    document.getElementById(
-      "portal-password"
-    );
-
-  const submit =
-    document.getElementById(
-      "portal-login-submit"
-    );
-
-  if (loginCard) {
-    loginCard.style.display =
-      portalAuthenticated
-        ? "none"
-        : "block";
-  }
-
-  if (sessionCard) {
-    sessionCard.style.display =
-      portalAuthenticated
-        ? "flex"
-        : "none";
-  }
-
-  if (analystTools) {
-    analystTools.style.display =
-      portalAuthenticated
-        ? "block"
-        : "none";
-  }
-
-  if (password) {
-    password.disabled =
-      portalAuthPending;
-  }
-
-  if (submit) {
-    submit.disabled =
-      portalAuthPending;
-
-    submit.textContent =
-      portalAuthPending
-        ? "Перевірка…"
-        : "Увійти";
-  }
-}
-
-
-async function loadPortalSession() {
-  const status =
-    document.getElementById(
-      "portal-auth-status"
-    );
-
-  try {
-    const response =
-      await fetch(
-        "/api/session",
-        {
-          headers: {
-            Accept:
-              "application/json",
-          },
-        }
-      );
-
-    if (!response.ok) {
-      throw new Error(
-        `HTTP ${response.status}`
-      );
-    }
-
-    const data =
-      await response.json();
-
-    portalAuthenticated =
-      data?.authenticated === true;
-
-    if (
-      portalAuthenticated
-    ) {
-      await loadManualReviewQueue();
-    }
-
-    if (status) {
-      status.textContent =
-        portalAuthenticated
-          ? ""
-          : "Для Manual Review потрібен вхід.";
-    }
-  } catch (error) {
-    console.error(
-      "Portal session check failed:",
-      error
-    );
-
-    portalAuthenticated =
-      false;
-
-    if (status) {
-      status.textContent =
-        "Не вдалося перевірити сесію.";
-    }
-  }
-
-  applyPortalAuthState();
-}
-
-
-async function submitPortalLogin(
-  event
-) {
-  event.preventDefault();
-
-  if (portalAuthPending) {
-    return;
-  }
-
-  const password =
-    document.getElementById(
-      "portal-password"
-    );
-
-  const status =
-    document.getElementById(
-      "portal-auth-status"
-    );
-
-  const value =
-    password?.value ?? "";
-
-  if (!value) {
-    if (status) {
-      status.textContent =
-        "Введіть пароль.";
-    }
-
-    return;
-  }
-
-  portalAuthPending = true;
-  applyPortalAuthState();
-
-  try {
-    const response =
-      await fetch(
-        "/api/login",
-        {
-          method:
-            "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json",
-
-            Accept:
-              "application/json",
-          },
-
-          body:
-            JSON.stringify({
-              password:
-                value,
-            }),
-        }
-      );
-
-    let data = null;
-
-    try {
-      data =
-        await response.json();
-    } catch {}
-
-    if (
-      !response.ok ||
-      data?.ok !== true
-    ) {
-      throw new Error(
-        response.status === 401
-          ? "Невірний пароль."
-          : "Не вдалося виконати вхід."
-      );
-    }
-
-    portalAuthenticated = true;
-
-    await loadManualReviewQueue();
-
-    if (password) {
-      password.value = "";
-    }
-
-    if (status) {
-      status.textContent = "";
-    }
-  } catch (error) {
-    portalAuthenticated = false;
-
-    if (status) {
-      status.textContent =
-        error?.message ??
-        "Помилка авторизації.";
-    }
-  } finally {
-    portalAuthPending = false;
-    applyPortalAuthState();
-  }
-}
-
-
-async function logoutPortal() {
-  if (portalAuthPending) {
-    return;
-  }
-
-  portalAuthPending = true;
-  applyPortalAuthState();
-
-  try {
-    const response =
-      await fetch(
-        "/api/logout",
-        {
-          method:
-            "POST",
-
-          headers: {
-            Accept:
-              "application/json",
-          },
-        }
-      );
-
-    if (!response.ok) {
-      throw new Error(
-        `HTTP ${response.status}`
-      );
-    }
-  } catch (error) {
-    console.error(
-      "Portal logout failed:",
-      error
-    );
-  } finally {
-    portalAuthenticated = false;
-    portalAuthPending = false;
-    manualReviewTasks = [];
-    manualReviewPendingTaskIds.clear();
-    activeDossierVersion = null;
-    activeDossierRequestedVersionId = null;
-    dossierEvidenceMessage = "";
-    renderManualReviewQueue();
-    renderDossierEvidence();
-    applyPortalAuthState();
   }
 }
 
@@ -5787,12 +5438,10 @@ async function loadSubjects() {
           loadSubjectGraph(subject.id, subject.full_name),
         ]);
 
-        if (portalAuthenticated) {
-          await loadDossierEvidence(
-            subject.id,
-            subject.full_name
-          );
-        }
+        await loadDossierEvidence(
+          subject.id,
+          subject.full_name
+        );
 
         document
           .getElementById("subject-stats-section")
@@ -7544,27 +7193,6 @@ document
     "click",
     loadManualReviewQueue
   );
-
-document
-  .getElementById(
-    "portal-login-form"
-  )
-  ?.addEventListener(
-    "submit",
-    submitPortalLogin
-  );
-
-document
-  .getElementById(
-    "portal-logout"
-  )
-  ?.addEventListener(
-    "click",
-    logoutPortal
-  );
-
-loadPortalSession();
-
 document
   .getElementById(
     "dossier-build"

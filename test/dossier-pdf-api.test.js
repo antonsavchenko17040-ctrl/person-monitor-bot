@@ -56,7 +56,7 @@ function createResponse() {
 
 
 test(
-  "authenticated GET exports exact persisted dossier version",
+  "GET exports exact persisted dossier version",
   async () => {
     const calls = [];
 
@@ -84,10 +84,6 @@ test(
 
     const handler =
       createDossierPdfHandler({
-        isAuthenticated:
-          () =>
-            true,
-
         loadExportInput:
           async (received) => {
             calls.push({
@@ -222,24 +218,14 @@ test(
 
 
 test(
-  "rejects non GET before authentication and export access",
+  "rejects non GET before export access",
   async () => {
-    let authCalls =
-      0;
 
     let loadCalls =
       0;
 
     const handler =
       createDossierPdfHandler({
-        isAuthenticated:
-          () => {
-            authCalls +=
-              1;
-
-            return true;
-          },
-
         loadExportInput:
           async () => {
             loadCalls +=
@@ -270,10 +256,6 @@ test(
       405
     );
 
-    assert.equal(
-      authCalls,
-      0
-    );
 
     assert.equal(
       loadCalls,
@@ -290,63 +272,6 @@ test(
 );
 
 
-test(
-  "rejects unauthenticated request before export access",
-  async () => {
-    let loadCalls =
-      0;
-
-    const handler =
-      createDossierPdfHandler({
-        isAuthenticated:
-          () =>
-            false,
-
-        loadExportInput:
-          async () => {
-            loadCalls +=
-              1;
-
-            return null;
-          },
-      });
-
-    const response =
-      createResponse();
-
-    await handler(
-      {
-        method:
-          "GET",
-
-        query: {
-          dossierVersionId:
-            VERSION_ID,
-        },
-      },
-      response
-    );
-
-    assert.equal(
-      response.statusCode,
-      401
-    );
-
-    assert.deepEqual(
-      response.body,
-      {
-        ok: false,
-        error:
-          "Unauthorized",
-      }
-    );
-
-    assert.equal(
-      loadCalls,
-      0
-    );
-  }
-);
 
 
 test(
@@ -357,10 +282,6 @@ test(
 
     const handler =
       createDossierPdfHandler({
-        isAuthenticated:
-          () =>
-            true,
-
         loadExportInput:
           async () => {
             loadCalls +=
@@ -413,10 +334,6 @@ test(
 
     const handler =
       createDossierPdfHandler({
-        isAuthenticated:
-          () =>
-            true,
-
         loadExportInput:
           async () => {
             loadCalls +=
@@ -468,10 +385,6 @@ test(
   async () => {
     const handler =
       createDossierPdfHandler({
-        isAuthenticated:
-          () =>
-            true,
-
         loadExportInput:
           async () =>
             null,
@@ -515,10 +428,6 @@ test(
   async () => {
     const handler =
       createDossierPdfHandler({
-        isAuthenticated:
-          () =>
-            true,
-
         loadExportInput:
           async () => {
             throw new TypeError(

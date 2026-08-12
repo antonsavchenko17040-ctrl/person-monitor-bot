@@ -49,7 +49,7 @@ function createResponse() {
 
 
 test(
-  "authenticated GET lists manual review tasks with filters",
+  "GET lists manual review tasks with filters",
   async () => {
     const calls = [];
 
@@ -76,10 +76,6 @@ test(
 
     const handler =
       createManualReviewHandler({
-        isAuthenticated:
-          () =>
-            true,
-
         listTasks:
           async (input) => {
             calls.push(
@@ -150,16 +146,12 @@ test(
 
 
 test(
-  "authenticated GET defaults to open manual review tasks",
+  "GET defaults to open manual review tasks",
   async () => {
     const calls = [];
 
     const handler =
       createManualReviewHandler({
-        isAuthenticated:
-          () =>
-            true,
-
         listTasks:
           async (input) => {
             calls.push(
@@ -205,88 +197,14 @@ test(
 );
 
 
-test(
-  "manual review API rejects unauthenticated request before store access",
-  async () => {
-    let calls = 0;
-
-    const handler =
-      createManualReviewHandler({
-        isAuthenticated:
-          () =>
-            false,
-
-        listTasks:
-          async () => {
-            calls +=
-              1;
-
-            return [];
-          },
-
-        setTaskStatus:
-          async () => {
-            calls +=
-              1;
-
-            return {};
-          },
-      });
-
-    for (
-      const method
-      of [
-        "GET",
-        "PATCH",
-      ]
-    ) {
-      const response =
-        createResponse();
-
-      await handler(
-        {
-          method,
-          query: {},
-          body: {
-            taskId:
-              TASK_ID,
-
-            taskStatus:
-              "resolved",
-          },
-        },
-        response,
-      );
-
-      assert.equal(
-        response.statusCode,
-        401,
-      );
-    }
-
-    assert.equal(
-      calls,
-      0,
-    );
-  },
-);
 
 
 test(
-  "manual review API rejects unsupported method before auth",
+  "manual review API rejects unsupported method before store access",
   async () => {
-    let authCalls = 0;
 
     const handler =
-      createManualReviewHandler({
-        isAuthenticated:
-          () => {
-            authCalls +=
-              1;
-
-            return true;
-          },
-      });
+      createManualReviewHandler({      });
 
     const response =
       createResponse();
@@ -299,10 +217,6 @@ test(
       response,
     );
 
-    assert.equal(
-      authCalls,
-      0,
-    );
 
     assert.equal(
       response.statusCode,
@@ -313,7 +227,7 @@ test(
 
 
 test(
-  "authenticated PATCH updates explicit manual review status",
+  "PATCH updates explicit manual review status",
   async () => {
     const calls = [];
 
@@ -330,10 +244,6 @@ test(
 
     const handler =
       createManualReviewHandler({
-        isAuthenticated:
-          () =>
-            true,
-
         setTaskStatus:
           async (input) => {
             calls.push(
@@ -391,16 +301,12 @@ test(
 
 
 test(
-  "authenticated PATCH accepts JSON string body",
+  "PATCH accepts JSON string body",
   async () => {
     const calls = [];
 
     const handler =
       createManualReviewHandler({
-        isAuthenticated:
-          () =>
-            true,
-
         setTaskStatus:
           async (input) => {
             calls.push(
@@ -457,16 +363,12 @@ test(
 
 
 test(
-  "authenticated PATCH rejects copied non-reference fields",
+  "PATCH rejects copied non-reference fields",
   async () => {
     let calls = 0;
 
     const handler =
       createManualReviewHandler({
-        isAuthenticated:
-          () =>
-            true,
-
         setTaskStatus:
           async () => {
             calls +=
@@ -521,14 +423,10 @@ test(
 
 
 test(
-  "authenticated PATCH maps missing task to 404",
+  "PATCH maps missing task to 404",
   async () => {
     const handler =
       createManualReviewHandler({
-        isAuthenticated:
-          () =>
-            true,
-
         setTaskStatus:
           async () =>
             null,
@@ -575,10 +473,6 @@ test(
   async () => {
     const handler =
       createManualReviewHandler({
-        isAuthenticated:
-          () =>
-            true,
-
         listTasks:
           async () => {
             throw new TypeError(
@@ -647,10 +541,6 @@ test(
   async () => {
     const handler =
       createManualReviewHandler({
-        isAuthenticated:
-          () =>
-            true,
-
         listTasks:
           async () => {
             throw new Error(

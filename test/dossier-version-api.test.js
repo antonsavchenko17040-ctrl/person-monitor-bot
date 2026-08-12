@@ -49,7 +49,7 @@ function createResponse() {
 
 
 test(
-  "authenticated GET loads latest dossier version by subject",
+  "GET loads latest dossier version by subject",
   async () => {
     const calls = [];
 
@@ -63,10 +63,6 @@ test(
 
     const handler =
       createDossierVersionHandler({
-        isAuthenticated:
-          () =>
-            true,
-
         loadLatest:
           async (input) => {
             calls.push(
@@ -133,7 +129,7 @@ test(
 
 
 test(
-  "authenticated GET loads dossier version by id",
+  "GET loads dossier version by id",
   async () => {
     const calls = [];
 
@@ -147,10 +143,6 @@ test(
 
     const handler =
       createDossierVersionHandler({
-        isAuthenticated:
-          () =>
-            true,
-
         loadLatest:
           async () => {
             throw new Error(
@@ -208,21 +200,12 @@ test(
 
 
 test(
-  "dossier version API rejects unsupported method before auth",
+  "dossier version API rejects unsupported method before store access",
   async () => {
-    let authCalls = 0;
     let storeCalls = 0;
 
     const handler =
       createDossierVersionHandler({
-        isAuthenticated:
-          () => {
-            authCalls +=
-              1;
-
-            return true;
-          },
-
         loadLatest:
           async () => {
             storeCalls +=
@@ -253,10 +236,6 @@ test(
       405,
     );
 
-    assert.equal(
-      authCalls,
-      0,
-    );
 
     assert.equal(
       storeCalls,
@@ -266,61 +245,6 @@ test(
 );
 
 
-test(
-  "dossier version API rejects unauthenticated request before store access",
-  async () => {
-    let storeCalls = 0;
-
-    const handler =
-      createDossierVersionHandler({
-        isAuthenticated:
-          () =>
-            false,
-
-        loadLatest:
-          async () => {
-            storeCalls +=
-              1;
-
-            return null;
-          },
-
-        loadById:
-          async () => {
-            storeCalls +=
-              1;
-
-            return null;
-          },
-      });
-
-    const response =
-      createResponse();
-
-    await handler(
-      {
-        method:
-          "GET",
-
-        query: {
-          subjectId:
-            SUBJECT_ID,
-        },
-      },
-      response,
-    );
-
-    assert.equal(
-      response.statusCode,
-      401,
-    );
-
-    assert.equal(
-      storeCalls,
-      0,
-    );
-  },
-);
 
 
 test(
@@ -330,10 +254,6 @@ test(
 
     const handler =
       createDossierVersionHandler({
-        isAuthenticated:
-          () =>
-            true,
-
         loadLatest:
           async () => {
             storeCalls +=
@@ -396,10 +316,6 @@ test(
   async () => {
     const handler =
       createDossierVersionHandler({
-        isAuthenticated:
-          () =>
-            true,
-
         loadLatest:
           async () => {
             throw new TypeError(
@@ -442,10 +358,6 @@ test(
   async () => {
     const handler =
       createDossierVersionHandler({
-        isAuthenticated:
-          () =>
-            true,
-
         loadById:
           async () =>
             null,
@@ -485,10 +397,6 @@ test(
   async () => {
     const handler =
       createDossierVersionHandler({
-        isAuthenticated:
-          () =>
-            true,
-
         loadLatest:
           async () => {
             throw new Error(
