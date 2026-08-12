@@ -44,7 +44,9 @@
     "edr:integration": "node --env-file=.env scripts/verify-edr-neon-integration.js",
     "edr:weekly:check": "node --env-file=.env scripts/check-edr-weekly-sync.js",
     "edr:diff:integration": "node --env-file=.env scripts/verify-edr-snapshot-diff-neon.js",
-    "asset:transitions:integration": "node --env-file=.env scripts/verify-asset-transitions-neon.js"
+    "asset:transitions:integration": "node --env-file=.env scripts/verify-asset-transitions-neon.js",
+    "db:migrate:dossier": "node --env-file=.env scripts/migrate-dossier-schema.js",
+    "db:verify:dossier": "node --env-file=.env scripts/migrate-dossier-schema.js --verify-only"
   },
   "engines": {
     "node": ">=22"

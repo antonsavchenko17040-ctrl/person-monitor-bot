@@ -1,8 +1,8 @@
 # Person Monitor — функціональна модель, поточний стан і дорожня карта
 
 **Дата фіксації:** 12.08.2026
-**Базова точка:** блок 5.4E3b «Canonical timeless EDR relations + manual review projection» закрито; report-side timeless EDR loader підключений до canonical report model один раз на subject, окремо від declaration-year relations.
-**Технічний стан:** 578/578 тестів пройдено; `loadTimelessEdrRelations()` використовує canonical `EDR_GRAPH_RELATION_TYPES`, завантажується один раз на `subject.entity_id` незалежно від declaration years і проєктується в canonical `relations` із `year: null`. Timeless EDR relations дедуплікуються за `relation_id`, зберігають `confidence`, `verification_status` та allowlisted metadata, не потрапляють у yearly `relation_count`, мають українські presentation labels і залишаються `heuristic_signal` до ручного identity resolution. `manual_review` посилається на такі human-review relations лише через canonical UUID `item_ref`; media `review_status` не перетворюється на human-review queue. Persistence/Manual Review Queue UI, canonical identity review, `report_id` та audit trail ще не реалізовані.
+**Базова точка:** блоки 5.4F1a–5.4F1b «Dossier version persistence foundation» закрито локально; additive schema contract `dossier_versions`, generic versioned canonical JSON SHA-256 hashing і insert-only dossier-version store реалізовані. Міграція в Neon ще не застосована, а persistence stage ще не підключений до orchestrator.
+**Технічний стан:** 587/587 тестів пройдено. `dossier_versions` зберігає subject, `completed / partial` status, orchestrator/report contract versions, report generation time, canonical report snapshot, SHA-256 integrity hash та hash contract version. `canonical-json-sha256-v1` стабілізує порядок object keys, зберігає точний текст і array order та відхиляє unsupported/non-finite values. `saveDossierVersion()` є insert-only contract без deduplication або update semantics, перевіряє UUID subject, відповідність `report.subject.subject_id`, report schema/generated timestamp і не дозволяє persist `failed` dossier. Повторні однакові snapshots дозволені як окремі запуски. `ON DELETE CASCADE` відповідає чинному explicit hard-delete subject. `report_id` у canonical payload ще лишається `null`; orchestrator persistence wiring, persistent Manual Review Queue, canonical identity review та повний audit/diff між запусками ще не реалізовані.
 
 ## 1. Що повинен вміти портал
 
@@ -49,7 +49,7 @@ Person Monitor має бути не просто пошуковим сайтом
 | 19 | Декларації третіх осіб | 🟡 Частково | Треті особи вже витягуються; автоматичний пошук їх декларацій ще потрібен. |
 | 20 | Пул новин пов’язаних із суб’єктом | 🟡 Сильно просунуто | Google Web/News, corruption gate, identity gate, full-text verification і класифікація ролі суб’єкта готові. Далі — фінальне збереження/представлення у досьє. |
 | 21 | Формування метрик | 🟡 Частково | Analytics/metrics/findings є; затвердити фінальний набір і шкалу ризиків/сигналів. |
-| 22 | Структура на кроки + аналітична довідка | 🟡 Частково | Canonical model, orchestration core, authenticated POST API, evidence-backed executive summary, `analytical_brief` manifest, versioned presentation/evidence contract, canonical timeless EDR relations і reference-only `manual_review` manifest є; потрібні narrative, evidence UI, persistent Manual Review Queue/versioning та фінальне представлення досьє. |
+| 22 | Структура на кроки + аналітична довідка | 🟡 Частково | Canonical model, orchestration core, authenticated POST API, evidence-backed executive summary, `analytical_brief` manifest, canonical timeless EDR relations, reference-only `manual_review` manifest і локальний versioned dossier persistence foundation є; потрібні orchestrator persistence wiring, narrative, evidence UI, persistent Manual Review Queue та фінальне представлення досьє. |
 | 23 | Математичні правила порівняння | 🟡 Частково | Частина правил є; потрібна формалізована rule matrix для всіх ключових типів даних. |
 | 24 | Зробити PDF | 🔁 Дублікат | Об’єднати з пунктом №3. |
 
@@ -66,7 +66,7 @@ Person Monitor має бути не просто пошуковим сайтом
 2. **Orchestrator «Сформувати досьє».** Одна дія має запускати весь pipeline: джерела → ідентифікація → факти → зв’язки → cross-checks → метрики → довідка → експорт.
 3. **Evidence / provenance UI.** Кожен висновок має мати джерело, дату, фрагмент, правило та рівень упевненості.
 4. **Manual Review Queue.** Probable/ambiguous/conflict кейси повинні потрапляти аналітику на ручне підтвердження.
-5. **Версії досьє та audit trail.** Зберігати, що система знала на конкретну дату, які джерела спрацювали та що змінилося між запусками.
+5. **Версії досьє та audit trail.** Persistence foundation уже є локально: `dossier_versions`, canonical payload hash і insert-only store contract. Далі — підключити persistence до orchestrator, зафіксувати run/source metadata та порівняння змін між версіями.
 6. **Моніторинг змін.** Нові декларації, зміни ЄДР, нові релевантні медіаматеріали, зміни зв’язків/активів.
 7. **Статус джерел.** Показувати окремо успіх/помилку/timeout/недоступність кожного джерела, щоб “нічого не знайдено” не плуталось з “джерело не перевірено”.
 8. **Роль суб’єкта в корупційних матеріалах.** Розрізняти adverse_context / anti_corruption_activity / related_mention без висновку про винуватість.
