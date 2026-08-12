@@ -39,6 +39,11 @@ export async function runSubjectDossier(
       ? options.persistDossier
       : null;
 
+  const syncManualReview =
+    typeof options.syncManualReview === "function"
+      ? options.syncManualReview
+      : null;
+
   const subject =
     await subjectLoader(
       subjectId,
@@ -64,6 +69,13 @@ export async function runSubjectDossier(
       ...(persistDossier
         ? {
             dossier_version:
+              null,
+          }
+        : {}),
+
+      ...(syncManualReview
+        ? {
+            review_queue:
               null,
           }
         : {}),
@@ -100,6 +112,15 @@ export async function runSubjectDossier(
         ...(persistDossier
           ? {
               persistence: {
+                status:
+                  "skipped",
+              },
+            }
+          : {}),
+
+        ...(syncManualReview
+          ? {
+              review_queue: {
                 status:
                   "skipped",
               },
@@ -290,6 +311,68 @@ export async function runSubjectDossier(
     }
   }
 
+  let reviewQueue =
+    null;
+
+  let reviewQueueStatus =
+    syncManualReview
+      ? "skipped"
+      : null;
+
+  if (
+    syncManualReview &&
+    persistDossier &&
+    persistenceStatus === "completed" &&
+    dossierVersion
+  ) {
+    try {
+      const dossierVersionId =
+        dossierVersion?.id ??
+        null;
+
+      if (!dossierVersionId) {
+        throw new Error(
+          "Persisted dossier version has no id",
+        );
+      }
+
+      reviewQueue =
+        await syncManualReview({
+          subjectId,
+
+          dossierVersionId,
+
+          manualReview:
+            report?.manual_review,
+        });
+
+      if (!reviewQueue) {
+        throw new Error(
+          "Manual review sync returned no summary",
+        );
+      }
+
+      reviewQueueStatus =
+        "completed";
+    } catch (error) {
+      reviewQueueStatus =
+        "failed";
+
+      errors.push({
+        step:
+          "review_queue",
+
+        code:
+          "manual_review_sync_failed",
+
+        message:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
   return {
     version:
       DOSSIER_ORCHESTRATOR_VERSION,
@@ -317,6 +400,13 @@ export async function runSubjectDossier(
       ? {
           dossier_version:
             dossierVersion,
+        }
+      : {}),
+
+    ...(syncManualReview
+      ? {
+          review_queue:
+            reviewQueue,
         }
       : {}),
 
@@ -352,6 +442,15 @@ export async function runSubjectDossier(
             persistence: {
               status:
                 persistenceStatus,
+            },
+          }
+        : {}),
+
+      ...(syncManualReview
+        ? {
+            review_queue: {
+              status:
+                reviewQueueStatus,
             },
           }
         : {}),

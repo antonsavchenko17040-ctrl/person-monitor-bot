@@ -1299,3 +1299,328 @@ test(
     );
   },
 );
+
+
+test(
+  "syncs manual review queue after successful dossier persistence",
+  async () => {
+    const calls = [];
+
+    const subject = {
+      id: 42,
+      full_name:
+        "Тестовий Суб’єкт",
+    };
+
+    const manualReview = {
+      version:
+        "manual-review-manifest-v1",
+
+      items: [{
+        source_path:
+          "related_people.items",
+
+        item_ref:
+          "related-person-ref-v1:" +
+          "a".repeat(64),
+
+        review_type:
+          "identity_resolution",
+      }],
+    };
+
+    const report = {
+      schema_version:
+        "report-model-v1",
+
+      manual_review:
+        manualReview,
+    };
+
+    const dossierVersion = {
+      id:
+        "11111111-1111-4111-8111-111111111111",
+    };
+
+    const reviewSummary = {
+      item_count:
+        1,
+
+      occurrences_created:
+        1,
+    };
+
+    const result =
+      await runSubjectDossier(
+        42,
+        {
+          subjectLoader:
+            async () =>
+              subject,
+
+          refreshSubject:
+            async () => ({
+              errors: [],
+            }),
+
+          reportBuilder:
+            async () =>
+              report,
+
+          persistDossier:
+            async () => {
+              calls.push(
+                "persistence",
+              );
+
+              return dossierVersion;
+            },
+
+          syncManualReview:
+            async (input) => {
+              calls.push(
+                "review_queue",
+              );
+
+              assert.deepEqual(
+                input,
+                {
+                  subjectId:
+                    42,
+
+                  dossierVersionId:
+                    dossierVersion.id,
+
+                  manualReview,
+                },
+              );
+
+              return reviewSummary;
+            },
+        },
+      );
+
+    assert.deepEqual(
+      calls,
+      [
+        "persistence",
+        "review_queue",
+      ],
+    );
+
+    assert.equal(
+      result.status,
+      "completed",
+    );
+
+    assert.deepEqual(
+      result.dossier_version,
+      dossierVersion,
+    );
+
+    assert.deepEqual(
+      result.review_queue,
+      reviewSummary,
+    );
+
+    assert.equal(
+      result.steps.persistence.status,
+      "completed",
+    );
+
+    assert.equal(
+      result.steps.review_queue.status,
+      "completed",
+    );
+  },
+);
+
+
+test(
+  "skips manual review queue when dossier persistence fails",
+  async () => {
+    let reviewCalls =
+      0;
+
+    const result =
+      await runSubjectDossier(
+        42,
+        {
+          subjectLoader:
+            async () => ({
+              id: 42,
+            }),
+
+          refreshSubject:
+            async () => ({
+              errors: [],
+            }),
+
+          reportBuilder:
+            async () => ({
+              schema_version:
+                "report-model-v1",
+
+              manual_review: {
+                version:
+                  "manual-review-manifest-v1",
+
+                items: [],
+              },
+            }),
+
+          persistDossier:
+            async () => {
+              throw new Error(
+                "database unavailable",
+              );
+            },
+
+          syncManualReview:
+            async () => {
+              reviewCalls +=
+                1;
+
+              return {};
+            },
+        },
+      );
+
+    assert.equal(
+      reviewCalls,
+      0,
+    );
+
+    assert.equal(
+      result.status,
+      "partial",
+    );
+
+    assert.equal(
+      result.dossier_version,
+      null,
+    );
+
+    assert.equal(
+      result.review_queue,
+      null,
+    );
+
+    assert.equal(
+      result.steps.persistence.status,
+      "failed",
+    );
+
+    assert.equal(
+      result.steps.review_queue.status,
+      "skipped",
+    );
+
+    assert.equal(
+      result.errors.some(
+        (error) =>
+          error.code ===
+          "persistence_failed",
+      ),
+      true,
+    );
+  },
+);
+
+
+test(
+  "keeps persisted dossier and returns partial when manual review sync fails",
+  async () => {
+    const dossierVersion = {
+      id:
+        "22222222-2222-4222-8222-222222222222",
+    };
+
+    const report = {
+      schema_version:
+        "report-model-v1",
+
+      manual_review: {
+        version:
+          "manual-review-manifest-v1",
+
+        items: [],
+      },
+    };
+
+    const result =
+      await runSubjectDossier(
+        42,
+        {
+          subjectLoader:
+            async () => ({
+              id: 42,
+            }),
+
+          refreshSubject:
+            async () => ({
+              errors: [],
+            }),
+
+          reportBuilder:
+            async () =>
+              report,
+
+          persistDossier:
+            async () =>
+              dossierVersion,
+
+          syncManualReview:
+            async () => {
+              throw new Error(
+                "review queue unavailable",
+              );
+            },
+        },
+      );
+
+    assert.equal(
+      result.status,
+      "partial",
+    );
+
+    assert.deepEqual(
+      result.report,
+      report,
+    );
+
+    assert.deepEqual(
+      result.dossier_version,
+      dossierVersion,
+    );
+
+    assert.equal(
+      result.review_queue,
+      null,
+    );
+
+    assert.equal(
+      result.steps.persistence.status,
+      "completed",
+    );
+
+    assert.equal(
+      result.steps.review_queue.status,
+      "failed",
+    );
+
+    assert.deepEqual(
+      result.errors.at(-1),
+      {
+        step:
+          "review_queue",
+
+        code:
+          "manual_review_sync_failed",
+
+        message:
+          "review queue unavailable",
+      },
+    );
+  },
+);

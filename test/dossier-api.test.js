@@ -592,7 +592,7 @@ test(
 );
 
 test(
-  "production dossier composition wires persistence into orchestrator",
+  "production dossier composition wires persistence and manual review sync into orchestrator",
   async () => {
     const subjectId =
       "11111111-1111-4111-8111-111111111111";
@@ -601,6 +601,12 @@ test(
       async () => ({
         id:
           "22222222-2222-4222-8222-222222222222",
+      });
+
+    const syncManualReview =
+      async () => ({
+        item_count:
+          0,
       });
 
     const calls = [];
@@ -638,6 +644,8 @@ test(
 
         persistDossier,
 
+        syncManualReview,
+
         orchestrateDossier:
           async (
             receivedSubjectId,
@@ -649,6 +657,9 @@ test(
 
               persistDossier:
                 options.persistDossier,
+
+              syncManualReview:
+                options.syncManualReview,
             });
 
             return dossier;
@@ -698,6 +709,11 @@ test(
     assert.equal(
       calls[0].persistDossier,
       persistDossier,
+    );
+
+    assert.equal(
+      calls[0].syncManualReview,
+      syncManualReview,
     );
   },
 );

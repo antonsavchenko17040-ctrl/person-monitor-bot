@@ -1,8 +1,8 @@
 # Person Monitor — функціональна модель, поточний стан і дорожня карта
 
 **Дата фіксації:** 12.08.2026
-**Базова точка:** блоки 5.4F1a–5.4F1c «Dossier version persistence» закрито; schema `dossier_versions` застосована в Neon, versioned canonical JSON SHA-256 hashing та insert-only dossier-version store готові, persistence stage підключений до orchestrator і production `/api/dossier`, live Neon persistence перевірено контрольованим snapshot. Блоки 5.4F2a–5.4F2b «Manual Review Queue persistence foundation» завершено: queue schema застосована в Neon, а reference-only atomic store/sync contract реалізований і покритий regression tests.
-**Технічний стан:** 600/600 тестів пройдено. `dossier_versions` зберігає canonical dossier snapshots та integrity metadata. `report_id` у `report-model-v1` лишається reserved nullable field, а persisted snapshot identity є `dossier_versions.id`. Для Human Manual Review створено `manual_review_tasks` та `manual_review_task_occurrences`: logical task стабільна між dossier snapshots, occurrence фіксує присутність review item у конкретному `dossier_version_id`. F2b `syncManualReviewTasks()` приймає лише canonical reference-only `manual_review-manifest-v1`, перевіряє `dossier_version_id → subject_id`, dedupe-ить manifest items до DB та одним atomic CTE statement синхронізує logical tasks і snapshot occurrences. Повторний sync idempotent; `resolved / dismissed` tasks автоматично не reopen-яться. Media `review_status`, ПІБ, facts, evidence, URL та article text у human queue не потрапляють. Наступний крок — 5.4F2c orchestrator wiring, після нього analyst API/UI; canonical identity review та повний audit/diff між запусками ще не завершені.
+**Базова точка:** блоки 5.4F1a–5.4F1c «Dossier version persistence» закрито; schema `dossier_versions` застосована в Neon, versioned canonical JSON SHA-256 hashing та insert-only dossier-version store готові, persistence stage підключений до orchestrator і production `/api/dossier`, live Neon persistence перевірено контрольованим snapshot. Блоки 5.4F2a–5.4F2c «Manual Review Queue workflow foundation» завершено: queue schema застосована в Neon, reference-only atomic store/sync contract реалізований, а sync підключений до orchestrator та production `/api/dossier` після успішного dossier persistence.
+**Технічний стан:** 603/603 тестів пройдено. `dossier_versions` зберігає canonical dossier snapshots та integrity metadata. `report_id` у `report-model-v1` лишається reserved nullable field, а persisted snapshot identity є `dossier_versions.id`. Для Human Manual Review існують stable logical tasks і per-snapshot occurrences. F2b `syncManualReviewTasks()` приймає лише canonical reference-only `manual-review-manifest-v1`, перевіряє `dossier_version_id → subject_id`, dedupe-ить manifest items та atomic CTE statement синхронізує tasks/occurrences без автоматичного reopen `resolved / dismissed`. F2c додає окремий `review_queue` stage після успішного dossier persistence: він отримує `subjectId`, persisted `dossier_version.id` і `report.manual_review`; при persistence failure або report failure queue sync пропускається. Якщо queue sync падає, canonical report і persisted dossier snapshot зберігаються, а workflow стає `partial` з `manual_review_sync_failed`. Production `/api/dossier` композиційно підключає і `saveDossierVersion()`, і `syncManualReviewTasks()`. Media `review_status`, ПІБ, facts, evidence, URL та article text у human queue не потрапляють. Далі — analyst review status API/UI, evidence/provenance presentation і audit/diff.
 
 ## 1. Що повинен вміти портал
 
@@ -23,7 +23,7 @@ Person Monitor має бути не просто пошуковим сайтом
 - Порівняння активів між роками та консервативні події “з’явився/вибув”, без вигаданого висновку “купив/продав”.
 - Розумний Google Web/Google News: corruption-only query plan, corruption relevance gate, identity gate, full-text fetch/extraction/review.
 - Versioned dossier persistence у Neon уже працює; persisted snapshot identity — `dossier_versions.id`.
-- Manual Review Queue F2a/F2b foundation готова: stable logical tasks + snapshot occurrences у Neon та atomic reference-only store/sync; orchestrator wiring ще попереду.
+- Manual Review Queue F2a–F2c foundation готова: stable logical tasks + snapshot occurrences у Neon, atomic reference-only store/sync та orchestrator/API production wiring.
 - PDF та Excel експорти вже існують, але поки відображають legacy-звіт згадок, а не повну нову аналітичну довідку.
 
 ## 3. Стан 24 функцій зі списку
@@ -51,7 +51,7 @@ Person Monitor має бути не просто пошуковим сайтом
 | 19 | Декларації третіх осіб | 🟡 Частково | Треті особи вже витягуються; автоматичний пошук їх декларацій ще потрібен. |
 | 20 | Пул новин пов’язаних із суб’єктом | 🟡 Сильно просунуто | Google Web/News, corruption gate, identity gate, full-text verification і класифікація ролі суб’єкта готові. Далі — фінальне збереження/представлення у досьє. |
 | 21 | Формування метрик | 🟡 Частково | Analytics/metrics/findings є; затвердити фінальний набір і шкалу ризиків/сигналів. |
-| 22 | Структура на кроки + аналітична довідка | 🟡 Частково | Canonical model, orchestration core, authenticated POST API, evidence-backed executive summary, `analytical_brief` manifest, timeless EDR relations, reference-only `manual_review` manifest, live-verified dossier persistence і Manual Review Queue F2a/F2b persistence foundation уже є; далі — F2c orchestrator wiring, narrative, evidence UI та фінальне представлення досьє. |
+| 22 | Структура на кроки + аналітична довідка | 🟡 Частково | Canonical model, orchestration core, authenticated POST API, evidence-backed executive summary, `analytical_brief` manifest, timeless EDR relations, reference-only `manual_review` manifest, live-verified dossier persistence і Manual Review Queue F2a–F2c workflow foundation уже є; далі — analyst review API/UI, narrative, evidence UI та фінальне представлення досьє. |
 | 23 | Математичні правила порівняння | 🟡 Частково | Частина правил є; потрібна формалізована rule matrix для всіх ключових типів даних. |
 | 24 | Зробити PDF | 🔁 Дублікат | Об’єднати з пунктом №3. |
 
@@ -67,7 +67,7 @@ Person Monitor має бути не просто пошуковим сайтом
 1. **ЄДР / ФОП.** Винести вже реалізований pipeline у окрему картку backlog та вирішити production storage для повного масиву.
 2. **Orchestrator «Сформувати досьє».** Одна дія має запускати весь pipeline: джерела → ідентифікація → факти → зв’язки → cross-checks → метрики → довідка → експорт.
 3. **Evidence / provenance UI.** Кожен висновок має мати джерело, дату, фрагмент, правило та рівень упевненості.
-4. **Manual Review Queue.** F2a schema foundation і F2b store/sync contract завершені. Stable logical task зберігається окремо від per-snapshot occurrence; sync перевіряє subject/version consistency, працює idempotent і не reopen-ить `resolved / dismissed`. Далі — F2c orchestrator wiring, API для статусів `open / resolved / dismissed` та analyst UI. Probable/ambiguous/conflict кейси мають потрапляти сюди тільки через canonical human-review semantics; media `review_status` не є human queue.
+4. **Manual Review Queue.** F2a schema foundation, F2b store/sync contract і F2c orchestrator wiring завершені. Stable logical task зберігається окремо від per-snapshot occurrence; sync перевіряє subject/version consistency, працює idempotent і не reopen-ить `resolved / dismissed`. Orchestrator запускає queue sync лише після успішного dossier persistence та повертає `partial`, не втрачаючи persisted snapshot, якщо review sync падає. Далі — API для статусів `open / resolved / dismissed` та analyst UI. Probable/ambiguous/conflict кейси мають потрапляти сюди тільки через canonical human-review semantics; media `review_status` не є human queue.
 5. **Версії досьє та audit trail.** `dossier_versions`, canonical payload hash, insert-only store, production orchestrator wiring і live Neon snapshot verification уже реалізовані. Далі — run/source metadata та порівняння змін між версіями; `report_id` у `report-model-v1` лишається reserved nullable field, а version references використовують `dossier_versions.id`.
 6. **Моніторинг змін.** Нові декларації, зміни ЄДР, нові релевантні медіаматеріали, зміни зв’язків/активів.
 7. **Статус джерел.** Показувати окремо успіх/помилку/timeout/недоступність кожного джерела, щоб “нічого не знайдено” не плуталось з “джерело не перевірено”.
@@ -85,7 +85,7 @@ Person Monitor має бути не просто пошуковим сайтом
 
 ## 7. Пріоритет після паузи
 
-Не підключати нові великі джерела одразу. Поточна оптимальна послідовність: **Manual Review Queue F2c orchestrator wiring → analyst review API/UI → evidence/provenance UI → фінальна аналітична довідка та dossier presentation → audit/diff → після цього AUTO.RIA / нерухомість / OpenDataBot.**
+Не підключати нові великі джерела одразу. Поточна оптимальна послідовність: **analyst review status API → Manual Review Queue UI → evidence/provenance UI → фінальна аналітична довідка та dossier presentation → audit/diff → після цього AUTO.RIA / нерухомість / OpenDataBot.**
 
 Причина: технічних “двигунів” уже багато. Найбільша потреба зараз — зібрати їх в один завершений користувацький сценарій, щоб кожне наступне джерело автоматично потрапляло у граф, аналітику, чат, довідку, PDF та Excel.
 
