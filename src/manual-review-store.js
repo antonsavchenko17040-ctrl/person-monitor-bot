@@ -8,6 +8,7 @@ import {
   MANUAL_REVIEW_SOURCE_PATH_RELATIONS,
   MANUAL_REVIEW_SOURCE_PATHS,
   MANUAL_REVIEW_TYPE_IDENTITY_RESOLUTION,
+  MANUAL_REVIEW_TASK_STATUSES,
 } from "./manual-review-contract.js";
 
 
@@ -25,6 +26,18 @@ const SOURCE_PATH_SET =
   new Set(
     MANUAL_REVIEW_SOURCE_PATHS,
   );
+
+
+const TASK_STATUS_SET =
+  new Set(
+    MANUAL_REVIEW_TASK_STATUSES,
+  );
+
+export const MANUAL_REVIEW_LIST_DEFAULT_LIMIT =
+  100;
+
+export const MANUAL_REVIEW_LIST_MAX_LIMIT =
+  200;
 
 
 function requiredText(
@@ -575,4 +588,337 @@ export async function syncManualReviewTasks(
     occurrences_created:
       occurrencesCreated,
   };
+}
+
+function normalizeTaskStatus(
+  value,
+  {
+    allowAll = false,
+  } = {},
+) {
+  const text =
+    requiredText(
+      value,
+      "taskStatus",
+    );
+
+  if (
+    allowAll &&
+    text === "all"
+  ) {
+    return null;
+  }
+
+  if (
+    !TASK_STATUS_SET.has(
+      text,
+    )
+  ) {
+    throw new TypeError(
+      "taskStatus must be open, resolved, or dismissed",
+    );
+  }
+
+  return text;
+}
+
+
+function normalizeListLimit(
+  value,
+) {
+  if (
+    value === undefined ||
+    value === null ||
+    value === ""
+  ) {
+    return MANUAL_REVIEW_LIST_DEFAULT_LIMIT;
+  }
+
+  const number =
+    Number(
+      value,
+    );
+
+  if (
+    !Number.isInteger(
+      number,
+    ) ||
+    number < 1 ||
+    number >
+      MANUAL_REVIEW_LIST_MAX_LIMIT
+  ) {
+    throw new TypeError(
+      "limit must be an integer between 1 and 200",
+    );
+  }
+
+  return number;
+}
+
+
+function nullableIso(
+  value,
+) {
+  if (value == null) {
+    return null;
+  }
+
+  const date =
+    value instanceof Date
+      ? value
+      : new Date(value);
+
+  return Number.isNaN(
+    date.getTime(),
+  )
+    ? String(value)
+    : date.toISOString();
+}
+
+
+function normalizeTaskRow(
+  row,
+) {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    id:
+      row.id ?? null,
+
+    subject_id:
+      row.subject_id ?? null,
+
+    source_path:
+      row.source_path ?? null,
+
+    item_ref:
+      row.item_ref ?? null,
+
+    review_type:
+      row.review_type ?? null,
+
+    task_status:
+      row.task_status ?? null,
+
+    occurrence_count:
+      Number(
+        row.occurrence_count ??
+        0,
+      ),
+
+    latest_dossier_version_id:
+      row.latest_dossier_version_id ??
+      null,
+
+    latest_occurrence_at:
+      nullableIso(
+        row.latest_occurrence_at,
+      ),
+
+    created_at:
+      nullableIso(
+        row.created_at,
+      ),
+
+    updated_at:
+      nullableIso(
+        row.updated_at,
+      ),
+  };
+}
+
+
+export async function listManualReviewTasks(
+  {
+    subjectId = null,
+    taskStatus = "open",
+    limit =
+      MANUAL_REVIEW_LIST_DEFAULT_LIMIT,
+  } = {},
+  options = {},
+) {
+  const normalizedSubjectId =
+    subjectId == null ||
+    String(subjectId).trim() === ""
+      ? null
+      : requiredUuid(
+          subjectId,
+          "subjectId",
+        );
+
+  const normalizedTaskStatus =
+    normalizeTaskStatus(
+      taskStatus,
+      {
+        allowAll:
+          true,
+      },
+    );
+
+  const normalizedLimit =
+    normalizeListLimit(
+      limit,
+    );
+
+  const sql =
+    options.sql ??
+    db();
+
+  const rows =
+    await sql`
+      SELECT
+        task.id,
+        task.subject_id,
+        task.source_path,
+        task.item_ref,
+        task.review_type,
+        task.task_status,
+        task.created_at,
+        task.updated_at,
+
+        count(
+          occurrence.id
+        )::int AS occurrence_count,
+
+        latest.dossier_version_id
+          AS latest_dossier_version_id,
+
+        latest.created_at
+          AS latest_occurrence_at
+
+      FROM manual_review_tasks
+        AS task
+
+      LEFT JOIN
+        manual_review_task_occurrences
+        AS occurrence
+        ON occurrence.task_id =
+          task.id
+
+      LEFT JOIN LATERAL (
+        SELECT
+          item.dossier_version_id,
+          item.created_at
+        FROM
+          manual_review_task_occurrences
+          AS item
+        WHERE
+          item.task_id =
+            task.id
+        ORDER BY
+          item.created_at DESC,
+          item.id DESC
+        LIMIT 1
+      ) AS latest
+        ON true
+
+      WHERE (
+        ${normalizedSubjectId}::uuid
+          IS NULL
+        OR task.subject_id =
+          ${normalizedSubjectId}::uuid
+      )
+      AND (
+        ${normalizedTaskStatus}::text
+          IS NULL
+        OR task.task_status =
+          ${normalizedTaskStatus}::text
+      )
+
+      GROUP BY
+        task.id,
+        latest.dossier_version_id,
+        latest.created_at
+
+      ORDER BY
+        task.updated_at DESC,
+        task.created_at DESC,
+        task.id DESC
+
+      LIMIT
+        ${normalizedLimit}
+    `;
+
+  return Array.isArray(
+    rows,
+  )
+    ? rows
+        .map(
+          normalizeTaskRow,
+        )
+        .filter(
+          Boolean,
+        )
+    : [];
+}
+
+
+export async function setManualReviewTaskStatus(
+  {
+    taskId,
+    taskStatus,
+  } = {},
+  options = {},
+) {
+  const normalizedTaskId =
+    requiredUuid(
+      taskId,
+      "taskId",
+    );
+
+  const normalizedTaskStatus =
+    normalizeTaskStatus(
+      taskStatus,
+    );
+
+  const sql =
+    options.sql ??
+    db();
+
+  const rows =
+    await sql`
+      UPDATE manual_review_tasks
+      SET
+        task_status =
+          ${normalizedTaskStatus},
+
+        updated_at =
+          now()
+
+      WHERE id =
+        ${normalizedTaskId}
+
+      RETURNING
+        id,
+        subject_id,
+        source_path,
+        item_ref,
+        review_type,
+        task_status,
+        created_at,
+        updated_at
+    `;
+
+  const row =
+    rows?.[0] ??
+    null;
+
+  if (!row) {
+    return null;
+  }
+
+  return normalizeTaskRow({
+    ...row,
+
+    occurrence_count:
+      0,
+
+    latest_dossier_version_id:
+      null,
+
+    latest_occurrence_at:
+      null,
+  });
 }

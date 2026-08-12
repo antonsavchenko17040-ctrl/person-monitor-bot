@@ -6,7 +6,11 @@ import {
 } from "../src/manual-review-contract.js";
 
 import {
+  MANUAL_REVIEW_LIST_DEFAULT_LIMIT,
+  MANUAL_REVIEW_LIST_MAX_LIMIT,
   MANUAL_REVIEW_STORE_VERSION,
+  listManualReviewTasks,
+  setManualReviewTaskStatus,
   syncManualReviewTasks,
 } from "../src/manual-review-store.js";
 
@@ -596,6 +600,507 @@ test(
     assert.equal(
       capture.calls.length,
       1,
+    );
+  },
+);
+
+test(
+  "manual review task list defaults to open and returns reference-only occurrence metadata",
+  async () => {
+    const capture =
+      capturedSql(
+        () => ({
+          id:
+            "55555555-5555-4555-8555-555555555555",
+
+          subject_id:
+            SUBJECT_ID,
+
+          source_path:
+            "related_people.items",
+
+          item_ref:
+            RELATED_REF,
+
+          review_type:
+            "identity_resolution",
+
+          task_status:
+            "open",
+
+          occurrence_count:
+            3,
+
+          latest_dossier_version_id:
+            DOSSIER_VERSION_ID,
+
+          latest_occurrence_at:
+            "2026-08-12T08:00:00.000Z",
+
+          created_at:
+            "2026-08-12T07:00:00.000Z",
+
+          updated_at:
+            "2026-08-12T07:30:00.000Z",
+        }),
+      );
+
+    const rows =
+      await listManualReviewTasks(
+        {},
+        {
+          sql:
+            capture.sql,
+        },
+      );
+
+    assert.equal(
+      MANUAL_REVIEW_LIST_DEFAULT_LIMIT,
+      100,
+    );
+
+    assert.equal(
+      MANUAL_REVIEW_LIST_MAX_LIMIT,
+      200,
+    );
+
+    assert.equal(
+      capture.calls.length,
+      1,
+    );
+
+    const call =
+      capture.calls[0];
+
+    assert.match(
+      call.text,
+      /manual_review_task_occurrences/,
+    );
+
+    assert.match(
+      call.text,
+      /LEFT JOIN LATERAL/,
+    );
+
+    assert.equal(
+      call.values.includes(
+        "open",
+      ),
+      true,
+    );
+
+    assert.equal(
+      call.values.includes(
+        100,
+      ),
+      true,
+    );
+
+    assert.deepEqual(
+      rows,
+      [{
+        id:
+          "55555555-5555-4555-8555-555555555555",
+
+        subject_id:
+          SUBJECT_ID,
+
+        source_path:
+          "related_people.items",
+
+        item_ref:
+          RELATED_REF,
+
+        review_type:
+          "identity_resolution",
+
+        task_status:
+          "open",
+
+        occurrence_count:
+          3,
+
+        latest_dossier_version_id:
+          DOSSIER_VERSION_ID,
+
+        latest_occurrence_at:
+          "2026-08-12T08:00:00.000Z",
+
+        created_at:
+          "2026-08-12T07:00:00.000Z",
+
+        updated_at:
+          "2026-08-12T07:30:00.000Z",
+      }],
+    );
+
+    assert.equal(
+      JSON.stringify(
+        rows,
+      ).includes(
+        "full_name",
+      ),
+      false,
+    );
+  },
+);
+
+
+test(
+  "manual review task list supports subject and all-status filters",
+  async () => {
+    const capture =
+      capturedSql(
+        () => ({
+          id:
+            "66666666-6666-4666-8666-666666666666",
+
+          subject_id:
+            SUBJECT_ID,
+
+          source_path:
+            "relations.items",
+
+          item_ref:
+            RELATION_REF,
+
+          review_type:
+            "identity_resolution",
+
+          task_status:
+            "resolved",
+
+          occurrence_count:
+            1,
+
+          latest_dossier_version_id:
+            DOSSIER_VERSION_ID,
+
+          latest_occurrence_at:
+            null,
+
+          created_at:
+            null,
+
+          updated_at:
+            null,
+        }),
+      );
+
+    await listManualReviewTasks(
+      {
+        subjectId:
+          SUBJECT_ID,
+
+        taskStatus:
+          "all",
+
+        limit:
+          25,
+      },
+      {
+        sql:
+          capture.sql,
+      },
+    );
+
+    const call =
+      capture.calls[0];
+
+    assert.equal(
+      call.values.includes(
+        SUBJECT_ID,
+      ),
+      true,
+    );
+
+    assert.equal(
+      call.values.includes(
+        null,
+      ),
+      true,
+    );
+
+    assert.equal(
+      call.values.includes(
+        25,
+      ),
+      true,
+    );
+  },
+);
+
+
+test(
+  "manual review task list validates filters before database access",
+  async () => {
+    let calls = 0;
+
+    const sql =
+      async () => {
+        calls += 1;
+        return [];
+      };
+
+    const invalidInputs = [
+      {
+        subjectId:
+          "not-a-uuid",
+      },
+      {
+        taskStatus:
+          "media_review",
+      },
+      {
+        limit:
+          0,
+      },
+      {
+        limit:
+          201,
+      },
+    ];
+
+    for (
+      const input
+      of invalidInputs
+    ) {
+      await assert.rejects(
+        listManualReviewTasks(
+          input,
+          {
+            sql,
+          },
+        ),
+        TypeError,
+      );
+    }
+
+    assert.equal(
+      calls,
+      0,
+    );
+  },
+);
+
+
+test(
+  "manual review task status update explicitly changes status and updated_at",
+  async () => {
+    const taskId =
+      "77777777-7777-4777-8777-777777777777";
+
+    const capture =
+      capturedSql(
+        (call) => ({
+          id:
+            taskId,
+
+          subject_id:
+            SUBJECT_ID,
+
+          source_path:
+            "related_people.items",
+
+          item_ref:
+            RELATED_REF,
+
+          review_type:
+            "identity_resolution",
+
+          task_status:
+            call.values[0],
+
+          created_at:
+            "2026-08-12T07:00:00.000Z",
+
+          updated_at:
+            "2026-08-12T09:00:00.000Z",
+        }),
+      );
+
+    const task =
+      await setManualReviewTaskStatus(
+        {
+          taskId,
+
+          taskStatus:
+            "resolved",
+        },
+        {
+          sql:
+            capture.sql,
+        },
+      );
+
+    const call =
+      capture.calls[0];
+
+    assert.match(
+      call.text,
+      /UPDATE manual_review_tasks/,
+    );
+
+    assert.match(
+      call.text,
+      /updated_at[\s\S]*now\(\)/,
+    );
+
+    assert.equal(
+      call.values[0],
+      "resolved",
+    );
+
+    assert.equal(
+      call.values[1],
+      taskId,
+    );
+
+    assert.equal(
+      task.task_status,
+      "resolved",
+    );
+
+    assert.equal(
+      task.updated_at,
+      "2026-08-12T09:00:00.000Z",
+    );
+  },
+);
+
+
+test(
+  "manual review task status update permits explicit analyst reopen",
+  async () => {
+    const taskId =
+      "88888888-8888-4888-8888-888888888888";
+
+    const capture =
+      capturedSql(
+        (call) => ({
+          id:
+            taskId,
+
+          subject_id:
+            SUBJECT_ID,
+
+          source_path:
+            "relations.items",
+
+          item_ref:
+            RELATION_REF,
+
+          review_type:
+            "identity_resolution",
+
+          task_status:
+            call.values[0],
+
+          created_at:
+            null,
+
+          updated_at:
+            null,
+        }),
+      );
+
+    const task =
+      await setManualReviewTaskStatus(
+        {
+          taskId,
+
+          taskStatus:
+            "open",
+        },
+        {
+          sql:
+            capture.sql,
+        },
+      );
+
+    assert.equal(
+      task.task_status,
+      "open",
+    );
+  },
+);
+
+
+test(
+  "manual review task status update returns null for missing task",
+  async () => {
+    const sql =
+      async () =>
+        [];
+
+    const task =
+      await setManualReviewTaskStatus(
+        {
+          taskId:
+            "99999999-9999-4999-8999-999999999999",
+
+          taskStatus:
+            "dismissed",
+        },
+        {
+          sql,
+        },
+      );
+
+    assert.equal(
+      task,
+      null,
+    );
+  },
+);
+
+
+test(
+  "manual review task status update validates input before database access",
+  async () => {
+    let calls = 0;
+
+    const sql =
+      async () => {
+        calls += 1;
+        return [];
+      };
+
+    await assert.rejects(
+      setManualReviewTaskStatus(
+        {
+          taskId:
+            "not-a-uuid",
+
+          taskStatus:
+            "resolved",
+        },
+        {
+          sql,
+        },
+      ),
+      TypeError,
+    );
+
+    await assert.rejects(
+      setManualReviewTaskStatus(
+        {
+          taskId:
+            "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+
+          taskStatus:
+            "fetch_failed",
+        },
+        {
+          sql,
+        },
+      ),
+      TypeError,
+    );
+
+    assert.equal(
+      calls,
+      0,
     );
   },
 );

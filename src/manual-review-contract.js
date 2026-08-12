@@ -15,3 +15,10 @@ export const MANUAL_REVIEW_SOURCE_PATHS =
     MANUAL_REVIEW_SOURCE_PATH_RELATED_PEOPLE,
     MANUAL_REVIEW_SOURCE_PATH_RELATIONS,
   ]);
+
+export const MANUAL_REVIEW_TASK_STATUSES =
+  Object.freeze([
+    "open",
+    "resolved",
+    "dismissed",
+  ]);

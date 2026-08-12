@@ -32,13 +32,14 @@ Person Monitor — система для автоматизованого фор
 - canonical JSON SHA-256 integrity hashing;
 - контрольована live Neon persistence verification;
 - reference-only canonical `manual_review` manifest;
-- Manual Review Queue F2a–F2c workflow foundation:
+- Manual Review Queue F2a–F2d workflow foundation:
   - `manual_review_tasks`;
   - `manual_review_task_occurrences`;
   - atomic reference-only store/sync contract;
   - idempotent snapshot occurrences без автоматичного reopen `resolved / dismissed`;
   - orchestrator wiring після успішного dossier persistence;
   - production `/api/dossier` підключає dossier persistence та manual-review sync;
+  - authenticated `/api/manual-review` для list/filter та explicit analyst status update;
 - повний технічний pipeline ЄДР/ФОП:
   discovery → download → parser → normalization → staging → Neon → lookup → matching → graph → weekly check → snapshot diff;
 - timeless EDR relations у canonical report;
@@ -95,15 +96,17 @@ Human-review queue не повинна копіювати ПІБ, факти, ev
 
 Automated media `review_status` — окрема семантика і не є Human Manual Review Queue.
 
-F2a schema foundation, F2b store/sync contract і F2c orchestrator wiring завершені.
+F2a schema foundation, F2b store/sync contract, F2c orchestrator wiring і F2d analyst review status API завершені.
 
 Після успішного збереження `dossier_versions` orchestrator передає `dossier_version.id` та canonical `report.manual_review` у queue sync. Якщо dossier persistence не відбувся, queue sync пропускається. Помилка queue sync не видаляє canonical report або вже persisted dossier snapshot, але workflow повертається як `partial`.
 
+`GET /api/manual-review` повертає reference-only tasks із фільтрами subject/status/limit. `PATCH /api/manual-review` дозволяє analyst явно встановити `open`, `resolved` або `dismissed`; explicit reopen дозволений, але автоматичний sync resolved/dismissed tasks не reopen-ить.
+
 Наступні блоки:
 
-1. API для analyst review status workflow;
-2. UI Manual Review Queue;
-3. evidence/provenance UI.
+1. UI Manual Review Queue;
+2. evidence/provenance UI;
+3. фінальна dossier presentation.
 
 ## Джерела
 
@@ -150,7 +153,7 @@ npm start
 npm test
 ```
 
-Поточна зафіксована baseline: **603/603 GREEN**.
+Поточна зафіксована baseline: **620/620 GREEN**.
 
 ## Database migrations
 
@@ -192,5 +195,5 @@ docs/REPORT_MODEL_SPEC.md
 - search query text не є identity evidence;
 - provider output не повинен віддавати користувачу повний текст статті;
 - PDF та Excel поки залишаються legacy exports і ще не переведені повністю на canonical analytical dossier;
-- Manual Review Queue має schema foundation, atomic store/sync contract та orchestrator/API production wiring; analyst API/status workflow та UI ще не завершені;
+- Manual Review Queue має schema foundation, atomic store/sync contract, orchestrator wiring та authenticated analyst status API; analyst UI ще не завершений;
 - AUTO.RIA / нерухомість / OpenDataBot не повинні випереджати завершення dossier, evidence та review workflow.
