@@ -196,6 +196,469 @@ function dossierStatementTypeLabel(
 }
 
 
+function canonicalDossierBriefSections(
+  report
+) {
+  const sections =
+    report
+      ?.analytical_brief
+      ?.sections;
+
+  return Array.isArray(
+    sections
+  )
+    ? sections
+    : [];
+}
+
+
+function dossierArray(
+  value
+) {
+  return Array.isArray(
+    value
+  )
+    ? value
+    : [];
+}
+
+
+function dossierBriefSectionSummary(
+  report,
+  code
+) {
+  if (
+    code ===
+    "overview"
+  ) {
+    return `${dossierArray(
+      report
+        ?.declarations
+        ?.items
+    ).length} декларацій`;
+  }
+
+  if (
+    code ===
+    "key_findings"
+  ) {
+    return `${canonicalDossierFindings(
+      report
+    ).length} сигналів`;
+  }
+
+  if (
+    code ===
+    "career_relations"
+  ) {
+    const total =
+      dossierArray(
+        report?.career?.items
+      ).length +
+      dossierArray(
+        report
+          ?.related_people
+          ?.items
+      ).length +
+      dossierArray(
+        report?.relations?.items
+      ).length;
+
+    return `${total} записів`;
+  }
+
+  if (
+    code ===
+    "finances"
+  ) {
+    return (
+      `${dossierArray(
+        report?.income?.yearly
+      ).length} років доходів · ` +
+      `${dossierArray(
+        report
+          ?.cash_assets
+          ?.yearly
+      ).length} років активів`
+    );
+  }
+
+  if (
+    code ===
+    "assets"
+  ) {
+    const realEstate =
+      dossierArray(
+        report
+          ?.real_estate
+          ?.yearly
+      ).reduce(
+        (total, year) =>
+          total +
+          dossierArray(
+            year?.items
+          ).length,
+        0
+      );
+
+    const vehicles =
+      dossierArray(
+        report
+          ?.vehicles
+          ?.yearly
+      ).reduce(
+        (total, year) =>
+          total +
+          dossierArray(
+            year?.items
+          ).length,
+        0
+      );
+
+    return (
+      `${realEstate} нерухомість · ` +
+      `${vehicles} транспорт`
+    );
+  }
+
+  if (
+    code ===
+    "analytics"
+  ) {
+    return (
+      `${dossierArray(
+        report
+          ?.analytics
+          ?.findings
+      ).length} findings · ` +
+      `${dossierArray(
+        report
+          ?.analytics
+          ?.transitions
+      ).length} змін`
+    );
+  }
+
+  if (
+    code ===
+    "media"
+  ) {
+    return `${dossierArray(
+      report?.mentions?.items
+    ).length} згадок`;
+  }
+
+  if (
+    code ===
+    "evidence"
+  ) {
+    return `${canonicalDossierSources(
+      report
+    ).length} джерел`;
+  }
+
+  return "";
+}
+
+
+function renderDossierBriefShell(
+  report
+) {
+  const navigation =
+    document.getElementById(
+      "dossier-brief-navigation"
+    );
+
+  const overview =
+    document.getElementById(
+      "dossier-brief-overview"
+    );
+
+  if (
+    !navigation ||
+    !overview
+  ) {
+    return;
+  }
+
+  navigation.replaceChildren();
+  overview.replaceChildren();
+
+  const sections =
+    canonicalDossierBriefSections(
+      report
+    );
+
+  const targets = {
+    overview:
+      "dossier-brief-overview",
+
+    key_findings:
+      "dossier-evidence-findings",
+
+    evidence:
+      "dossier-evidence-sources",
+  };
+
+  if (
+    sections.length === 0
+  ) {
+    navigation.textContent =
+      "Canonical analytical_brief manifest відсутній.";
+  }
+
+  for (
+    const section
+    of sections
+  ) {
+    const code =
+      String(
+        section?.code ?? ""
+      );
+
+    const targetId =
+      targets[code] ||
+      null;
+
+    const button =
+      document.createElement(
+        "button"
+      );
+
+    button.type =
+      "button";
+
+    const summary =
+      dossierBriefSectionSummary(
+        report,
+        code
+      );
+
+    button.textContent = [
+      section?.title ||
+        code ||
+        "Розділ",
+      summary,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+
+    button.disabled =
+      targetId === null;
+
+    button.style.padding =
+      "8px 11px";
+
+    button.style.borderRadius =
+      "999px";
+
+    button.style.border =
+      "1px solid #2a303b";
+
+    button.style.background =
+      "#141821";
+
+    button.style.color =
+      "inherit";
+
+    button.style.cursor =
+      targetId
+        ? "pointer"
+        : "default";
+
+    button.style.opacity =
+      targetId
+        ? "1"
+        : "0.65";
+
+    if (targetId) {
+      button.addEventListener(
+        "click",
+        () => {
+          document
+            .getElementById(
+              targetId
+            )
+            ?.scrollIntoView({
+              behavior:
+                "smooth",
+
+              block:
+                "start",
+            });
+        }
+      );
+    }
+
+    navigation.append(
+      button
+    );
+  }
+
+  const subject =
+    report?.subject &&
+    typeof report.subject ===
+      "object"
+      ? report.subject
+      : {};
+
+  const meta =
+    report?.meta &&
+    typeof report.meta ===
+      "object"
+      ? report.meta
+      : {};
+
+  const heading =
+    document.createElement(
+      "strong"
+    );
+
+  heading.textContent =
+    subject.full_name ||
+    activeDossierSubjectName ||
+    "Профіль суб’єкта";
+
+  heading.style.fontSize =
+    "18px";
+
+  overview.append(
+    heading
+  );
+
+  const rows = [
+    [
+      "Організація",
+      subject.organization,
+    ],
+    [
+      "Посада",
+      subject.position,
+    ],
+    [
+      "Місто",
+      subject.city,
+    ],
+    [
+      "Період",
+      (
+        meta?.period?.from_year !=
+          null &&
+        meta?.period?.to_year !=
+          null
+      )
+        ? `${meta.period.from_year}–${meta.period.to_year}`
+        : null,
+    ],
+    [
+      "Доступні роки",
+      dossierArray(
+        meta.available_years
+      ).length
+        ? dossierArray(
+            meta.available_years
+          ).join(", ")
+        : null,
+    ],
+    [
+      "Декларації",
+      dossierArray(
+        report
+          ?.declarations
+          ?.items
+      ).length,
+    ],
+    [
+      "Report schema",
+      report.schema_version ||
+        meta.schema_version,
+    ],
+    [
+      "Analytical brief",
+      report
+        ?.analytical_brief
+        ?.version,
+    ],
+  ];
+
+  const grid =
+    document.createElement(
+      "div"
+    );
+
+  grid.style.display =
+    "grid";
+
+  grid.style.gridTemplateColumns =
+    "repeat(auto-fit, minmax(180px, 1fr))";
+
+  grid.style.gap =
+    "12px";
+
+  grid.style.marginTop =
+    "14px";
+
+  for (
+    const [label, value]
+    of rows
+  ) {
+    if (
+      value === null ||
+      value === undefined ||
+      String(value).trim() === ""
+    ) {
+      continue;
+    }
+
+    const cell =
+      document.createElement(
+        "div"
+      );
+
+    const cellLabel =
+      document.createElement(
+        "div"
+      );
+
+    cellLabel.className =
+      "label";
+
+    cellLabel.textContent =
+      label;
+
+    const cellValue =
+      document.createElement(
+        "div"
+      );
+
+    cellValue.style.marginTop =
+      "4px";
+
+    cellValue.style.fontWeight =
+      "700";
+
+    cellValue.style.wordBreak =
+      "break-word";
+
+    cellValue.textContent =
+      String(value);
+
+    cell.append(
+      cellLabel,
+      cellValue
+    );
+
+    grid.append(
+      cell
+    );
+  }
+
+  overview.append(
+    grid
+  );
+}
+
+
 function renderDossierEvidence() {
   const title =
     document.getElementById(
@@ -210,6 +673,16 @@ function renderDossierEvidence() {
   const meta =
     document.getElementById(
       "dossier-evidence-meta"
+    );
+
+  const briefNavigation =
+    document.getElementById(
+      "dossier-brief-navigation"
+    );
+
+  const briefOverview =
+    document.getElementById(
+      "dossier-brief-overview"
     );
 
   const findingsContainer =
@@ -230,6 +703,8 @@ function renderDossierEvidence() {
   if (
     !status ||
     !meta ||
+    !briefNavigation ||
+    !briefOverview ||
     !findingsContainer ||
     !sourcesContainer
   ) {
@@ -239,8 +714,8 @@ function renderDossierEvidence() {
   if (title) {
     title.textContent =
       activeDossierSubjectName
-        ? `Досьє та provenance: ${activeDossierSubjectName}`
-        : "Досьє та provenance";
+        ? `Аналітичне досьє: ${activeDossierSubjectName}`
+        : "Аналітичне досьє";
   }
 
   if (refresh) {
@@ -256,6 +731,8 @@ function renderDossierEvidence() {
   }
 
   meta.replaceChildren();
+  briefNavigation.replaceChildren();
+  briefOverview.replaceChildren();
   findingsContainer.replaceChildren();
   sourcesContainer.replaceChildren();
 
@@ -275,7 +752,9 @@ function renderDossierEvidence() {
 
   if (dossierEvidenceLoading) {
     status.textContent =
-      "Завантаження останнього persisted snapshot…";
+      activeDossierRequestedVersionId
+        ? "Завантаження exact persisted snapshot…"
+        : "Завантаження останнього persisted snapshot…";
 
     return;
   }
@@ -300,7 +779,11 @@ function renderDossierEvidence() {
 
   status.textContent =
     dossierEvidenceMessage ||
-    "Завантажено останній persisted dossier snapshot.";
+    (
+      activeDossierRequestedVersionId
+        ? "Завантажено exact persisted dossier snapshot."
+        : "Завантажено останній persisted dossier snapshot."
+    );
 
   const metadata = [
     [
@@ -380,6 +863,10 @@ function renderDossierEvidence() {
       row
     );
   }
+
+  renderDossierBriefShell(
+    report
+  );
 
   const sources =
     canonicalDossierSources(
