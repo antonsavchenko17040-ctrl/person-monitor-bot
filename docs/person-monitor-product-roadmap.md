@@ -1,8 +1,8 @@
 # Person Monitor — функціональна модель, поточний стан і дорожня карта
 
 **Дата фіксації:** 12.08.2026
-**Базова точка:** блок 5.4E3a «Timeless EDR relations loader» закрито; окремий report-side loader без declaration-year semantics безпечно завантажує subject→organization зв’язки ЄДР як timeless relations, не змішуючи їх із річними declaration relations.
-**Технічний стан:** 575/575 тестів пройдено; `loadTimelessEdrRelations()` використовує canonical `EDR_GRAPH_RELATION_TYPES`, приймає лише timeless EDR relations для поточного subject і organization target, зберігає `verification_status` та allowlisted metadata і defensively відсіює malformed IDs, dated/non-EDR/unsupported rows. Loader ще не підключений до canonical `relations` або `manual_review`; EDR human-review projection у report буде окремим 5.4E3b. Identity review, persistence/Manual Review Queue UI, `report_id` та audit trail ще не реалізовані.
+**Базова точка:** блок 5.4E3b «Canonical timeless EDR relations + manual review projection» закрито; report-side timeless EDR loader підключений до canonical report model один раз на subject, окремо від declaration-year relations.
+**Технічний стан:** 578/578 тестів пройдено; `loadTimelessEdrRelations()` використовує canonical `EDR_GRAPH_RELATION_TYPES`, завантажується один раз на `subject.entity_id` незалежно від declaration years і проєктується в canonical `relations` із `year: null`. Timeless EDR relations дедуплікуються за `relation_id`, зберігають `confidence`, `verification_status` та allowlisted metadata, не потрапляють у yearly `relation_count`, мають українські presentation labels і залишаються `heuristic_signal` до ручного identity resolution. `manual_review` посилається на такі human-review relations лише через canonical UUID `item_ref`; media `review_status` не перетворюється на human-review queue. Persistence/Manual Review Queue UI, canonical identity review, `report_id` та audit trail ще не реалізовані.
 
 ## 1. Що повинен вміти портал
 
@@ -49,7 +49,7 @@ Person Monitor має бути не просто пошуковим сайтом
 | 19 | Декларації третіх осіб | 🟡 Частково | Треті особи вже витягуються; автоматичний пошук їх декларацій ще потрібен. |
 | 20 | Пул новин пов’язаних із суб’єктом | 🟡 Сильно просунуто | Google Web/News, corruption gate, identity gate, full-text verification і класифікація ролі суб’єкта готові. Далі — фінальне збереження/представлення у досьє. |
 | 21 | Формування метрик | 🟡 Частково | Analytics/metrics/findings є; затвердити фінальний набір і шкалу ризиків/сигналів. |
-| 22 | Структура на кроки + аналітична довідка | 🟡 Частково | Canonical model, orchestration core, authenticated POST API, evidence-backed executive summary, `analytical_brief` manifest і versioned presentation/evidence contract є; потрібні narrative, evidence UI та фінальне представлення досьє. |
+| 22 | Структура на кроки + аналітична довідка | 🟡 Частково | Canonical model, orchestration core, authenticated POST API, evidence-backed executive summary, `analytical_brief` manifest, versioned presentation/evidence contract, canonical timeless EDR relations і reference-only `manual_review` manifest є; потрібні narrative, evidence UI, persistent Manual Review Queue/versioning та фінальне представлення досьє. |
 | 23 | Математичні правила порівняння | 🟡 Частково | Частина правил є; потрібна формалізована rule matrix для всіх ключових типів даних. |
 | 24 | Зробити PDF | 🔁 Дублікат | Об’єднати з пунктом №3. |
 

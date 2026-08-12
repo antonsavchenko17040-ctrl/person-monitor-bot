@@ -35,6 +35,11 @@ import {
 } from "./relations-context.js";
 
 import {
+  loadTimelessEdrRelations,
+  TIMELESS_EDR_RELATION_TYPES,
+} from "./report-timeless-relations.js";
+
+import {
   getSubject,
   listMentions,
 } from "./store.js";
@@ -2046,6 +2051,24 @@ const REPORT_RELATION_LABELS = {
 
   resolved_to:
     "Ідентифіковано як",
+
+  edr_founder_of:
+    "Засновник (ЄДР)",
+
+  edr_beneficiary_of:
+    "Бенефіціар (ЄДР)",
+
+  edr_signer_of:
+    "Підписант (ЄДР)",
+
+  edr_member_of:
+    "Учасник / член (ЄДР)",
+
+  edr_executive_power_of:
+    "Керівний орган (ЄДР)",
+
+  edr_superior_management_of:
+    "Вищий орган управління (ЄДР)",
 };
 
 
@@ -2129,8 +2152,46 @@ function safeReportRelationMetadata(value) {
 }
 
 
+function safeReportTimelessRelationMetadata(
+  value,
+) {
+  const source =
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value)
+      ? value
+      : {};
+
+  const allowed = [
+    "source",
+    "edr_relation_type",
+    "identity_status",
+    "identity_decision",
+    "review_required",
+    "evidence_count",
+    "relation_semantics",
+  ];
+
+  return Object.fromEntries(
+    allowed
+      .filter(
+        (key) =>
+          source[key] !== null &&
+          source[key] !== undefined,
+      )
+      .map(
+        (key) => [
+          key,
+          source[key],
+        ],
+      ),
+  );
+}
+
+
 export function buildRelationsSection({
   contexts = [],
+  timelessRelations = [],
 } = {}) {
   const items = [];
 
@@ -2306,6 +2367,167 @@ export function buildRelationsSection({
       });
     }
   }
+
+  const seenRelationIds =
+    new Set(
+      items
+        .map(
+          (item) =>
+            item?.relation_id,
+        )
+        .filter(Boolean),
+    );
+
+  for (
+    const relation
+    of (
+      Array.isArray(
+        timelessRelations,
+      )
+        ? timelessRelations
+        : []
+    )
+  ) {
+    const relationId =
+      cleanValue(
+        relation?.relation_id,
+      );
+
+    const relationType =
+      cleanValue(
+        relation?.relation_type,
+      );
+
+    const fromEntityId =
+      cleanValue(
+        relation?.from_entity_id,
+      );
+
+    const toEntityId =
+      cleanValue(
+        relation?.to_entity_id,
+      );
+
+    const metadata =
+      safeReportTimelessRelationMetadata(
+        relation?.metadata,
+      );
+
+    if (
+      !relationId ||
+      !relationType ||
+      !fromEntityId ||
+      !toEntityId ||
+      seenRelationIds.has(
+        relationId,
+      ) ||
+      relation?.relation_scope !==
+        "timeless" ||
+      !TIMELESS_EDR_RELATION_TYPES.includes(
+        relationType,
+      ) ||
+      metadata.source !==
+        "edr" ||
+      relation?.source_document_id !=
+        null ||
+      relation?.valid_from != null ||
+      relation?.valid_to != null ||
+      cleanValue(
+        relation?.to_entity_type,
+      ) !== "organization"
+    ) {
+      continue;
+    }
+
+    const confidenceNumber =
+      relation?.confidence === null ||
+      relation?.confidence === undefined ||
+      relation?.confidence === ""
+        ? null
+        : Number(
+            relation.confidence,
+          );
+
+    seenRelationIds.add(
+      relationId,
+    );
+
+    items.push({
+      relation_id:
+        relationId,
+
+      relation_type:
+        relationType,
+
+      relation_scope:
+        "timeless",
+
+      from_entity_id:
+        fromEntityId,
+
+      to_entity_id:
+        toEntityId,
+
+      from_entity_type:
+        cleanValue(
+          relation.from_entity_type,
+        ),
+
+      from_name:
+        cleanValue(
+          relation.from_name,
+        ),
+
+      from_metadata:
+        safeReportEntityMetadata(
+          relation.from_metadata,
+        ),
+
+      to_entity_type:
+        cleanValue(
+          relation.to_entity_type,
+        ),
+
+      to_name:
+        cleanValue(
+          relation.to_name,
+        ),
+
+      to_metadata:
+        safeReportEntityMetadata(
+          relation.to_metadata,
+        ),
+
+      label:
+        REPORT_RELATION_LABELS[
+          relationType
+        ] ??
+        relationType,
+
+      year:
+        null,
+
+      confidence:
+        Number.isFinite(
+          confidenceNumber,
+        )
+          ? confidenceNumber
+          : null,
+
+      verification_status:
+        cleanValue(
+          relation.verification_status,
+        ),
+
+      metadata,
+
+      statement_type:
+        "heuristic_signal",
+
+      evidence: [],
+    });
+  }
+
 
   items.sort(
     (a, b) =>
@@ -3400,6 +3622,7 @@ function resolveExecutiveSummaryEvidence(
 
 export function buildManualReviewManifest({
   relatedPeople = null,
+  relations = null,
 } = {}) {
   const items = [];
   const seen = new Set();
@@ -3458,6 +3681,62 @@ export function buildManualReviewManifest({
 
       item_ref:
         itemRef,
+
+      review_type:
+        "identity_resolution",
+    });
+  }
+
+  for (
+    const relation
+    of (
+      Array.isArray(
+        relations?.items,
+      )
+        ? relations.items
+        : []
+    )
+  ) {
+    const relationId =
+      cleanValue(
+        relation?.relation_id,
+      );
+
+    if (
+      !relationId ||
+      relation?.relation_scope !==
+        "timeless" ||
+      relation?.verification_status !==
+        "manual_review" ||
+      relation?.metadata?.source !==
+        "edr" ||
+      relation?.metadata?.review_required !==
+        true ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        relationId,
+      ) ||
+      !TIMELESS_EDR_RELATION_TYPES.includes(
+        relation?.relation_type,
+      )
+    ) {
+      continue;
+    }
+
+    const seenKey =
+      `relations.items::${relationId}`;
+
+    if (seen.has(seenKey)) {
+      continue;
+    }
+
+    seen.add(seenKey);
+
+    items.push({
+      source_path:
+        "relations.items",
+
+      item_ref:
+        relationId,
 
       review_type:
         "identity_resolution",
@@ -3685,12 +3964,6 @@ export function buildSubjectReportModelPayload({
         : [],
   };
 
-  const manualReviewSection =
-    buildManualReviewManifest({
-      relatedPeople:
-        relatedPeopleSection,
-    });
-
   const relationsSection = {
     items:
       Array.isArray(
@@ -3706,6 +3979,15 @@ export function buildSubjectReportModelPayload({
         ? relations.counts
         : {},
   };
+
+  const manualReviewSection =
+    buildManualReviewManifest({
+      relatedPeople:
+        relatedPeopleSection,
+
+      relations:
+        relationsSection,
+    });
 
   const analyticsSection = {
     metrics:
@@ -4256,10 +4538,37 @@ export async function buildSubjectReportModel(
       ),
     );
 
+  const timelessRelationsLoader =
+    options.timelessRelationsLoader ??
+    loadTimelessEdrRelations;
+
+  const timelessRelationsOptions =
+    options.timelessRelationsOptions ?? {};
+
+  const normalizedSubjectEntityId =
+    cleanValue(
+      subject.entity_id,
+    );
+
+  const canLoadTimelessRelations =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      normalizedSubjectEntityId ?? "",
+    );
+
+  const timelessRelations =
+    canLoadTimelessRelations
+      ? await timelessRelationsLoader(
+          normalizedSubjectEntityId,
+          timelessRelationsOptions,
+        )
+      : [];
+
   const relations =
     buildRelationsSection({
       contexts:
         relationContexts,
+
+      timelessRelations,
     });
 
   const thirdPartyPeople =

@@ -175,6 +175,9 @@ test(
 
           declarationYearsLoader:
             async () => [],
+
+          timelessRelationsLoader:
+            async () => [],
         },
       );
 
@@ -307,6 +310,9 @@ test(
 
           declarationYearsLoader:
             async () => [2025, 2024],
+
+          timelessRelationsLoader:
+            async () => [],
 
           employmentContextLoader:
             async () => null,
@@ -892,6 +898,9 @@ test(
 
           declarationYearsLoader:
             async () => [2025],
+
+          timelessRelationsLoader:
+            async () => [],
 
           declarationContextLoader:
             async (_entityId, year) => ({

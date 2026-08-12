@@ -272,3 +272,236 @@ test(
     );
   },
 );
+
+
+
+test(
+  "manual review manifest references timeless EDR human-review relation",
+  async () => {
+    const reportModel =
+      await import(
+        "../src/report-model.js"
+      );
+
+    const reviewedRelationId =
+      "33333333-3333-5333-8333-333333333333";
+
+    const report =
+      reportModel
+        .buildSubjectReportModelPayload({
+          subject: {
+            id:
+              "44444444-4444-4444-8444-444444444444",
+
+            full_name:
+              "Тестовий Суб’єкт",
+          },
+
+          relations: {
+            items: [
+              {
+                relation_id:
+                  reviewedRelationId,
+
+                relation_type:
+                  "edr_founder_of",
+
+                relation_scope:
+                  "timeless",
+
+                year:
+                  null,
+
+                verification_status:
+                  "manual_review",
+
+                metadata: {
+                  source:
+                    "edr",
+
+                  review_required:
+                    true,
+
+                  edr_relation_type:
+                    "founder",
+                },
+
+                to_name:
+                  "СЕКРЕТНА ОРГАНІЗАЦІЯ",
+
+                to_metadata: {
+                  edrpou:
+                    "12345678",
+                },
+              },
+
+              {
+                relation_id:
+                  "55555555-5555-5555-8555-555555555555",
+
+                relation_type:
+                  "edr_signer_of",
+
+                relation_scope:
+                  "timeless",
+
+                year:
+                  null,
+
+                verification_status:
+                  "verified",
+
+                metadata: {
+                  source:
+                    "edr",
+
+                  review_required:
+                    false,
+                },
+              },
+
+              {
+                relation_id:
+                  "66666666-6666-5666-8666-666666666666",
+
+                relation_type:
+                  "edr_member_of",
+
+                relation_scope:
+                  "timeless",
+
+                year:
+                  null,
+
+                verification_status:
+                  "manual_review",
+
+                metadata: {
+                  source:
+                    "other",
+
+                  review_required:
+                    true,
+                },
+              },
+
+              {
+                relation_id:
+                  "77777777-7777-5777-8777-777777777777",
+
+                relation_type:
+                  "employed_by",
+
+                relation_scope:
+                  "direct",
+
+                year:
+                  2025,
+
+                verification_status:
+                  "manual_review",
+
+                metadata: {
+                  source:
+                    "edr",
+
+                  review_required:
+                    true,
+                },
+              },
+
+              {
+                relation_id:
+                  "   ",
+
+                relation_type:
+                  "edr_beneficiary_of",
+
+                relation_scope:
+                  "timeless",
+
+                year:
+                  null,
+
+                verification_status:
+                  "manual_review",
+
+                metadata: {
+                  source:
+                    "edr",
+
+                  review_required:
+                    true,
+                },
+              },
+
+              {
+                relation_id:
+                  "relation-not-a-uuid",
+
+                relation_type:
+                  "edr_beneficiary_of",
+
+                relation_scope:
+                  "timeless",
+
+                year:
+                  null,
+
+                verification_status:
+                  "manual_review",
+
+                metadata: {
+                  source:
+                    "edr",
+
+                  review_required:
+                    true,
+                },
+              },
+            ],
+          },
+        });
+
+    assert.deepEqual(
+      report.manual_review,
+      {
+        version:
+          "manual-review-manifest-v1",
+
+        items: [{
+          source_path:
+            "relations.items",
+
+          item_ref:
+            reviewedRelationId,
+
+          review_type:
+            "identity_resolution",
+        }],
+      },
+    );
+
+    const serialized =
+      JSON.stringify(
+        report.manual_review,
+      );
+
+    for (
+      const forbidden
+      of [
+        "СЕКРЕТНА ОРГАНІЗАЦІЯ",
+        "12345678",
+        "edr_founder_of",
+        "founder",
+      ]
+    ) {
+      assert.equal(
+        serialized.includes(
+          forbidden,
+        ),
+        false,
+      );
+    }
+  },
+);
