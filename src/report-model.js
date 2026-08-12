@@ -52,6 +52,14 @@ import {
   stableFingerprint,
 } from "./utils.js";
 
+import {
+  MANUAL_REVIEW_MANIFEST_VERSION,
+} from "./manual-review-contract.js";
+
+export {
+  MANUAL_REVIEW_MANIFEST_VERSION,
+};
+
 export const REPORT_MODEL_SCHEMA_VERSION =
   "report-model-v1";
 
@@ -69,9 +77,6 @@ export const REPORT_EVIDENCE_POLICY_VERSION =
 
 export const RELATED_PERSON_REF_VERSION =
   "related-person-ref-v1";
-
-export const MANUAL_REVIEW_MANIFEST_VERSION =
-  "manual-review-manifest-v1";
 
 export const REPORT_MODEL_LIMITATIONS = [
   "Відкриті джерела можуть бути неповними.",
