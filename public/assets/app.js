@@ -408,6 +408,9 @@ function renderDossierBriefShell(
     analytics:
       "dossier-analytics-section",
 
+    media:
+      "dossier-media-section",
+
     evidence:
       "dossier-evidence-sources",
   };
@@ -2477,6 +2480,246 @@ function renderDossierAnalytics(
 }
 
 
+function dossierSafeSnippet(
+  value,
+  maxLength = 360
+) {
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return null;
+  }
+
+  const text =
+    String(value).trim();
+
+  if (!text) {
+    return null;
+  }
+
+  if (
+    text.length <= maxLength
+  ) {
+    return text;
+  }
+
+  return (
+    text.slice(
+      0,
+      maxLength
+    ).trimEnd() +
+    "…"
+  );
+}
+
+
+function appendDossierSourceLink(
+  container,
+  source
+) {
+  const url =
+    source?.url;
+
+  if (
+    typeof url !== "string" ||
+    !url.trim()
+  ) {
+    return;
+  }
+
+  const row =
+    document.createElement(
+      "div"
+    );
+
+  row.style.marginTop =
+    "9px";
+
+  const link =
+    document.createElement(
+      "a"
+    );
+
+  link.href =
+    url;
+
+  link.target =
+    "_blank";
+
+  link.rel =
+    "noopener noreferrer";
+
+  link.textContent =
+    "Відкрити canonical джерело";
+
+  row.append(
+    link
+  );
+
+  container.append(
+    row
+  );
+}
+
+
+function renderDossierMedia(
+  report
+) {
+  const container =
+    document.getElementById(
+      "dossier-media"
+    );
+
+  if (!container) {
+    return;
+  }
+
+  container.replaceChildren();
+
+  const mentions =
+    dossierArray(
+      report?.mentions?.items
+    );
+
+  if (
+    mentions.length === 0
+  ) {
+    container.textContent =
+      "Canonical релевантних згадок у цьому snapshot немає.";
+
+    return;
+  }
+
+  const sourcesById =
+    new Map(
+      canonicalDossierSources(
+        report
+      )
+        .filter(
+          (source) =>
+            source
+              ?.source_document_id !=
+            null
+        )
+        .map(
+          (source) => [
+            String(
+              source
+                .source_document_id
+            ),
+            source,
+          ]
+        )
+    );
+
+  appendDossierGroupHeading(
+    container,
+    "Згадки",
+    mentions.length
+  );
+
+  for (
+    const item
+    of mentions
+  ) {
+    const sourceId =
+      item
+        ?.source_document_id !=
+      null
+        ? String(
+            item
+              .source_document_id
+          )
+        : null;
+
+    const source =
+      sourceId
+        ? sourcesById.get(
+            sourceId
+          ) || null
+        : null;
+
+    const card =
+      createDossierPresentationCard(
+        item?.title ||
+          "Медійна згадка"
+      );
+
+    appendDossierField(
+      card,
+      "Provider",
+      source?.provider ||
+        item?.provider
+    );
+
+    appendDossierField(
+      card,
+      "Джерело",
+      item?.source
+    );
+
+    appendDossierField(
+      card,
+      "Опубліковано",
+      item?.published_at
+        ? formatPortalDateTime(
+            item.published_at
+          )
+        : null
+    );
+
+    appendDossierField(
+      card,
+      "Вперше зафіксовано",
+      item?.first_seen_at
+        ? formatPortalDateTime(
+            item.first_seen_at
+          )
+        : null
+    );
+
+    appendDossierField(
+      card,
+      "Match level",
+      item?.match_level
+    );
+
+    appendDossierField(
+      card,
+      "Match score",
+      item?.match_score
+    );
+
+    const snippet =
+      dossierSafeSnippet(
+        item?.snippet
+      );
+
+    appendDossierField(
+      card,
+      "Фрагмент",
+      snippet
+    );
+
+    appendDossierField(
+      card,
+      "Source document",
+      sourceId
+    );
+
+    appendDossierSourceLink(
+      card,
+      source
+    );
+
+    container.append(
+      card
+    );
+  }
+}
+
+
 function renderDossierEvidence() {
   const title =
     document.getElementById(
@@ -2523,6 +2766,11 @@ function renderDossierEvidence() {
       "dossier-analytics"
     );
 
+  const media =
+    document.getElementById(
+      "dossier-media"
+    );
+
   const findingsContainer =
     document.getElementById(
       "dossier-evidence-findings"
@@ -2547,6 +2795,7 @@ function renderDossierEvidence() {
     !finances ||
     !assets ||
     !analytics ||
+    !media ||
     !findingsContainer ||
     !sourcesContainer
   ) {
@@ -2579,6 +2828,7 @@ function renderDossierEvidence() {
   finances.replaceChildren();
   assets.replaceChildren();
   analytics.replaceChildren();
+  media.replaceChildren();
   findingsContainer.replaceChildren();
   sourcesContainer.replaceChildren();
 
@@ -2727,6 +2977,10 @@ function renderDossierEvidence() {
   );
 
   renderDossierAnalytics(
+    report
+  );
+
+  renderDossierMedia(
     report
   );
 
