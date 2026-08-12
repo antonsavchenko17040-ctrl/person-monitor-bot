@@ -951,3 +951,351 @@ test(
     );
   },
 );
+
+test(
+  "persists completed canonical dossier after report build",
+  async () => {
+    const subjectId =
+      "11111111-1111-4111-8111-111111111111";
+
+    const subject = {
+      id:
+        subjectId,
+      full_name:
+        "Олексій Чернишов",
+    };
+
+    const report = {
+      schema_version:
+        "report-model-v1",
+
+      generated_at:
+        "2026-08-12T06:30:00.000Z",
+
+      subject: {
+        subject_id:
+          subjectId,
+      },
+    };
+
+    const version = {
+      id:
+        "22222222-2222-4222-8222-222222222222",
+    };
+
+    const calls = [];
+
+    const result =
+      await runSubjectDossier(
+        subjectId,
+        {
+          subjectLoader:
+            async () =>
+              subject,
+
+          refreshSubject:
+            async () => ({
+              errors: [],
+            }),
+
+          reportBuilder:
+            async () =>
+              report,
+
+          persistDossier:
+            async (input) => {
+              calls.push(
+                input,
+              );
+
+              return version;
+            },
+        },
+      );
+
+    assert.equal(
+      result.status,
+      "completed",
+    );
+
+    assert.deepEqual(
+      result.dossier_version,
+      version,
+    );
+
+    assert.equal(
+      result.steps.persistence.status,
+      "completed",
+    );
+
+    assert.equal(
+      calls.length,
+      1,
+    );
+
+    assert.deepEqual(
+      calls[0],
+      {
+        subjectId,
+
+        dossierStatus:
+          "completed",
+
+        orchestratorVersion:
+          DOSSIER_ORCHESTRATOR_VERSION,
+
+        report,
+      },
+    );
+  },
+);
+
+
+test(
+  "persists partial dossier when earlier workflow step is partial",
+  async () => {
+    const subjectId =
+      "11111111-1111-4111-8111-111111111111";
+
+    const report = {
+      schema_version:
+        "report-model-v1",
+
+      generated_at:
+        "2026-08-12T06:30:00.000Z",
+
+      subject: {
+        subject_id:
+          subjectId,
+      },
+    };
+
+    let persistedStatus =
+      null;
+
+    const result =
+      await runSubjectDossier(
+        subjectId,
+        {
+          subjectLoader:
+            async () => ({
+              id:
+                subjectId,
+            }),
+
+          refreshSubject:
+            async () => ({
+              errors: [
+                {
+                  code:
+                    "provider_failed",
+                },
+              ],
+            }),
+
+          reportBuilder:
+            async () =>
+              report,
+
+          persistDossier:
+            async (input) => {
+              persistedStatus =
+                input.dossierStatus;
+
+              return {
+                id:
+                  "22222222-2222-4222-8222-222222222222",
+              };
+            },
+        },
+      );
+
+    assert.equal(
+      persistedStatus,
+      "partial",
+    );
+
+    assert.equal(
+      result.status,
+      "partial",
+    );
+
+    assert.equal(
+      result.steps.refresh.status,
+      "partial",
+    );
+
+    assert.equal(
+      result.steps.persistence.status,
+      "completed",
+    );
+
+    assert.equal(
+      result.errors[0]?.code,
+      "refresh_partial",
+    );
+  },
+);
+
+
+test(
+  "keeps canonical report and returns partial when persistence fails",
+  async () => {
+    const subjectId =
+      "11111111-1111-4111-8111-111111111111";
+
+    const report = {
+      schema_version:
+        "report-model-v1",
+
+      generated_at:
+        "2026-08-12T06:30:00.000Z",
+
+      subject: {
+        subject_id:
+          subjectId,
+      },
+    };
+
+    const result =
+      await runSubjectDossier(
+        subjectId,
+        {
+          subjectLoader:
+            async () => ({
+              id:
+                subjectId,
+            }),
+
+          refreshSubject:
+            async () => ({
+              errors: [],
+            }),
+
+          reportBuilder:
+            async () =>
+              report,
+
+          persistDossier:
+            async () => {
+              throw new Error(
+                "database unavailable",
+              );
+            },
+        },
+      );
+
+    assert.equal(
+      result.status,
+      "partial",
+    );
+
+    assert.deepEqual(
+      result.report,
+      report,
+    );
+
+    assert.equal(
+      result.dossier_version,
+      null,
+    );
+
+    assert.equal(
+      result.steps.report.status,
+      "completed",
+    );
+
+    assert.equal(
+      result.steps.persistence.status,
+      "failed",
+    );
+
+    assert.deepEqual(
+      result.errors,
+      [
+        {
+          step:
+            "persistence",
+
+          code:
+            "persistence_failed",
+
+          message:
+            "database unavailable",
+        },
+      ],
+    );
+  },
+);
+
+
+test(
+  "skips persistence when canonical report build fails",
+  async () => {
+    const subjectId =
+      "11111111-1111-4111-8111-111111111111";
+
+    let persistenceCalls =
+      0;
+
+    const result =
+      await runSubjectDossier(
+        subjectId,
+        {
+          subjectLoader:
+            async () => ({
+              id:
+                subjectId,
+            }),
+
+          refreshSubject:
+            async () => ({
+              errors: [],
+            }),
+
+          reportBuilder:
+            async () => {
+              throw new Error(
+                "report unavailable",
+              );
+            },
+
+          persistDossier:
+            async () => {
+              persistenceCalls +=
+                1;
+
+              return {
+                id:
+                  "22222222-2222-4222-8222-222222222222",
+              };
+            },
+        },
+      );
+
+    assert.equal(
+      result.status,
+      "failed",
+    );
+
+    assert.equal(
+      result.report,
+      null,
+    );
+
+    assert.equal(
+      result.dossier_version,
+      null,
+    );
+
+    assert.equal(
+      result.steps.persistence.status,
+      "skipped",
+    );
+
+    assert.equal(
+      persistenceCalls,
+      0,
+    );
+  },
+);

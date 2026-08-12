@@ -590,3 +590,216 @@ test(
     );
   },
 );
+
+test(
+  "production dossier composition wires persistence into orchestrator",
+  async () => {
+    const subjectId =
+      "11111111-1111-4111-8111-111111111111";
+
+    const persistDossier =
+      async () => ({
+        id:
+          "22222222-2222-4222-8222-222222222222",
+      });
+
+    const calls = [];
+
+    const dossier = {
+      version:
+        "dossier-orchestrator-v1",
+
+      status:
+        "completed",
+
+      subject: {
+        id:
+          subjectId,
+      },
+
+      report: {
+        schema_version:
+          "report-model-v1",
+      },
+
+      dossier_version: {
+        id:
+          "22222222-2222-4222-8222-222222222222",
+      },
+
+      errors: [],
+    };
+
+    const handler =
+      createDossierHandler({
+        isAuthenticated:
+          () =>
+            true,
+
+        persistDossier,
+
+        orchestrateDossier:
+          async (
+            receivedSubjectId,
+            options,
+          ) => {
+            calls.push({
+              subjectId:
+                receivedSubjectId,
+
+              persistDossier:
+                options.persistDossier,
+            });
+
+            return dossier;
+          },
+      });
+
+    const request = {
+      method:
+        "POST",
+
+      query: {
+        subjectId,
+      },
+    };
+
+    const response =
+      createResponse();
+
+    await handler(
+      request,
+      response,
+    );
+
+    assert.equal(
+      response.statusCode,
+      200,
+    );
+
+    assert.deepEqual(
+      response.body,
+      {
+        ok: true,
+        dossier,
+      },
+    );
+
+    assert.equal(
+      calls.length,
+      1,
+    );
+
+    assert.equal(
+      calls[0].subjectId,
+      subjectId,
+    );
+
+    assert.equal(
+      calls[0].persistDossier,
+      persistDossier,
+    );
+  },
+);
+
+
+test(
+  "explicit runDossier override keeps precedence over production composition",
+  async () => {
+    const subjectId =
+      "11111111-1111-4111-8111-111111111111";
+
+    let orchestratorCalls =
+      0;
+
+    let persistenceCalls =
+      0;
+
+    const dossier = {
+      version:
+        "test-dossier",
+
+      status:
+        "completed",
+
+      errors: [],
+    };
+
+    const handler =
+      createDossierHandler({
+        isAuthenticated:
+          () =>
+            true,
+
+        orchestrateDossier:
+          async () => {
+            orchestratorCalls +=
+              1;
+
+            throw new Error(
+              "orchestrator must not run",
+            );
+          },
+
+        persistDossier:
+          async () => {
+            persistenceCalls +=
+              1;
+
+            throw new Error(
+              "persistence must not run",
+            );
+          },
+
+        runDossier:
+          async (
+            receivedSubjectId,
+          ) => {
+            assert.equal(
+              receivedSubjectId,
+              subjectId,
+            );
+
+            return dossier;
+          },
+      });
+
+    const response =
+      createResponse();
+
+    await handler(
+      {
+        method:
+          "POST",
+
+        query: {
+          subjectId,
+        },
+      },
+      response,
+    );
+
+    assert.equal(
+      response.statusCode,
+      200,
+    );
+
+    assert.equal(
+      orchestratorCalls,
+      0,
+    );
+
+    assert.equal(
+      persistenceCalls,
+      0,
+    );
+
+    assert.deepEqual(
+      response.body,
+      {
+        ok: true,
+        dossier,
+      },
+    );
+  },
+);

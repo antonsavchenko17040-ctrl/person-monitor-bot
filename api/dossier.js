@@ -6,6 +6,10 @@ import {
   runSubjectDossier,
 } from "../src/dossier-orchestrator.js";
 
+import {
+  saveDossierVersion,
+} from "../src/dossier-version-store.js";
+
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -16,9 +20,23 @@ export function createDossierHandler(
     options.isAuthenticated ??
     isPortalAuthenticated;
 
+  const orchestrateDossier =
+    options.orchestrateDossier ??
+    runSubjectDossier;
+
+  const persistDossier =
+    options.persistDossier ??
+    saveDossierVersion;
+
   const runDossier =
     options.runDossier ??
-    runSubjectDossier;
+    ((subjectId) =>
+      orchestrateDossier(
+        subjectId,
+        {
+          persistDossier,
+        },
+      ));
 
   return async function handler(
     request,

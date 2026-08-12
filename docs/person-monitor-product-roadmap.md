@@ -1,8 +1,8 @@
 # Person Monitor — функціональна модель, поточний стан і дорожня карта
 
 **Дата фіксації:** 12.08.2026
-**Базова точка:** блоки 5.4F1a–5.4F1b «Dossier version persistence foundation» закрито локально; additive schema contract `dossier_versions`, generic versioned canonical JSON SHA-256 hashing і insert-only dossier-version store реалізовані. Міграція в Neon ще не застосована, а persistence stage ще не підключений до orchestrator.
-**Технічний стан:** 587/587 тестів пройдено. `dossier_versions` зберігає subject, `completed / partial` status, orchestrator/report contract versions, report generation time, canonical report snapshot, SHA-256 integrity hash та hash contract version. `canonical-json-sha256-v1` стабілізує порядок object keys, зберігає точний текст і array order та відхиляє unsupported/non-finite values. `saveDossierVersion()` є insert-only contract без deduplication або update semantics, перевіряє UUID subject, відповідність `report.subject.subject_id`, report schema/generated timestamp і не дозволяє persist `failed` dossier. Повторні однакові snapshots дозволені як окремі запуски. `ON DELETE CASCADE` відповідає чинному explicit hard-delete subject. `report_id` у canonical payload ще лишається `null`; orchestrator persistence wiring, persistent Manual Review Queue, canonical identity review та повний audit/diff між запусками ще не реалізовані.
+**Базова точка:** блоки 5.4F1a–5.4F1c «Dossier version persistence» реалізовані; schema `dossier_versions` застосована в Neon, generic versioned canonical JSON SHA-256 hashing та insert-only dossier-version store готові, а persistence stage підключений до orchestrator і production `/api/dossier`.
+**Технічний стан:** 593/593 тестів пройдено. `dossier_versions` зберігає subject, `completed / partial` status, orchestrator/report contract versions, report generation time, canonical report snapshot, SHA-256 integrity hash та hash contract version. `saveDossierVersion()` є insert-only contract без deduplication/update semantics. Orchestrator persist-ить тільки успішно побудований report, зберігає pre-persistence `completed / partial` status, пропускає persistence при report failure і повертає report як `partial` при `persistence_failed`. Production `/api/dossier` композиційно передає `saveDossierVersion()` у orchestrator, зберігаючи dependency injection для тестів. Реальний live POST із записом snapshot у Neon ще не перевірявся. `report_id` у canonical payload лишається `null`; persistent Manual Review Queue, canonical identity review та повний audit/diff між запусками ще не реалізовані.
 
 ## 1. Що повинен вміти портал
 
@@ -49,7 +49,7 @@ Person Monitor має бути не просто пошуковим сайтом
 | 19 | Декларації третіх осіб | 🟡 Частково | Треті особи вже витягуються; автоматичний пошук їх декларацій ще потрібен. |
 | 20 | Пул новин пов’язаних із суб’єктом | 🟡 Сильно просунуто | Google Web/News, corruption gate, identity gate, full-text verification і класифікація ролі суб’єкта готові. Далі — фінальне збереження/представлення у досьє. |
 | 21 | Формування метрик | 🟡 Частково | Analytics/metrics/findings є; затвердити фінальний набір і шкалу ризиків/сигналів. |
-| 22 | Структура на кроки + аналітична довідка | 🟡 Частково | Canonical model, orchestration core, authenticated POST API, evidence-backed executive summary, `analytical_brief` manifest, canonical timeless EDR relations, reference-only `manual_review` manifest і локальний versioned dossier persistence foundation є; потрібні orchestrator persistence wiring, narrative, evidence UI, persistent Manual Review Queue та фінальне представлення досьє. |
+| 22 | Структура на кроки + аналітична довідка | 🟡 Частково | Canonical model, orchestration core, authenticated POST API, evidence-backed executive summary, `analytical_brief` manifest, canonical timeless EDR relations, reference-only `manual_review` manifest і versioned dossier persistence з production wiring є; потрібні live persistence verification, narrative, evidence UI, persistent Manual Review Queue та фінальне представлення досьє. |
 | 23 | Математичні правила порівняння | 🟡 Частково | Частина правил є; потрібна формалізована rule matrix для всіх ключових типів даних. |
 | 24 | Зробити PDF | 🔁 Дублікат | Об’єднати з пунктом №3. |
 
@@ -66,7 +66,7 @@ Person Monitor має бути не просто пошуковим сайтом
 2. **Orchestrator «Сформувати досьє».** Одна дія має запускати весь pipeline: джерела → ідентифікація → факти → зв’язки → cross-checks → метрики → довідка → експорт.
 3. **Evidence / provenance UI.** Кожен висновок має мати джерело, дату, фрагмент, правило та рівень упевненості.
 4. **Manual Review Queue.** Probable/ambiguous/conflict кейси повинні потрапляти аналітику на ручне підтвердження.
-5. **Версії досьє та audit trail.** Persistence foundation уже є локально: `dossier_versions`, canonical payload hash і insert-only store contract. Далі — підключити persistence до orchestrator, зафіксувати run/source metadata та порівняння змін між версіями.
+5. **Версії досьє та audit trail.** `dossier_versions`, canonical payload hash, insert-only store і production orchestrator wiring уже реалізовані; schema застосована в Neon. Далі — live verification реального snapshot, run/source metadata, `report_id` semantics та порівняння змін між версіями.
 6. **Моніторинг змін.** Нові декларації, зміни ЄДР, нові релевантні медіаматеріали, зміни зв’язків/активів.
 7. **Статус джерел.** Показувати окремо успіх/помилку/timeout/недоступність кожного джерела, щоб “нічого не знайдено” не плуталось з “джерело не перевірено”.
 8. **Роль суб’єкта в корупційних матеріалах.** Розрізняти adverse_context / anti_corruption_activity / related_mention без висновку про винуватість.

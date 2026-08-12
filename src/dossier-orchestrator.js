@@ -34,6 +34,11 @@ export async function runSubjectDossier(
       ? options.ingestSubject
       : null;
 
+  const persistDossier =
+    typeof options.persistDossier === "function"
+      ? options.persistDossier
+      : null;
+
   const subject =
     await subjectLoader(
       subjectId,
@@ -55,6 +60,13 @@ export async function runSubjectDossier(
 
       report:
         null,
+
+      ...(persistDossier
+        ? {
+            dossier_version:
+              null,
+          }
+        : {}),
 
       errors: [
         {
@@ -84,6 +96,15 @@ export async function runSubjectDossier(
           status:
             "skipped",
         },
+
+        ...(persistDossier
+          ? {
+              persistence: {
+                status:
+                  "skipped",
+              },
+            }
+          : {}),
       },
     };
   }
@@ -210,6 +231,65 @@ export async function runSubjectDossier(
     });
   }
 
+  const statusBeforePersistence =
+    reportStatus === "failed"
+      ? "failed"
+      : errors.length
+        ? "partial"
+        : "completed";
+
+  let dossierVersion =
+    null;
+
+  let persistenceStatus =
+    persistDossier
+      ? reportStatus === "failed"
+        ? "skipped"
+        : "completed"
+      : null;
+
+  if (
+    persistDossier &&
+    reportStatus !== "failed"
+  ) {
+    try {
+      dossierVersion =
+        await persistDossier({
+          subjectId,
+
+          dossierStatus:
+            statusBeforePersistence,
+
+          orchestratorVersion:
+            DOSSIER_ORCHESTRATOR_VERSION,
+
+          report,
+        });
+
+      if (!dossierVersion) {
+        throw new Error(
+          "Persistence returned no dossier version",
+        );
+      }
+    } catch (error) {
+      persistenceStatus =
+        "failed";
+
+      errors.push({
+        step:
+          "persistence",
+
+        code:
+          "persistence_failed",
+
+        message:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
   return {
     version:
       DOSSIER_ORCHESTRATOR_VERSION,
@@ -232,6 +312,13 @@ export async function runSubjectDossier(
       : {}),
 
     report,
+
+    ...(persistDossier
+      ? {
+          dossier_version:
+            dossierVersion,
+        }
+      : {}),
 
     errors,
 
@@ -259,6 +346,15 @@ export async function runSubjectDossier(
         status:
           reportStatus,
       },
+
+      ...(persistDossier
+        ? {
+            persistence: {
+              status:
+                persistenceStatus,
+            },
+          }
+        : {}),
     },
   };
 }
