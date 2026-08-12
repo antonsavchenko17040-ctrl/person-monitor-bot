@@ -35,6 +35,7 @@ let activeDossierVersion = null;
 let activeDossierRequestedVersionId = null;
 let dossierEvidenceLoading = false;
 let dossierEvidenceMessage = "";
+let dossierBuildPending = false;
 
 const subjectNameById =
   new Map();
@@ -2905,6 +2906,11 @@ function renderDossierEvidence() {
       "dossier-evidence-refresh"
     );
 
+  const build =
+    document.getElementById(
+      "dossier-build"
+    );
+
   if (
     !status ||
     !meta ||
@@ -2933,12 +2939,26 @@ function renderDossierEvidence() {
     refresh.disabled =
       !portalAuthenticated ||
       !activeDossierSubjectId ||
-      dossierEvidenceLoading;
+      dossierEvidenceLoading ||
+      dossierBuildPending;
 
     refresh.textContent =
       dossierEvidenceLoading
         ? "Завантаження…"
         : "Оновити перегляд";
+  }
+
+  if (build) {
+    build.disabled =
+      !portalAuthenticated ||
+      !activeDossierSubjectId ||
+      dossierEvidenceLoading ||
+      dossierBuildPending;
+
+    build.textContent =
+      dossierBuildPending
+        ? "Формування…"
+        : "Сформувати / Оновити досьє";
   }
 
   meta.replaceChildren();
@@ -2976,6 +2996,16 @@ function renderDossierEvidence() {
     return;
   }
 
+  if (
+    dossierBuildPending &&
+    !activeDossierVersion
+  ) {
+    status.textContent =
+      "Формування та збереження нового dossier snapshot…";
+
+    return;
+  }
+
   if (!activeDossierVersion) {
     status.textContent =
       dossierEvidenceMessage ||
@@ -2995,12 +3025,14 @@ function renderDossierEvidence() {
       : {};
 
   status.textContent =
-    dossierEvidenceMessage ||
-    (
-      activeDossierRequestedVersionId
-        ? "Завантажено exact persisted dossier snapshot."
-        : "Завантажено останній persisted dossier snapshot."
-    );
+    dossierBuildPending
+      ? "Формування нової версії досьє… Поточний snapshot залишається доступним."
+      : dossierEvidenceMessage ||
+        (
+          activeDossierRequestedVersionId
+            ? "Завантажено exact persisted dossier snapshot."
+            : "Завантажено останній persisted dossier snapshot."
+        );
 
   const metadata = [
     [
@@ -3597,10 +3629,154 @@ function renderDossierEvidence() {
 }
 
 
+async function buildActiveDossier() {
+  if (
+    !portalAuthenticated ||
+    !activeDossierSubjectId ||
+    dossierBuildPending ||
+    dossierEvidenceLoading
+  ) {
+    return;
+  }
+
+  const subjectId =
+    activeDossierSubjectId;
+
+  const subjectName =
+    activeDossierSubjectName ||
+    subjectNameById.get(
+      subjectId
+    ) ||
+    subjectId;
+
+  dossierBuildPending =
+    true;
+
+  dossierEvidenceMessage =
+    "";
+
+  renderDossierEvidence();
+
+  try {
+    const response =
+      await fetch(
+        `/api/dossier?subjectId=${encodeURIComponent(
+          subjectId
+        )}`,
+        {
+          method: "POST",
+          headers: {
+            Accept:
+              "application/json",
+          },
+        }
+      );
+
+    let data = null;
+
+    try {
+      data =
+        await response.json();
+    } catch {}
+
+    if (
+      response.status === 401
+    ) {
+      portalAuthenticated =
+        false;
+
+      applyPortalAuthState();
+
+      dossierEvidenceMessage =
+        "Сесія завершилась. Увійдіть повторно.";
+
+      return;
+    }
+
+    if (
+      !response.ok ||
+      data?.ok !== true
+    ) {
+      throw new Error(
+        data?.error ||
+        `HTTP ${response.status}`
+      );
+    }
+
+    const dossier =
+      data?.dossier;
+
+    const persistenceStatus =
+      dossier
+        ?.steps
+        ?.persistence
+        ?.status;
+
+    const dossierVersionId =
+      dossier
+        ?.dossier_version
+        ?.id;
+
+    if (
+      persistenceStatus !==
+        "completed" ||
+      !dossierVersionId
+    ) {
+      throw new Error(
+        dossier?.status ===
+          "partial"
+          ? "Workflow завершився частково, але новий persisted snapshot не створено."
+          : "Новий persisted dossier snapshot не створено."
+      );
+    }
+
+    const message =
+      dossier?.status ===
+        "partial"
+        ? "Нову версію досьє збережено. Workflow завершився частково."
+        : "Нову версію досьє сформовано та збережено.";
+
+    dossierBuildPending =
+      false;
+
+    if (
+      activeDossierSubjectId ===
+      subjectId
+    ) {
+      await loadDossierEvidence(
+        subjectId,
+        subjectName,
+        null,
+        message
+      );
+    } else {
+      renderDossierEvidence();
+    }
+  } catch (error) {
+    console.error(
+      "Dossier build failed:",
+      error
+    );
+
+    dossierEvidenceMessage =
+      error?.message ||
+      "Не вдалося сформувати нову версію досьє.";
+  } finally {
+    if (dossierBuildPending) {
+      dossierBuildPending =
+        false;
+
+      renderDossierEvidence();
+    }
+  }
+}
+
+
 async function loadDossierEvidence(
   subjectId,
   fullName,
-  dossierVersionId = null
+  dossierVersionId = null,
+  messageAfterLoad = ""
 ) {
   if (
     !portalAuthenticated ||
@@ -3708,6 +3884,14 @@ async function loadDossierEvidence(
     activeDossierVersion =
       data.dossierVersion ||
       null;
+
+    if (
+      activeDossierVersion &&
+      messageAfterLoad
+    ) {
+      dossierEvidenceMessage =
+        messageAfterLoad;
+    }
   } catch (error) {
     console.error(
       "Dossier evidence loading failed:",
@@ -7314,6 +7498,16 @@ document
   );
 
 loadPortalSession();
+
+document
+  .getElementById(
+    "dossier-build"
+  )
+  ?.addEventListener(
+    "click",
+    buildActiveDossier
+  );
+
 document
   .getElementById(
     "dossier-evidence-refresh"
