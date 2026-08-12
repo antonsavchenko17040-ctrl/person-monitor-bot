@@ -412,7 +412,7 @@ function renderDossierBriefShell(
       "dossier-media-section",
 
     evidence:
-      "dossier-evidence-sources",
+      "dossier-evidence-methodology-section",
   };
 
   if (
@@ -1486,11 +1486,6 @@ function renderDossierFinances(
         )
       );
 
-      appendDossierField(
-        card,
-        "Source document",
-        item?.source_document_id
-      );
 
       appendDossierField(
         card,
@@ -1596,11 +1591,6 @@ function renderDossierFinances(
           ?.person_name
       );
 
-      appendDossierField(
-        card,
-        "Source document",
-        item?.source_document_id
-      );
 
       appendDossierField(
         card,
@@ -1742,11 +1732,6 @@ function renderDossierFinances(
           ).length
         );
 
-        appendDossierField(
-          card,
-          "Source document",
-          item?.source_document_id
-        );
 
         appendDossierField(
           card,
@@ -1909,19 +1894,7 @@ function renderDossierAssets(
           ).length
         );
 
-        appendDossierField(
-          card,
-          "Source item ref",
-          item
-            ?.tracking_identity
-            ?.source_item_ref
-        );
 
-        appendDossierField(
-          card,
-          "Source document",
-          item?.source_document_id
-        );
 
         appendDossierField(
           card,
@@ -2020,19 +1993,7 @@ function renderDossierAssets(
           ).length
         );
 
-        appendDossierField(
-          card,
-          "Source item ref",
-          item
-            ?.tracking_identity
-            ?.source_item_ref
-        );
 
-        appendDossierField(
-          card,
-          "Source document",
-          item?.source_document_id
-        );
 
         appendDossierField(
           card,
@@ -2702,16 +2663,169 @@ function renderDossierMedia(
       snippet
     );
 
-    appendDossierField(
-      card,
-      "Source document",
-      sourceId
-    );
 
     appendDossierSourceLink(
       card,
       source
     );
+
+    container.append(
+      card
+    );
+  }
+}
+
+
+function renderDossierMethodology(
+  report
+) {
+  const container =
+    document.getElementById(
+      "dossier-methodology"
+    );
+
+  if (!container) {
+    return;
+  }
+
+  container.replaceChildren();
+
+  const methodology =
+    report?.methodology;
+
+  if (
+    !methodology ||
+    typeof methodology !== "object" ||
+    Array.isArray(methodology)
+  ) {
+    container.textContent =
+      "Canonical methodology у цьому snapshot відсутня.";
+
+    return;
+  }
+
+  const versions =
+    createDossierPresentationCard(
+      "Версії аналітичного контракту"
+    );
+
+  appendDossierField(
+    versions,
+    "Report model",
+    methodology?.report_model_version
+  );
+
+  appendDossierField(
+    versions,
+    "Analytics",
+    methodology?.analytics_version
+  );
+
+  appendDossierField(
+    versions,
+    "Rules",
+    methodology?.rules_version
+  );
+
+  appendDossierField(
+    versions,
+    "Analytical brief",
+    methodology?.analytical_brief_version
+  );
+
+  appendDossierField(
+    versions,
+    "Evidence policy",
+    methodology?.evidence_policy_version
+  );
+
+  appendDossierField(
+    versions,
+    "Manual review manifest",
+    methodology?.manual_review_manifest_version
+  );
+
+  container.append(
+    versions
+  );
+
+  const notes =
+    dossierArray(
+      methodology?.notes
+    ).filter(
+      (item) =>
+        typeof item === "string" &&
+        item.trim()
+    );
+
+  if (notes.length) {
+    const card =
+      createDossierPresentationCard(
+        "Методологічні примітки"
+      );
+
+    for (const note of notes) {
+      const row =
+        document.createElement(
+          "div"
+        );
+
+      row.className =
+        "label";
+
+      row.style.marginTop =
+        "8px";
+
+      row.textContent =
+        note;
+
+      card.append(
+        row
+      );
+    }
+
+    container.append(
+      card
+    );
+  }
+
+  const limitations =
+    dossierArray(
+      methodology?.limitations
+    ).filter(
+      (item) =>
+        typeof item === "string" &&
+        item.trim()
+    );
+
+  if (limitations.length) {
+    const card =
+      createDossierPresentationCard(
+        "Обмеження методології"
+      );
+
+    for (
+      const limitation
+      of limitations
+    ) {
+      const row =
+        document.createElement(
+          "div"
+        );
+
+      row.className =
+        "label";
+
+      row.style.marginTop =
+        "8px";
+
+      row.textContent =
+        limitation;
+
+      card.append(
+        row
+      );
+    }
 
     container.append(
       card
@@ -2771,6 +2885,11 @@ function renderDossierEvidence() {
       "dossier-media"
     );
 
+  const methodology =
+    document.getElementById(
+      "dossier-methodology"
+    );
+
   const findingsContainer =
     document.getElementById(
       "dossier-evidence-findings"
@@ -2796,6 +2915,7 @@ function renderDossierEvidence() {
     !assets ||
     !analytics ||
     !media ||
+    !methodology ||
     !findingsContainer ||
     !sourcesContainer
   ) {
@@ -2829,6 +2949,7 @@ function renderDossierEvidence() {
   assets.replaceChildren();
   analytics.replaceChildren();
   media.replaceChildren();
+  methodology.replaceChildren();
   findingsContainer.replaceChildren();
   sourcesContainer.replaceChildren();
 
@@ -2981,6 +3102,10 @@ function renderDossierEvidence() {
   );
 
   renderDossierMedia(
+    report
+  );
+
+  renderDossierMethodology(
     report
   );
 
@@ -3292,29 +3417,9 @@ function renderDossierEvidence() {
           .filter(Boolean)
           .join(" · ");
 
-        const reference =
-          document.createElement(
-            "div"
-          );
-
-        reference.className =
-          "label";
-
-        reference.style.marginTop =
-          "6px";
-
-        reference.style.wordBreak =
-          "break-all";
-
-        reference.textContent =
-          sourceId
-            ? `Source document: ${sourceId}`
-            : "Source document ID відсутній";
-
         evidenceCard.append(
           sourceHeading,
-          evidenceType,
-          reference
+          evidenceType
         );
 
         if (!source) {
@@ -3448,31 +3553,9 @@ function renderDossierEvidence() {
     details.textContent =
       parts.join(" · ");
 
-    const reference =
-      document.createElement(
-        "div"
-      );
-
-    reference.className =
-      "label";
-
-    reference.style.marginTop =
-      "8px";
-
-    reference.style.wordBreak =
-      "break-all";
-
-    reference.textContent =
-      source.source_document_id
-        ? `Source document: ${source.source_document_id}`
-        : source.external_id
-          ? `External ID: ${source.external_id}`
-          : "Source ID відсутній";
-
     card.append(
       heading,
-      details,
-      reference
+      details
     );
 
     if (source.url) {
