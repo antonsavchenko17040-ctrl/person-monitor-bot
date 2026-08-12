@@ -2911,6 +2911,16 @@ function renderDossierEvidence() {
       "dossier-build"
     );
 
+  const pdfExport =
+    document.getElementById(
+      "dossier-pdf-export"
+    );
+
+  const excelExport =
+    document.getElementById(
+      "dossier-excel-export"
+    );
+
   if (
     !status ||
     !meta ||
@@ -2959,6 +2969,62 @@ function renderDossierEvidence() {
       dossierBuildPending
         ? "Формування…"
         : "Сформувати / Оновити досьє";
+  }
+
+  const displayedDossierVersionId =
+    String(
+      activeDossierVersion?.id ??
+      ""
+    ).trim();
+
+  const canonicalExportEnabled =
+    portalAuthenticated &&
+    Boolean(
+      displayedDossierVersionId
+    );
+
+  for (
+    const [link, endpoint]
+    of [
+      [
+        pdfExport,
+        "/api/dossier-pdf",
+      ],
+      [
+        excelExport,
+        "/api/dossier-excel",
+      ],
+    ]
+  ) {
+    if (!link) {
+      continue;
+    }
+
+    if (canonicalExportEnabled) {
+      link.href =
+        `${endpoint}?dossierVersionId=${encodeURIComponent(
+          displayedDossierVersionId
+        )}`;
+
+      link.style.display =
+        "inline-block";
+
+      link.removeAttribute(
+        "aria-disabled"
+      );
+    } else {
+      link.removeAttribute(
+        "href"
+      );
+
+      link.style.display =
+        "none";
+
+      link.setAttribute(
+        "aria-disabled",
+        "true"
+      );
+    }
   }
 
   meta.replaceChildren();
