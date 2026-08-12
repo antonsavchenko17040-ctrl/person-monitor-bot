@@ -149,6 +149,52 @@ function canonicalDossierSources(
 }
 
 
+function canonicalDossierFindings(
+  report
+) {
+  const items =
+    report
+      ?.executive_summary
+      ?.items;
+
+  return Array.isArray(
+    items
+  )
+    ? items
+    : [];
+}
+
+
+function dossierStatementTypeLabel(
+  value
+) {
+  if (
+    value ===
+    "source_fact"
+  ) {
+    return "Факт із джерела";
+  }
+
+  if (
+    value ===
+    "calculation"
+  ) {
+    return "Розрахунок";
+  }
+
+  if (
+    value ===
+    "heuristic_signal"
+  ) {
+    return "Евристичний сигнал";
+  }
+
+  return value
+    ? String(value)
+    : "Тип твердження не вказано";
+}
+
+
 function renderDossierEvidence() {
   const title =
     document.getElementById(
@@ -165,6 +211,11 @@ function renderDossierEvidence() {
       "dossier-evidence-meta"
     );
 
+  const findingsContainer =
+    document.getElementById(
+      "dossier-evidence-findings"
+    );
+
   const sourcesContainer =
     document.getElementById(
       "dossier-evidence-sources"
@@ -178,6 +229,7 @@ function renderDossierEvidence() {
   if (
     !status ||
     !meta ||
+    !findingsContainer ||
     !sourcesContainer
   ) {
     return;
@@ -203,6 +255,7 @@ function renderDossierEvidence() {
   }
 
   meta.replaceChildren();
+  findingsContainer.replaceChildren();
   sourcesContainer.replaceChildren();
 
   if (!activeDossierSubjectId) {
@@ -331,6 +384,397 @@ function renderDossierEvidence() {
     canonicalDossierSources(
       report
     );
+
+  const sourcesById =
+    new Map(
+      sources
+        .filter(
+          (source) =>
+            source
+              ?.source_document_id !=
+            null
+        )
+        .map(
+          (source) => [
+            String(
+              source
+                .source_document_id
+            ),
+            source,
+          ]
+        )
+    );
+
+  const findings =
+    canonicalDossierFindings(
+      report
+    );
+
+  if (
+    findings.length === 0
+  ) {
+    findingsContainer.textContent =
+      "Ключових сигналів із canonical evidence у цьому snapshot немає.";
+  } else {
+    for (
+      const finding
+      of findings
+    ) {
+      const card =
+        document.createElement(
+          "div"
+        );
+
+      card.className =
+        "card";
+
+      card.style.padding =
+        "16px";
+
+      const top =
+        document.createElement(
+          "div"
+        );
+
+      top.style.display =
+        "flex";
+
+      top.style.alignItems =
+        "flex-start";
+
+      top.style.justifyContent =
+        "space-between";
+
+      top.style.gap =
+        "12px";
+
+      const message =
+        document.createElement(
+          "strong"
+        );
+
+      message.textContent =
+        finding.message ||
+        finding.rule_code ||
+        "Аналітичний сигнал";
+
+      const statementBadge =
+        document.createElement(
+          "span"
+        );
+
+      statementBadge.textContent =
+        dossierStatementTypeLabel(
+          finding.statement_type
+        );
+
+      statementBadge.style.padding =
+        "5px 9px";
+
+      statementBadge.style.border =
+        "1px solid #2a303b";
+
+      statementBadge.style.borderRadius =
+        "999px";
+
+      statementBadge.style.fontSize =
+        "12px";
+
+      statementBadge.style.whiteSpace =
+        "nowrap";
+
+      top.append(
+        message,
+        statementBadge
+      );
+
+      const findingMeta =
+        document.createElement(
+          "div"
+        );
+
+      findingMeta.className =
+        "label";
+
+      findingMeta.style.marginTop =
+        "8px";
+
+      findingMeta.textContent = [
+        finding.rule_code,
+        finding.domain,
+        finding.severity
+          ? `severity: ${finding.severity}`
+          : null,
+        finding.score !== null &&
+        finding.score !== undefined
+          ? `score: ${finding.score}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+
+      card.append(
+        top,
+        findingMeta
+      );
+
+      if (
+        finding.details &&
+        typeof finding.details ===
+          "object" &&
+        !Array.isArray(
+          finding.details
+        )
+      ) {
+        const detailEntries =
+          Object.entries(
+            finding.details
+          );
+
+        if (
+          detailEntries.length > 0
+        ) {
+          const details =
+            document.createElement(
+              "div"
+            );
+
+          details.className =
+            "label";
+
+          details.style.marginTop =
+            "8px";
+
+          details.textContent =
+            detailEntries
+              .map(
+                ([key, value]) =>
+                  `${key}: ${String(value)}`
+              )
+              .join(" · ");
+
+          card.append(
+            details
+          );
+        }
+      }
+
+      const evidenceItems =
+        Array.isArray(
+          finding.evidence
+        )
+          ? finding.evidence
+          : [];
+
+      const evidenceHeading =
+        document.createElement(
+          "div"
+        );
+
+      evidenceHeading.style.marginTop =
+        "14px";
+
+      evidenceHeading.style.fontWeight =
+        "700";
+
+      evidenceHeading.textContent =
+        `Evidence: ${evidenceItems.length}`;
+
+      card.append(
+        evidenceHeading
+      );
+
+      if (
+        evidenceItems.length === 0
+      ) {
+        const empty =
+          document.createElement(
+            "div"
+          );
+
+        empty.className =
+          "label";
+
+        empty.style.marginTop =
+          "8px";
+
+        empty.textContent =
+          "Canonical evidence для цього сигналу відсутнє.";
+
+        card.append(
+          empty
+        );
+      }
+
+      for (
+        const evidence
+        of evidenceItems
+      ) {
+        const sourceId =
+          evidence
+            ?.source_document_id !=
+          null
+            ? String(
+                evidence
+                  .source_document_id
+              )
+            : null;
+
+        const source =
+          sourceId
+            ? sourcesById.get(
+                sourceId
+              )
+            : null;
+
+        const evidenceCard =
+          document.createElement(
+            "div"
+          );
+
+        evidenceCard.style.marginTop =
+          "10px";
+
+        evidenceCard.style.padding =
+          "12px";
+
+        evidenceCard.style.border =
+          "1px solid #2a303b";
+
+        evidenceCard.style.borderRadius =
+          "10px";
+
+        const sourceHeading =
+          document.createElement(
+            "strong"
+          );
+
+        sourceHeading.textContent =
+          source?.title ||
+          (
+            source?.provider
+              ? providerLabel(
+                  source.provider
+                )
+              : null
+          ) ||
+          source?.source_type ||
+          "Canonical source";
+
+        const evidenceType =
+          document.createElement(
+            "div"
+          );
+
+        evidenceType.className =
+          "label";
+
+        evidenceType.style.marginTop =
+          "6px";
+
+        evidenceType.textContent = [
+          dossierStatementTypeLabel(
+            evidence
+              ?.statement_type
+          ),
+          source?.provider
+            ? providerLabel(
+                source.provider
+              )
+            : null,
+          source?.source_type ||
+            null,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+
+        const reference =
+          document.createElement(
+            "div"
+          );
+
+        reference.className =
+          "label";
+
+        reference.style.marginTop =
+          "6px";
+
+        reference.style.wordBreak =
+          "break-all";
+
+        reference.textContent =
+          sourceId
+            ? `Source document: ${sourceId}`
+            : "Source document ID відсутній";
+
+        evidenceCard.append(
+          sourceHeading,
+          evidenceType,
+          reference
+        );
+
+        if (!source) {
+          const unresolved =
+            document.createElement(
+              "div"
+            );
+
+          unresolved.className =
+            "label";
+
+          unresolved.style.marginTop =
+            "6px";
+
+          unresolved.textContent =
+            "Canonical source record не знайдено.";
+
+          evidenceCard.append(
+            unresolved
+          );
+        }
+
+        if (source?.url) {
+          const link =
+            document.createElement(
+              "a"
+            );
+
+          link.href =
+            source.url;
+
+          link.target =
+            "_blank";
+
+          link.rel =
+            "noopener noreferrer";
+
+          link.textContent =
+            "Відкрити canonical source";
+
+          link.style.display =
+            "inline-block";
+
+          link.style.marginTop =
+            "8px";
+
+          link.style.color =
+            "inherit";
+
+          evidenceCard.append(
+            link
+          );
+        }
+
+        card.append(
+          evidenceCard
+        );
+      }
+
+      findingsContainer.append(
+        card
+      );
+    }
+  }
 
   if (sources.length === 0) {
     sourcesContainer.textContent =
