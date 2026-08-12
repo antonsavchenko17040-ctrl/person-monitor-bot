@@ -1,8 +1,8 @@
 # Person Monitor — функціональна модель, поточний стан і дорожня карта
 
 **Дата фіксації:** 12.08.2026
-**Базова точка:** блоки 5.4F1a–5.4F1c «Dossier version persistence» закрито; schema `dossier_versions` застосована в Neon, versioned canonical JSON SHA-256 hashing та insert-only dossier-version store готові, persistence stage підключений до orchestrator і production `/api/dossier`, live Neon persistence перевірено контрольованим snapshot. Блоки 5.4F2a–5.4F2e «Manual Review Queue workflow» завершено. Core evidence/provenance presentation E1–E3 також завершено: authenticated persisted-snapshot read API підтримує latest snapshot за `subjectId` та exact snapshot за `dossierVersionId`; portal показує canonical source catalog, `executive_summary` finding → evidence → canonical source та дозволяє переходити з Manual Review task до exact `latest_dossier_version_id` без автоматичної генерації нового dossier.
-**Технічний стан:** повний regression suite GREEN. `dossier_versions` зберігає canonical dossier snapshots та integrity metadata. `report_id` у `report-model-v1` лишається reserved nullable field, а persisted snapshot identity є `dossier_versions.id`. Для Human Manual Review існують stable logical tasks і per-snapshot occurrences. F2b `syncManualReviewTasks()` приймає лише canonical reference-only `manual-review-manifest-v1`, перевіряє `dossier_version_id → subject_id`, dedupe-ить manifest items та atomic CTE statement синхронізує tasks/occurrences без автоматичного reopen `resolved / dismissed`. F2c додає окремий `review_queue` stage після успішного dossier persistence. F2d додає authenticated `/api/manual-review`: `GET` списує reference-only queue tasks із фільтрами, `PATCH` виконує explicit analyst transition `open / resolved / dismissed`, включно з ручним reopen, і явно оновлює `updated_at`. Unsupported methods відхиляються до auth, validation повертає 400, missing task — 404, internal failures не розкривають DB details. F2e додає portal auth shell, Manual Review Queue UI, subject/status filters та explicit analyst actions. ПІБ у queue UI є лише presentation join із `/api/subjects` і не зберігається у queue persistence. Media `review_status`, ПІБ, facts, evidence, URL та article text у human queue не потрапляють. Core evidence/provenance E1–E3 завершено. Далі — фінальна dossier presentation, явна analyst action `Сформувати / Оновити досьє` та audit/diff.
+**Базова точка:** блоки 5.4F1a–5.4F1c «Dossier version persistence» закрито; schema `dossier_versions` застосована в Neon, versioned canonical JSON SHA-256 hashing та insert-only dossier-version store готові, persistence stage підключений до orchestrator і production `/api/dossier`, live Neon persistence перевірено контрольованим snapshot. Блоки 5.4F2a–5.4F2e «Manual Review Queue workflow» завершено. Core evidence/provenance presentation E1–E3 також завершено: authenticated persisted-snapshot read API підтримує latest snapshot за `subjectId` та exact snapshot за `dossierVersionId`; portal показує canonical source catalog, `executive_summary` finding → evidence → canonical source та дозволяє переходити з Manual Review task до exact `latest_dossier_version_id` без автоматичної генерації нового dossier. Final canonical dossier presentation G1–G7 завершена: shell, career/relations, finances, assets, analytics/transitions/signals, media mentions, evidence/source catalog і canonical methodology відображаються з persisted `report_payload` без створення паралельної presentation-моделі.
+**Технічний стан:** повний regression suite GREEN. `dossier_versions` зберігає canonical dossier snapshots та integrity metadata. `report_id` у `report-model-v1` лишається reserved nullable field, а persisted snapshot identity є `dossier_versions.id`. Для Human Manual Review існують stable logical tasks і per-snapshot occurrences. F2b `syncManualReviewTasks()` приймає лише canonical reference-only `manual-review-manifest-v1`, перевіряє `dossier_version_id → subject_id`, dedupe-ить manifest items та atomic CTE statement синхронізує tasks/occurrences без автоматичного reopen `resolved / dismissed`. F2c додає окремий `review_queue` stage після успішного dossier persistence. F2d додає authenticated `/api/manual-review`: `GET` списує reference-only queue tasks із фільтрами, `PATCH` виконує explicit analyst transition `open / resolved / dismissed`, включно з ручним reopen, і явно оновлює `updated_at`. Unsupported methods відхиляються до auth, validation повертає 400, missing task — 404, internal failures не розкривають DB details. F2e додає portal auth shell, Manual Review Queue UI, subject/status filters та explicit analyst actions. ПІБ у queue UI є лише presentation join із `/api/subjects` і не зберігається у queue persistence. Media `review_status`, ПІБ, facts, evidence, URL та article text у human queue не потрапляють. Core evidence/provenance E1–E3 та final dossier presentation G1–G7 завершено. Raw internal source IDs прибрані з presentation, canonical source/evidence joins лишаються внутрішніми, а methodology projection читається з persisted `report_payload`. Далі — явна authenticated analyst action `Сформувати / Оновити досьє`, потім canonical exports та audit/diff.
 
 ## 1. Що повинен вміти портал
 
@@ -25,14 +25,27 @@ Person Monitor має бути не просто пошуковим сайтом
 - Versioned dossier persistence у Neon уже працює; persisted snapshot identity — `dossier_versions.id`.
 - Manual Review Queue F2a–F2e готова: stable logical tasks + snapshot occurrences у Neon, atomic reference-only store/sync, orchestrator/API production wiring, authenticated analyst status API та portal analyst UI.
 - Persisted dossier read/evidence flow готовий: latest/exact snapshot read API, canonical source catalog, evidence-backed executive-summary presentation та exact snapshot navigation із Manual Review Queue.
+- Final canonical dossier presentation G1–G7 готова: overview, key findings, career/relations, finances, assets, analytics/transitions/signals, media mentions, evidence/source catalog та methodology відображаються з persisted canonical `report_payload`.
+- Presentation не показує raw `source_document_id` або `source_item_ref`; вони лишаються internal references для evidence/source resolution. Snapshot version та SHA-256 збережені як audit/integrity metadata.
 - PDF та Excel експорти вже існують, але поки відображають legacy-звіт згадок, а не повну нову аналітичну довідку.
+
+### 2.1. Final dossier presentation G1–G7
+
+- **G1** — canonical dossier presentation shell (`b1c485b`).
+- **G2** — career, related people та relations presentation (`8d33c54`).
+- **G3 + G4** — finances та assets presentation у спільному commit (`2880814`).
+- **G5** — analytics, transitions та analytical signals presentation (`5beb267`).
+- **G6** — canonical media mentions presentation (`3e62e4b`).
+- **G7** — evidence/source catalog + canonical methodology presentation (`eb15506`) та repair (`1187459`).
+- Усі секції є projection із persisted canonical `report_payload`; окремої persisted UI-моделі немає.
+- Відкриття subject або exact snapshot залишається read-only; dossier generation не запускається автоматично.
 
 ## 3. Стан 24 функцій зі списку
 
 | № | Функція | Стан | Що залишилось |
 |---:|---|---|---|
 | 1 | Чат із контекстом | ✅ Готово | Ядро працює; надалі — підключати нові джерела до knowledge layer та полірувати UI. |
-| 2 | Відмальовка шаблону на основі даних | 🟡 Частково | Canonical report model є; потрібен фінальний UI аналітичного досьє. |
+| 2 | Відмальовка шаблону на основі даних | ✅ Готово | Final canonical dossier presentation G1–G7 працює поверх persisted `report_payload`; наступні зміни тут уже є UI polish, а не відсутній базовий шаблон. |
 | 3 | Експорт PDF | 🟡 Частково | PDF працює, але це legacy-звіт згадок. Перевести на повну аналітичну довідку. |
 | 4 | Експорт Excel | 🟡 Частково | Excel працює, але його теж треба перевести на canonical report model. |
 | 5 | Підключення AUTO.RIA | ⬜ Не реалізовано | Source adapter, нормалізація, matching, оцінка вартості/оголошень. |
@@ -50,9 +63,9 @@ Person Monitor має бути не просто пошуковим сайтом
 | 17 | Зв’язки по кар’єрному шляху | 🟡 Частково | Employment/career вже є; потрібна повна timeline і глибша інтеграція з графом. |
 | 18 | Зв’язки по купівлі/продажу | ✅* Реалізовано консервативно | Правильніше: зміни активів / потенційні транзакційні події. Поява/вибуття ≠ автоматично купівля/продаж. |
 | 19 | Декларації третіх осіб | 🟡 Частково | Треті особи вже витягуються; автоматичний пошук їх декларацій ще потрібен. |
-| 20 | Пул новин пов’язаних із суб’єктом | 🟡 Сильно просунуто | Google Web/News, corruption gate, identity gate, full-text verification і класифікація ролі суб’єкта готові. Далі — фінальне збереження/представлення у досьє. |
+| 20 | Пул новин пов’язаних із суб’єктом | 🟡 Сильно просунуто | Google Web/News, corruption gate, identity gate, full-text verification, класифікація ролі та canonical media presentation у досьє готові. Подальше розширення джерел — після explicit build/update action та audit/diff. |
 | 21 | Формування метрик | 🟡 Частково | Analytics/metrics/findings є; затвердити фінальний набір і шкалу ризиків/сигналів. |
-| 22 | Структура на кроки + аналітична довідка | 🟡 Частково | Canonical model, orchestration core, authenticated POST/read APIs, evidence-backed executive summary, `analytical_brief` manifest, timeless EDR relations, versioned persistence, Manual Review workflow та core evidence/provenance UI уже є; далі — narrative, safe source-context presentation, фінальний dossier UI та explicit build/update action. |
+| 22 | Структура на кроки + аналітична довідка | 🟡 Майже готово | Canonical model, `analytical_brief` manifest, final G1–G7 presentation, evidence/methodology, versioned persistence і Manual Review workflow готові. Наступний ключовий крок — explicit analyst build/update action; після нього canonical exports та audit/diff. |
 | 23 | Математичні правила порівняння | 🟡 Частково | Частина правил є; потрібна формалізована rule matrix для всіх ключових типів даних. |
 | 24 | Зробити PDF | 🔁 Дублікат | Об’єднати з пунктом №3. |
 
@@ -67,7 +80,7 @@ Person Monitor має бути не просто пошуковим сайтом
 
 1. **ЄДР / ФОП.** Винести вже реалізований pipeline у окрему картку backlog та вирішити production storage для повного масиву.
 2. **Orchestrator «Сформувати досьє».** Одна дія має запускати весь pipeline: джерела → ідентифікація → факти → зв’язки → cross-checks → метрики → довідка → експорт.
-3. **Evidence / provenance UI.** Core E1–E3 завершено: persisted latest/exact snapshot read, canonical source catalog, `finding → evidence → canonical source`, statement-type labels та Manual Review → exact snapshot navigation. Далі — safe local source-context presentation у фінальному dossier UI; provider full article text не показувати.
+3. **Evidence / provenance UI.** Core E1–E3 і G7 завершено: persisted latest/exact snapshot read, canonical source catalog, `finding → evidence → canonical source`, statement-type labels, methodology projection та Manual Review → exact snapshot navigation готові. Provider full article text не показувати; raw internal source IDs не виводити у presentation.
 4. **Manual Review Queue.** F2a schema foundation, F2b store/sync contract, F2c orchestrator wiring, F2d analyst status API і F2e analyst UI завершені. Stable logical task зберігається окремо від per-snapshot occurrence; sync перевіряє subject/version consistency, працює idempotent і не reopen-ить `resolved / dismissed`. Orchestrator запускає queue sync лише після успішного dossier persistence та повертає `partial`, не втрачаючи persisted snapshot, якщо review sync падає. Authenticated `GET /api/manual-review` списує queue, `PATCH /api/manual-review` дозволяє явні analyst transitions `open / resolved / dismissed`, а portal UI підтримує login/session/logout, filters та analyst actions. Probable/ambiguous/conflict кейси мають потрапляти сюди тільки через canonical human-review semantics; media `review_status` не є human queue.
 5. **Версії досьє та audit trail.** `dossier_versions`, canonical payload hash, insert-only store, production orchestrator wiring, live Neon snapshot verification та authenticated latest/exact snapshot read уже реалізовані. Manual Review UI використовує `dossier_versions.id` для exact snapshot navigation. Далі — version history, run/source metadata та порівняння змін між версіями; `report_id` у `report-model-v1` лишається reserved nullable field.
 6. **Моніторинг змін.** Нові декларації, зміни ЄДР, нові релевантні медіаматеріали, зміни зв’язків/активів.
@@ -86,7 +99,7 @@ Person Monitor має бути не просто пошуковим сайтом
 
 ## 7. Пріоритет після паузи
 
-Не підключати нові великі джерела одразу. Core evidence/provenance E1–E3 уже завершено. Поточна оптимальна послідовність: **фінальна аналітична довідка та dossier presentation → явна analyst action `Сформувати / Оновити досьє` → audit/diff → після цього AUTO.RIA / нерухомість / OpenDataBot.**
+Не підключати нові великі джерела одразу. Core evidence/provenance E1–E3 та final dossier presentation G1–G7 уже завершено. Поточна оптимальна послідовність: **явна authenticated analyst action `Сформувати / Оновити досьє` → canonical PDF/Excel → audit/diff → після цього AUTO.RIA / нерухомість / OpenDataBot.**
 
 Причина: технічних “двигунів” уже багато. Найбільша потреба зараз — зібрати їх в один завершений користувацький сценарій, щоб кожне наступне джерело автоматично потрапляло у граф, аналітику, чат, довідку, PDF та Excel.
 

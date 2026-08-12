@@ -2,7 +2,7 @@
 
 Person Monitor — система для автоматизованого формування аналітичного досьє на суб’єкта декларування.
 
-Поточний продукт виріс із локального Telegram-бота для моніторингу згадок і тепер включає canonical report model, ідентифікацію, деклараційні дані, ЄДР/ФОП, граф зв’язків, аналітику, evidence/provenance, AI-чат, versioned dossier persistence, Manual Review Queue та analyst evidence/provenance UI.
+Поточний продукт виріс із локального Telegram-бота для моніторингу згадок і тепер включає canonical report model, ідентифікацію, деклараційні дані, ЄДР/ФОП, граф зв’язків, аналітику, evidence/provenance, AI-чат, versioned dossier persistence, Manual Review Queue, persisted latest/exact snapshot viewing та завершену canonical dossier presentation G1–G7.
 
 ## Поточний pipeline
 
@@ -45,12 +45,21 @@ Person Monitor — система для автоматизованого фор
   - Manual Review Queue UI з status/subject filters;
   - analyst actions `resolved / dismissed / reopen` через authenticated PATCH;
   - перехід із Manual Review task до exact persisted snapshot через `latest_dossier_version_id`;
-- persisted dossier evidence/provenance UI:
+- persisted canonical dossier presentation G1–G7 завершена:
+  - G1 — canonical dossier presentation shell (`b1c485b`);
+  - G2 — career, related people та relations presentation (`8d33c54`);
+  - G3 + G4 — finances та assets presentation у спільному commit (`2880814`);
+  - G5 — analytics, transitions та analytical signals presentation (`5beb267`);
+  - G6 — canonical media mentions presentation (`3e62e4b`);
+  - G7 — evidence/source catalog + methodology presentation (`eb15506`) і repair (`1187459`);
   - latest persisted snapshot переглядається за subject без створення нової версії;
   - exact persisted snapshot переглядається за `dossierVersionId`;
   - `executive_summary` signals показуються як `finding → evidence → canonical source`;
   - UI розрізняє `source_fact`, `calculation` та `heuristic_signal`;
-  - canonical source catalog показує лише безпечні source metadata та URL, без provider full article text;
+  - canonical source catalog показує safe source metadata та URL без provider full article text;
+  - canonical `report.methodology` відображає версії контрактів, notes та limitations;
+  - raw `source_document_id` і `tracking_identity.source_item_ref` не показуються у presentation, але можуть використовуватись внутрішньо для exact evidence/source join;
+  - `Dossier version` та SHA-256 залишаються видимою audit/integrity metadata snapshot;
   - вибір subject, відкриття review task та refresh перегляду не викликають автоматичний `POST /api/dossier`;
 - повний технічний pipeline ЄДР/ФОП:
   discovery → download → parser → normalization → staging → Neon → lookup → matching → graph → weekly check → snapshot diff;
@@ -118,9 +127,10 @@ Frontend тепер має analyst auth shell, read-only queue з status/subject
 
 Наступні блоки:
 
-1. фінальна dossier presentation та safe source-context presentation;
-2. явна analyst action `Сформувати / Оновити досьє`;
-3. canonical PDF/Excel та audit/diff.
+1. явна authenticated analyst action `Сформувати / Оновити досьє`;
+2. canonical PDF/Excel на основі persisted analytical dossier;
+3. version history та audit/diff між immutable dossier snapshots;
+4. після цього — розширення великими новими джерелами.
 
 ## Джерела
 
