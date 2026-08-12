@@ -32,6 +32,7 @@ const manualReviewPendingTaskIds =
 let activeDossierSubjectId = null;
 let activeDossierSubjectName = "";
 let activeDossierVersion = null;
+let activeDossierRequestedVersionId = null;
 let dossierEvidenceLoading = false;
 let dossierEvidenceMessage = "";
 
@@ -912,7 +913,8 @@ function renderDossierEvidence() {
 
 async function loadDossierEvidence(
   subjectId,
-  fullName
+  fullName,
+  dossierVersionId = null
 ) {
   if (
     !portalAuthenticated ||
@@ -940,13 +942,29 @@ async function loadDossierEvidence(
   activeDossierVersion =
     null;
 
+  activeDossierRequestedVersionId =
+    dossierVersionId ||
+    null;
+
   renderDossierEvidence();
 
   try {
     const params =
-      new URLSearchParams({
-        subjectId,
-      });
+      new URLSearchParams();
+
+    if (
+      activeDossierRequestedVersionId
+    ) {
+      params.set(
+        "dossierVersionId",
+        activeDossierRequestedVersionId
+      );
+    } else {
+      params.set(
+        "subjectId",
+        subjectId
+      );
+    }
 
     const response =
       await fetch(
@@ -984,7 +1002,9 @@ async function loadDossierEvidence(
       response.status === 404
     ) {
       dossierEvidenceMessage =
-        "Persisted dossier snapshot для цього суб’єкта ще не створено.";
+        activeDossierRequestedVersionId
+          ? "Вказану persisted версію досьє не знайдено."
+          : "Persisted dossier snapshot для цього суб’єкта ще не створено.";
 
       return;
     }
@@ -1414,6 +1434,77 @@ function renderManualReviewQueue() {
         button
       );
     };
+
+    if (
+      task.latest_dossier_version_id
+    ) {
+      const openSnapshot =
+        document.createElement(
+          "button"
+        );
+
+      openSnapshot.type =
+        "button";
+
+      openSnapshot.textContent =
+        "Відкрити evidence snapshot";
+
+      openSnapshot.disabled =
+        dossierEvidenceLoading;
+
+      openSnapshot.style.padding =
+        "9px 12px";
+
+      openSnapshot.style.borderRadius =
+        "9px";
+
+      openSnapshot.style.border =
+        "1px solid #2a303b";
+
+      openSnapshot.style.background =
+        "#141821";
+
+      openSnapshot.style.color =
+        "inherit";
+
+      openSnapshot.style.fontWeight =
+        "700";
+
+      openSnapshot.style.cursor =
+        dossierEvidenceLoading
+          ? "default"
+          : "pointer";
+
+      openSnapshot.addEventListener(
+        "click",
+        async () => {
+          const subjectName =
+            subjectNameById.get(
+              task.subject_id
+            ) ||
+            task.subject_id;
+
+          await loadDossierEvidence(
+            task.subject_id,
+            subjectName,
+            task.latest_dossier_version_id
+          );
+
+          document
+            .getElementById(
+              "dossier-evidence-section"
+            )
+            ?.scrollIntoView({
+              behavior: "smooth",
+              block: "start",
+            });
+        }
+      );
+
+      actions.append(
+        openSnapshot
+      );
+    }
 
     if (
       task.task_status ===
@@ -1949,6 +2040,7 @@ async function logoutPortal() {
     manualReviewTasks = [];
     manualReviewPendingTaskIds.clear();
     activeDossierVersion = null;
+    activeDossierRequestedVersionId = null;
     dossierEvidenceMessage = "";
     renderManualReviewQueue();
     renderDossierEvidence();
@@ -2743,6 +2835,9 @@ async function loadSubjects() {
           subject.id;
 
         activeDossierVersion =
+          null;
+
+        activeDossierRequestedVersionId =
           null;
 
         dossierEvidenceMessage =
@@ -4545,7 +4640,8 @@ document
       ) {
         loadDossierEvidence(
           activeDossierSubjectId,
-          activeDossierSubjectName
+          activeDossierSubjectName,
+          activeDossierRequestedVersionId
         );
       }
     }
