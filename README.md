@@ -2,7 +2,7 @@
 
 Person Monitor — система для автоматизованого формування аналітичного досьє на суб’єкта декларування.
 
-Поточний продукт виріс із локального Telegram-бота для моніторингу згадок і тепер включає canonical report model, ідентифікацію, деклараційні дані, ЄДР/ФОП, граф зв’язків, аналітику, evidence/provenance, AI-чат, versioned dossier persistence, Manual Review Queue, persisted latest/exact snapshot viewing та завершену canonical dossier presentation G1–G7.
+Поточний продукт виріс із локального Telegram-бота для моніторингу згадок і тепер включає canonical report model, ідентифікацію, деклараційні дані, ЄДР/ФОП, граф зв’язків, аналітику, evidence/provenance, AI-чат, versioned dossier persistence, Manual Review Queue, persisted latest/exact snapshot viewing завершену canonical dossier presentation G1–G7 та canonical exact-version PDF/Excel exports.
 
 ## Поточний pipeline
 
@@ -77,7 +77,15 @@ Person Monitor — система для автоматизованого фор
   - класифікація ролі суб’єкта;
 - AI-чат із контекстом конкретного суб’єкта та deterministic-відповідями для ключових доменів;
 - Telegram workflow;
-- PDF та Excel legacy exports;
+- canonical exact-version PDF/Excel exports на основі immutable persisted dossier snapshot:
+  - shared safe projection `dossier-export-model-v1`;
+  - Excel builder `dossier-excel-v1`;
+  - PDF builder `dossier-pdf-v1`;
+  - authenticated `GET /api/dossier-excel?dossierVersionId=...`;
+  - authenticated `GET /api/dossier-pdf?dossierVersionId=...`;
+  - canonical export endpoints не приймають `subjectId` і не перебудовують live dossier;
+  - frontend формує canonical export links лише для exact `activeDossierVersion.id`;
+  - legacy `/api/report-excel` та `/api/report-pdf` поки лишаються compatibility exports;
 - судовий open-data index.
 
 ## Ключові архітектурні контракти
@@ -130,9 +138,8 @@ Frontend тепер має analyst auth shell, read-only queue з status/subject
 
 Наступні блоки:
 
-1. canonical PDF/Excel на основі persisted analytical dossier;
-2. version history та audit/diff між immutable dossier snapshots;
-3. після цього — розширення великими новими джерелами.
+1. version history та audit/diff між immutable dossier snapshots;
+2. після цього — розширення великими новими джерелами відповідно до roadmap.
 
 ## Джерела
 
@@ -220,6 +227,6 @@ docs/REPORT_MODEL_SPEC.md
 - fetch failure не означає identity mismatch;
 - search query text не є identity evidence;
 - provider output не повинен віддавати користувачу повний текст статті;
-- PDF та Excel поки залишаються legacy exports і ще не переведені повністю на canonical analytical dossier;
+- canonical dossier PDF/Excel працюють від exact immutable `dossier_versions` snapshot; legacy `/api/report-pdf` та `/api/report-excel` залишаються лише compatibility path і не є canonical dossier export;
 - Manual Review Queue має schema foundation, atomic store/sync contract, orchestrator wiring, authenticated analyst status API та analyst UI; actor/note/history audit trail ще не реалізовано;
 - AUTO.RIA / нерухомість / OpenDataBot не повинні випереджати завершення dossier, evidence та review workflow.

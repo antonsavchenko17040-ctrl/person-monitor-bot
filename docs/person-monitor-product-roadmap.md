@@ -2,7 +2,7 @@
 
 **Дата фіксації:** 12.08.2026
 **Базова точка:** блоки 5.4F1a–5.4F1c «Dossier version persistence» закрито; schema `dossier_versions` застосована в Neon, versioned canonical JSON SHA-256 hashing та insert-only dossier-version store готові, persistence stage підключений до orchestrator і production `/api/dossier`, live Neon persistence перевірено контрольованим snapshot. Блоки 5.4F2a–5.4F2e «Manual Review Queue workflow» завершено. Core evidence/provenance presentation E1–E3 також завершено: authenticated persisted-snapshot read API підтримує latest snapshot за `subjectId` та exact snapshot за `dossierVersionId`; portal показує canonical source catalog, `executive_summary` finding → evidence → canonical source та дозволяє переходити з Manual Review task до exact `latest_dossier_version_id` без автоматичної генерації нового dossier. Final canonical dossier presentation G1–G7 завершена: shell, career/relations, finances, assets, analytics/transitions/signals, media mentions, evidence/source catalog і canonical methodology відображаються з persisted `report_payload` без створення паралельної presentation-моделі.
-**Технічний стан:** повний regression suite GREEN. `dossier_versions` зберігає canonical dossier snapshots та integrity metadata. `report_id` у `report-model-v1` лишається reserved nullable field, а persisted snapshot identity є `dossier_versions.id`. Для Human Manual Review існують stable logical tasks і per-snapshot occurrences. F2b `syncManualReviewTasks()` приймає лише canonical reference-only `manual-review-manifest-v1`, перевіряє `dossier_version_id → subject_id`, dedupe-ить manifest items та atomic CTE statement синхронізує tasks/occurrences без автоматичного reopen `resolved / dismissed`. F2c додає окремий `review_queue` stage після успішного dossier persistence. F2d додає authenticated `/api/manual-review`: `GET` списує reference-only queue tasks із фільтрами, `PATCH` виконує explicit analyst transition `open / resolved / dismissed`, включно з ручним reopen, і явно оновлює `updated_at`. Unsupported methods відхиляються до auth, validation повертає 400, missing task — 404, internal failures не розкривають DB details. F2e додає portal auth shell, Manual Review Queue UI, subject/status filters та explicit analyst actions. ПІБ у queue UI є лише presentation join із `/api/subjects` і не зберігається у queue persistence. Media `review_status`, ПІБ, facts, evidence, URL та article text у human queue не потрапляють. Core evidence/provenance E1–E3, final dossier presentation G1–G7 та explicit authenticated analyst action `Сформувати / Оновити досьє` завершено. Raw internal source IDs прибрані з presentation, canonical source/evidence joins лишаються внутрішніми, а methodology projection читається з persisted `report_payload`. Build/update action є єдиним frontend-тригером `POST /api/dossier`; read-only subject/exact-snapshot navigation використовує `GET /api/dossier-version`. Далі — canonical exports та audit/diff.
+**Технічний стан:** повний regression suite GREEN. `dossier_versions` зберігає canonical dossier snapshots та integrity metadata. `report_id` у `report-model-v1` лишається reserved nullable field, а persisted snapshot identity є `dossier_versions.id`. Для Human Manual Review існують stable logical tasks і per-snapshot occurrences. F2b `syncManualReviewTasks()` приймає лише canonical reference-only `manual-review-manifest-v1`, перевіряє `dossier_version_id → subject_id`, dedupe-ить manifest items та atomic CTE statement синхронізує tasks/occurrences без автоматичного reopen `resolved / dismissed`. F2c додає окремий `review_queue` stage після успішного dossier persistence. F2d додає authenticated `/api/manual-review`: `GET` списує reference-only queue tasks із фільтрами, `PATCH` виконує explicit analyst transition `open / resolved / dismissed`, включно з ручним reopen, і явно оновлює `updated_at`. Unsupported methods відхиляються до auth, validation повертає 400, missing task — 404, internal failures не розкривають DB details. F2e додає portal auth shell, Manual Review Queue UI, subject/status filters та explicit analyst actions. ПІБ у queue UI є лише presentation join із `/api/subjects` і не зберігається у queue persistence. Media `review_status`, ПІБ, facts, evidence, URL та article text у human queue не потрапляють. Core evidence/provenance E1–E3, final dossier presentation G1–G7 та explicit authenticated analyst action `Сформувати / Оновити досьє` завершено. Raw internal source IDs прибрані з presentation, canonical source/evidence joins лишаються внутрішніми, а methodology projection читається з persisted `report_payload`. Build/update action є єдиним frontend-тригером `POST /api/dossier`; read-only subject/exact-snapshot navigation використовує `GET /api/dossier-version`. Canonical exact-version PDF/Excel exports завершені. Далі — version history та audit/diff між immutable dossier snapshots.
 
 ## 1. Що повинен вміти портал
 
@@ -27,7 +27,7 @@ Person Monitor має бути не просто пошуковим сайтом
 - Persisted dossier read/evidence flow готовий: latest/exact snapshot read API, canonical source catalog, evidence-backed executive-summary presentation та exact snapshot navigation із Manual Review Queue.
 - Final canonical dossier presentation G1–G7 готова: overview, key findings, career/relations, finances, assets, analytics/transitions/signals, media mentions, evidence/source catalog та methodology відображаються з persisted canonical `report_payload`.
 - Presentation не показує raw `source_document_id` або `source_item_ref`; вони лишаються internal references для evidence/source resolution. Snapshot version та SHA-256 збережені як audit/integrity metadata.
-- PDF та Excel експорти вже існують, але поки відображають legacy-звіт згадок, а не повну нову аналітичну довідку.
+- Canonical PDF та Excel exports завершені: обидва будуються через shared safe `dossier-export-model-v1` з exact persisted `dossier_versions` snapshot; authenticated endpoints приймають лише `dossierVersionId`, а frontend експортує саме поточну відображену версію. Legacy report exports поки лишаються compatibility path.
 
 ### 2.1. Final dossier presentation G1–G7
 
@@ -40,14 +40,27 @@ Person Monitor має бути не просто пошуковим сайтом
 - Усі секції є projection із persisted canonical `report_payload`; окремої persisted UI-моделі немає.
 - Відкриття subject або exact snapshot залишається read-only; dossier generation не запускається автоматично.
 
+### 2.2. Canonical dossier exports
+
+- Shared transient safe projection — `dossier-export-model-v1`; окремої persisted export-моделі немає.
+- Export input завантажується тільки за exact `dossierVersionId` з immutable `dossier_versions.report_payload`.
+- Canonical Excel — `dossier-excel-v1`, endpoint `GET /api/dossier-excel?dossierVersionId=...`.
+- Canonical PDF — `dossier-pdf-v1`, endpoint `GET /api/dossier-pdf?dossierVersionId=...`.
+- Обидва endpoints authenticated, `Cache-Control: no-store`, відхиляють `subjectId` та не запускають live dossier rebuild.
+- Export projection не віддає raw internal source/entity IDs, provider full article text або search query.
+- Audit metadata містить exact dossier version, report schema, persisted timestamps та canonical payload hash/version.
+- Portal показує PDF/Excel controls лише коли завантажена конкретна `activeDossierVersion.id`; export URL використовує цю exact версію.
+- Legacy `/api/report-pdf` та `/api/report-excel` поки не видаляються й лишаються compatibility path.
+- Наступний продуктово-архітектурний блок — version history та audit/diff між immutable dossier snapshots.
+
 ## 3. Стан 24 функцій зі списку
 
 | № | Функція | Стан | Що залишилось |
 |---:|---|---|---|
 | 1 | Чат із контекстом | ✅ Готово | Ядро працює; надалі — підключати нові джерела до knowledge layer та полірувати UI. |
 | 2 | Відмальовка шаблону на основі даних | ✅ Готово | Final canonical dossier presentation G1–G7 працює поверх persisted `report_payload`; наступні зміни тут уже є UI polish, а не відсутній базовий шаблон. |
-| 3 | Експорт PDF | 🟡 Частково | PDF працює, але це legacy-звіт згадок. Перевести на повну аналітичну довідку. |
-| 4 | Експорт Excel | 🟡 Частково | Excel працює, але його теж треба перевести на canonical report model. |
+| 3 | Експорт PDF | ✅ Готово | Canonical PDF будується з exact persisted dossier version через safe export model; legacy PDF лишається compatibility path. |
+| 4 | Експорт Excel | ✅ Готово | Canonical Excel будується з exact persisted dossier version через safe export model; legacy Excel лишається compatibility path. |
 | 5 | Підключення AUTO.RIA | ⬜ Не реалізовано | Source adapter, нормалізація, matching, оцінка вартості/оголошень. |
 | 6 | Джерело по нерухомості | ⬜ Не реалізовано | Обрати доступне джерело/API і підключити через source adapter. |
 | 7 | OpenDataBot | ⬜ Не реалізовано | Спершу визначити унікальну цінність поверх ЄДР/НАЗК/судів; потім adapter. |
@@ -63,9 +76,9 @@ Person Monitor має бути не просто пошуковим сайтом
 | 17 | Зв’язки по кар’єрному шляху | 🟡 Частково | Employment/career вже є; потрібна повна timeline і глибша інтеграція з графом. |
 | 18 | Зв’язки по купівлі/продажу | ✅* Реалізовано консервативно | Правильніше: зміни активів / потенційні транзакційні події. Поява/вибуття ≠ автоматично купівля/продаж. |
 | 19 | Декларації третіх осіб | 🟡 Частково | Треті особи вже витягуються; автоматичний пошук їх декларацій ще потрібен. |
-| 20 | Пул новин пов’язаних із суб’єктом | 🟡 Сильно просунуто | Google Web/News, corruption gate, identity gate, full-text verification, класифікація ролі та canonical media presentation у досьє готові. Подальше розширення джерел — після canonical exports та audit/diff. |
+| 20 | Пул новин пов’язаних із суб’єктом | 🟡 Сильно просунуто | Google Web/News, corruption gate, identity gate, full-text verification, класифікація ролі та canonical media presentation у досьє готові. Подальше розширення джерел — після audit/diff. |
 | 21 | Формування метрик | 🟡 Частково | Analytics/metrics/findings є; затвердити фінальний набір і шкалу ризиків/сигналів. |
-| 22 | Структура на кроки + аналітична довідка | ✅ Готово | Canonical model, `analytical_brief` manifest, final G1–G7 presentation, evidence/methodology, versioned persistence, Manual Review workflow та explicit analyst build/update action готові. Подальші роботи — canonical exports і audit/diff, а не базова структура досьє. |
+| 22 | Структура на кроки + аналітична довідка | ✅ Готово | Canonical model, `analytical_brief` manifest, final G1–G7 presentation, evidence/methodology, versioned persistence, Manual Review workflow та explicit analyst build/update action готові. Подальші роботи — version history та audit/diff, а не базова структура досьє. |
 | 23 | Математичні правила порівняння | 🟡 Частково | Частина правил є; потрібна формалізована rule matrix для всіх ключових типів даних. |
 | 24 | Зробити PDF | 🔁 Дублікат | Об’єднати з пунктом №3. |
 
