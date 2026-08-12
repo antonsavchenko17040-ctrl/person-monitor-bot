@@ -9,6 +9,8 @@ import {
 
 import {
   DOSSIER_VERSION_STORE_VERSION,
+  loadDossierVersionById,
+  loadLatestDossierVersion,
   saveDossierVersion,
 } from "../src/dossier-version-store.js";
 
@@ -472,6 +474,328 @@ test(
             "dossier-orchestrator-v1",
 
           report,
+        },
+        {
+          sql,
+        },
+      ),
+      TypeError,
+    );
+
+    assert.equal(
+      calls,
+      0,
+    );
+  },
+);
+
+test(
+  "dossier version store loads latest subject snapshot deterministically",
+  async () => {
+    const report =
+      reportPayload();
+
+    const capture =
+      capturedSql(
+        (call) => ({
+          id:
+            VERSION_ID,
+
+          subject_id:
+            call.values[0],
+
+          dossier_status:
+            "completed",
+
+          orchestrator_version:
+            "dossier-orchestrator-v1",
+
+          report_schema_version:
+            "report-model-v1",
+
+          report_generated_at:
+            "2026-08-12T06:00:00.000Z",
+
+          report_payload:
+            report,
+
+          report_payload_hash:
+            canonicalJsonHash(
+              report,
+            ),
+
+          report_payload_hash_version:
+            CANONICAL_JSON_HASH_VERSION,
+
+          metadata: {},
+
+          created_at:
+            "2026-08-12T06:01:00.000Z",
+        }),
+      );
+
+    const loaded =
+      await loadLatestDossierVersion(
+        {
+          subjectId:
+            SUBJECT_ID,
+        },
+        {
+          sql:
+            capture.sql,
+        },
+      );
+
+    assert.equal(
+      capture.calls.length,
+      1,
+    );
+
+    const call =
+      capture.calls[0];
+
+    assert.match(
+      call.text,
+      /FROM dossier_versions/,
+    );
+
+    assert.match(
+      call.text,
+      /WHERE subject_id/,
+    );
+
+    assert.match(
+      call.text,
+      /ORDER BY[\s\S]*created_at DESC[\s\S]*id DESC/,
+    );
+
+    assert.match(
+      call.text,
+      /LIMIT 1/,
+    );
+
+    assert.equal(
+      call.values[0],
+      SUBJECT_ID,
+    );
+
+    assert.equal(
+      loaded.id,
+      VERSION_ID,
+    );
+
+    assert.equal(
+      loaded.subject_id,
+      SUBJECT_ID,
+    );
+
+    assert.deepEqual(
+      loaded.report_payload,
+      report,
+    );
+  },
+);
+
+
+test(
+  "dossier version store returns null when latest subject snapshot is missing",
+  async () => {
+    const sql =
+      async () =>
+        [];
+
+    const loaded =
+      await loadLatestDossierVersion(
+        {
+          subjectId:
+            SUBJECT_ID,
+        },
+        {
+          sql,
+        },
+      );
+
+    assert.equal(
+      loaded,
+      null,
+    );
+  },
+);
+
+
+test(
+  "dossier version store loads snapshot by dossier version id",
+  async () => {
+    const report =
+      reportPayload();
+
+    const capture =
+      capturedSql(
+        (call) => ({
+          id:
+            call.values[0],
+
+          subject_id:
+            SUBJECT_ID,
+
+          dossier_status:
+            "partial",
+
+          orchestrator_version:
+            "dossier-orchestrator-v1",
+
+          report_schema_version:
+            "report-model-v1",
+
+          report_generated_at:
+            "2026-08-12T06:00:00.000Z",
+
+          report_payload:
+            report,
+
+          report_payload_hash:
+            canonicalJsonHash(
+              report,
+            ),
+
+          report_payload_hash_version:
+            CANONICAL_JSON_HASH_VERSION,
+
+          metadata: {
+            reason:
+              "refresh_partial",
+          },
+
+          created_at:
+            "2026-08-12T06:02:00.000Z",
+        }),
+      );
+
+    const loaded =
+      await loadDossierVersionById(
+        {
+          dossierVersionId:
+            VERSION_ID,
+        },
+        {
+          sql:
+            capture.sql,
+        },
+      );
+
+    const call =
+      capture.calls[0];
+
+    assert.match(
+      call.text,
+      /FROM dossier_versions/,
+    );
+
+    assert.match(
+      call.text,
+      /WHERE id/,
+    );
+
+    assert.equal(
+      call.values[0],
+      VERSION_ID,
+    );
+
+    assert.equal(
+      loaded.id,
+      VERSION_ID,
+    );
+
+    assert.equal(
+      loaded.dossier_status,
+      "partial",
+    );
+
+    assert.deepEqual(
+      loaded.metadata,
+      {
+        reason:
+          "refresh_partial",
+      },
+    );
+  },
+);
+
+
+test(
+  "dossier version store returns null when version id is missing",
+  async () => {
+    const sql =
+      async () =>
+        [];
+
+    const loaded =
+      await loadDossierVersionById(
+        {
+          dossierVersionId:
+            VERSION_ID,
+        },
+        {
+          sql,
+        },
+      );
+
+    assert.equal(
+      loaded,
+      null,
+    );
+  },
+);
+
+
+test(
+  "latest dossier read validates subject id before database access",
+  async () => {
+    let calls = 0;
+
+    const sql =
+      async () => {
+        calls += 1;
+        return [];
+      };
+
+    await assert.rejects(
+      loadLatestDossierVersion(
+        {
+          subjectId:
+            "invalid",
+        },
+        {
+          sql,
+        },
+      ),
+      TypeError,
+    );
+
+    assert.equal(
+      calls,
+      0,
+    );
+  },
+);
+
+
+test(
+  "dossier version id read validates id before database access",
+  async () => {
+    let calls = 0;
+
+    const sql =
+      async () => {
+        calls += 1;
+        return [];
+      };
+
+    await assert.rejects(
+      loadDossierVersionById(
+        {
+          dossierVersionId:
+            "invalid",
         },
         {
           sql,

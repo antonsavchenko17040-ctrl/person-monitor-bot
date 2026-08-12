@@ -194,6 +194,95 @@ function normalizeRow(
 }
 
 
+export async function loadLatestDossierVersion(
+  {
+    subjectId,
+  } = {},
+  options = {},
+) {
+  const normalizedSubjectId =
+    requiredUuid(
+      subjectId,
+      "subjectId",
+    );
+
+  const sql =
+    options.sql ??
+    db();
+
+  const rows =
+    await sql`
+      SELECT
+        id,
+        subject_id,
+        dossier_status,
+        orchestrator_version,
+        report_schema_version,
+        report_generated_at,
+        report_payload,
+        report_payload_hash,
+        report_payload_hash_version,
+        metadata,
+        created_at
+      FROM dossier_versions
+      WHERE subject_id =
+        ${normalizedSubjectId}
+      ORDER BY
+        created_at DESC,
+        id DESC
+      LIMIT 1
+    `;
+
+  return normalizeRow(
+    rows?.[0] ??
+    null,
+  );
+}
+
+
+export async function loadDossierVersionById(
+  {
+    dossierVersionId,
+  } = {},
+  options = {},
+) {
+  const normalizedVersionId =
+    requiredUuid(
+      dossierVersionId,
+      "dossierVersionId",
+    );
+
+  const sql =
+    options.sql ??
+    db();
+
+  const rows =
+    await sql`
+      SELECT
+        id,
+        subject_id,
+        dossier_status,
+        orchestrator_version,
+        report_schema_version,
+        report_generated_at,
+        report_payload,
+        report_payload_hash,
+        report_payload_hash_version,
+        metadata,
+        created_at
+      FROM dossier_versions
+      WHERE id =
+        ${normalizedVersionId}
+      LIMIT 1
+    `;
+
+  return normalizeRow(
+    rows?.[0] ??
+    null,
+  );
+}
+
+
 export async function saveDossierVersion(
   {
     subjectId,
