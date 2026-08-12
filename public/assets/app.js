@@ -405,6 +405,9 @@ function renderDossierBriefShell(
     assets:
       "dossier-assets-section",
 
+    analytics:
+      "dossier-analytics-section",
+
     evidence:
       "dossier-evidence-sources",
   };
@@ -1240,6 +1243,17 @@ function renderDossierCareerRelations(
 function dossierFormatNumber(
   value
 ) {
+  if (
+    value === null ||
+    value === undefined ||
+    (
+      typeof value === "string" &&
+      value.trim() === ""
+    )
+  ) {
+    return null;
+  }
+
   const number =
     Number(value);
 
@@ -2034,6 +2048,435 @@ function renderDossierAssets(
 }
 
 
+function dossierFormatPercent(
+  value
+) {
+  const formatted =
+    dossierFormatNumber(
+      value
+    );
+
+  return formatted === null
+    ? null
+    : `${formatted}%`;
+}
+
+
+function appendDossierAnalyticsDetails(
+  card,
+  details
+) {
+  if (
+    !details ||
+    typeof details !== "object" ||
+    Array.isArray(details)
+  ) {
+    return;
+  }
+
+  const fromYear =
+    details.from_year;
+
+  const toYear =
+    details.to_year;
+
+  appendDossierField(
+    card,
+    "Період",
+    (
+      fromYear !== null &&
+      fromYear !== undefined &&
+      toYear !== null &&
+      toYear !== undefined
+    )
+      ? `${fromYear} → ${toYear}`
+      : null
+  );
+
+  appendDossierField(
+    card,
+    "Приріст cash",
+    dossierFormatAmount(
+      details.cash_uah_delta,
+      "UAH"
+    )
+  );
+
+  appendDossierField(
+    card,
+    "Поточний дохід",
+    dossierFormatAmount(
+      details.current_income_uah,
+      "UAH"
+    )
+  );
+
+  appendDossierField(
+    card,
+    "Ratio",
+    dossierFormatNumber(
+      details.ratio
+    )
+  );
+
+  appendDossierField(
+    card,
+    "Зміна доходу",
+    dossierFormatAmount(
+      details.income_delta_uah,
+      "UAH"
+    )
+  );
+
+  appendDossierField(
+    card,
+    "Зміна доходу",
+    dossierFormatPercent(
+      details.income_delta_percent
+    )
+  );
+
+  appendDossierField(
+    card,
+    "Зміна кількості",
+    dossierFormatNumber(
+      details.count_delta
+    )
+  );
+
+  appendDossierField(
+    card,
+    "Було",
+    dossierFormatNumber(
+      details.previous_count
+    )
+  );
+
+  appendDossierField(
+    card,
+    "Стало",
+    dossierFormatNumber(
+      details.current_count
+    )
+  );
+
+  appendDossierField(
+    card,
+    "Організація змінилась",
+    details.organization_changed
+  );
+
+  appendDossierField(
+    card,
+    "Посада змінилась",
+    details.position_changed
+  );
+}
+
+
+function renderDossierAnalytics(
+  report
+) {
+  const container =
+    document.getElementById(
+      "dossier-analytics"
+    );
+
+  if (!container) {
+    return;
+  }
+
+  container.replaceChildren();
+
+  const metrics =
+    dossierArray(
+      report?.analytics?.metrics
+    );
+
+  const transitions =
+    dossierArray(
+      report
+        ?.analytics
+        ?.transitions
+    );
+
+  const findings =
+    dossierArray(
+      report
+        ?.analytics
+        ?.findings
+    );
+
+  if (
+    metrics.length === 0 &&
+    transitions.length === 0 &&
+    findings.length === 0
+  ) {
+    container.textContent =
+      "Canonical аналітичних метрик і змін у цьому snapshot немає.";
+
+    return;
+  }
+
+  if (metrics.length) {
+    appendDossierGroupHeading(
+      container,
+      "Річні метрики",
+      metrics.length
+    );
+
+    for (
+      const item
+      of metrics
+    ) {
+      const card =
+        createDossierPresentationCard(
+          `${item?.year ?? "?"} · Річні метрики`,
+          item?.statement_type
+        );
+
+      appendDossierField(
+        card,
+        "Дохід декларанта",
+        dossierFormatAmount(
+          item?.income_declarant_uah,
+          "UAH"
+        )
+      );
+
+      appendDossierField(
+        card,
+        "Дохід домогосподарства",
+        dossierFormatAmount(
+          item?.income_household_uah,
+          "UAH"
+        )
+      );
+
+      appendDossierField(
+        card,
+        "Cash декларанта",
+        dossierCurrencySummary(
+          item
+            ?.cash_declarant_by_currency
+        )
+      );
+
+      appendDossierField(
+        card,
+        "Cash домогосподарства",
+        dossierCurrencySummary(
+          item
+            ?.cash_household_by_currency
+        )
+      );
+
+      appendDossierField(
+        card,
+        "Нерухомість",
+        item?.real_estate_items
+      );
+
+      appendDossierField(
+        card,
+        "Транспорт",
+        item?.vehicle_items
+      );
+
+      appendDossierField(
+        card,
+        "Зв’язки",
+        item?.relation_count
+      );
+
+      appendDossierField(
+        card,
+        "Організація",
+        item?.career?.organization
+      );
+
+      appendDossierField(
+        card,
+        "Посада",
+        item?.career?.position
+      );
+
+      appendDossierField(
+        card,
+        "Evidence",
+        dossierArray(
+          item?.evidence
+        ).length
+      );
+
+      container.append(
+        card
+      );
+    }
+  }
+
+  if (transitions.length) {
+    appendDossierGroupHeading(
+      container,
+      "Річні зміни",
+      transitions.length
+    );
+
+    for (
+      const item
+      of transitions
+    ) {
+      const card =
+        createDossierPresentationCard(
+          `${item?.from_year ?? "?"} → ${item?.to_year ?? "?"}`,
+          item?.statement_type
+        );
+
+      appendDossierField(
+        card,
+        "Крок років",
+        item?.year_gap
+      );
+
+      appendDossierField(
+        card,
+        "Δ дохід",
+        dossierFormatAmount(
+          item?.income_delta_uah,
+          "UAH"
+        )
+      );
+
+      appendDossierField(
+        card,
+        "Δ дохід",
+        dossierFormatPercent(
+          item
+            ?.income_delta_percent
+        )
+      );
+
+      appendDossierField(
+        card,
+        "Δ cash",
+        dossierFormatAmount(
+          item?.cash_uah_delta,
+          "UAH"
+        )
+      );
+
+      appendDossierField(
+        card,
+        "Δ нерухомість",
+        item
+          ?.real_estate_count_delta
+      );
+
+      appendDossierField(
+        card,
+        "Δ транспорт",
+        item
+          ?.vehicle_count_delta
+      );
+
+      appendDossierField(
+        card,
+        "Організація змінилась",
+        item
+          ?.organization_changed
+      );
+
+      appendDossierField(
+        card,
+        "Посада змінилась",
+        item
+          ?.position_changed
+      );
+
+      appendDossierField(
+        card,
+        "Evidence",
+        dossierArray(
+          item?.evidence
+        ).length
+      );
+
+      container.append(
+        card
+      );
+    }
+  }
+
+  if (findings.length) {
+    appendDossierGroupHeading(
+      container,
+      "Аналітичні сигнали",
+      findings.length
+    );
+
+    for (
+      const item
+      of findings
+    ) {
+      const card =
+        createDossierPresentationCard(
+          item?.message ||
+            item?.rule_code ||
+            "Аналітичний сигнал",
+          item?.statement_type
+        );
+
+      appendDossierField(
+        card,
+        "Rule",
+        item?.rule_code
+      );
+
+      appendDossierField(
+        card,
+        "Domain",
+        item?.domain
+      );
+
+      appendDossierField(
+        card,
+        "Result",
+        item?.result
+      );
+
+      appendDossierField(
+        card,
+        "Severity",
+        item?.severity
+      );
+
+      appendDossierField(
+        card,
+        "Score",
+        item?.score
+      );
+
+      appendDossierAnalyticsDetails(
+        card,
+        item?.details
+      );
+
+      appendDossierField(
+        card,
+        "Evidence",
+        dossierArray(
+          item?.evidence
+        ).length
+      );
+
+      container.append(
+        card
+      );
+    }
+  }
+}
+
+
 function renderDossierEvidence() {
   const title =
     document.getElementById(
@@ -2075,6 +2518,11 @@ function renderDossierEvidence() {
       "dossier-assets"
     );
 
+  const analytics =
+    document.getElementById(
+      "dossier-analytics"
+    );
+
   const findingsContainer =
     document.getElementById(
       "dossier-evidence-findings"
@@ -2098,6 +2546,7 @@ function renderDossierEvidence() {
     !careerRelations ||
     !finances ||
     !assets ||
+    !analytics ||
     !findingsContainer ||
     !sourcesContainer
   ) {
@@ -2129,6 +2578,7 @@ function renderDossierEvidence() {
   careerRelations.replaceChildren();
   finances.replaceChildren();
   assets.replaceChildren();
+  analytics.replaceChildren();
   findingsContainer.replaceChildren();
   sourcesContainer.replaceChildren();
 
@@ -2273,6 +2723,10 @@ function renderDossierEvidence() {
   );
 
   renderDossierAssets(
+    report
+  );
+
+  renderDossierAnalytics(
     report
   );
 
