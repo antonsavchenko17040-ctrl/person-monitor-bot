@@ -965,6 +965,21 @@ test(
       task.updated_at,
       "2026-08-12T09:00:00.000Z",
     );
+
+    assert.equal(
+      "occurrence_count" in task,
+      false,
+    );
+
+    assert.equal(
+      "latest_dossier_version_id" in task,
+      false,
+    );
+
+    assert.equal(
+      "latest_occurrence_at" in task,
+      false,
+    );
   },
 );
 

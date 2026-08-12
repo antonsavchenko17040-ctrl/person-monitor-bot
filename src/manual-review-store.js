@@ -676,7 +676,7 @@ function nullableIso(
 }
 
 
-function normalizeTaskRow(
+function normalizeBaseTaskRow(
   row,
 ) {
   if (!row) {
@@ -702,6 +702,34 @@ function normalizeTaskRow(
     task_status:
       row.task_status ?? null,
 
+    created_at:
+      nullableIso(
+        row.created_at,
+      ),
+
+    updated_at:
+      nullableIso(
+        row.updated_at,
+      ),
+  };
+}
+
+
+function normalizeTaskRow(
+  row,
+) {
+  const task =
+    normalizeBaseTaskRow(
+      row,
+    );
+
+  if (!task) {
+    return null;
+  }
+
+  return {
+    ...task,
+
     occurrence_count:
       Number(
         row.occurrence_count ??
@@ -715,16 +743,6 @@ function normalizeTaskRow(
     latest_occurrence_at:
       nullableIso(
         row.latest_occurrence_at,
-      ),
-
-    created_at:
-      nullableIso(
-        row.created_at,
-      ),
-
-    updated_at:
-      nullableIso(
-        row.updated_at,
       ),
   };
 }
@@ -909,16 +927,7 @@ export async function setManualReviewTaskStatus(
     return null;
   }
 
-  return normalizeTaskRow({
-    ...row,
-
-    occurrence_count:
-      0,
-
-    latest_dossier_version_id:
-      null,
-
-    latest_occurrence_at:
-      null,
-  });
+  return normalizeBaseTaskRow(
+    row,
+  );
 }
