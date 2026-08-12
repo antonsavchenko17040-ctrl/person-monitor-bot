@@ -396,6 +396,9 @@ function renderDossierBriefShell(
     key_findings:
       "dossier-evidence-findings",
 
+    career_relations:
+      "dossier-career-relations-section",
+
     evidence:
       "dossier-evidence-sources",
   };
@@ -659,6 +662,575 @@ function renderDossierBriefShell(
 }
 
 
+function dossierDisplayValue(
+  value
+) {
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return null;
+  }
+
+  if (
+    Array.isArray(value)
+  ) {
+    const items =
+      value
+        .filter(
+          (item) =>
+            item !== null &&
+            item !== undefined &&
+            typeof item !==
+              "object"
+        )
+        .map(
+          (item) =>
+            String(item)
+        )
+        .filter(
+          (item) =>
+            item.trim() !== ""
+        );
+
+    return items.length
+      ? items.join(", ")
+      : null;
+  }
+
+  if (
+    typeof value ===
+    "boolean"
+  ) {
+    return value
+      ? "Так"
+      : "Ні";
+  }
+
+  if (
+    typeof value ===
+      "string" ||
+    typeof value ===
+      "number"
+  ) {
+    const text =
+      String(value).trim();
+
+    return text === ""
+      ? null
+      : text;
+  }
+
+  return null;
+}
+
+
+function appendDossierField(
+  container,
+  label,
+  value
+) {
+  const displayValue =
+    dossierDisplayValue(
+      value
+    );
+
+  if (
+    displayValue === null
+  ) {
+    return;
+  }
+
+  const row =
+    document.createElement(
+      "div"
+    );
+
+  row.style.marginTop =
+    "7px";
+
+  row.style.wordBreak =
+    "break-word";
+
+  const strong =
+    document.createElement(
+      "strong"
+    );
+
+  strong.textContent =
+    `${label}: `;
+
+  row.append(
+    strong,
+    document.createTextNode(
+      displayValue
+    )
+  );
+
+  container.append(
+    row
+  );
+}
+
+
+function createDossierPresentationCard(
+  title,
+  statementType = null
+) {
+  const card =
+    document.createElement(
+      "div"
+    );
+
+  card.className =
+    "card";
+
+  card.style.padding =
+    "14px";
+
+  const top =
+    document.createElement(
+      "div"
+    );
+
+  top.style.display =
+    "flex";
+
+  top.style.alignItems =
+    "flex-start";
+
+  top.style.justifyContent =
+    "space-between";
+
+  top.style.gap =
+    "10px";
+
+  const heading =
+    document.createElement(
+      "strong"
+    );
+
+  heading.textContent =
+    title ||
+    "Запис";
+
+  top.append(
+    heading
+  );
+
+  if (statementType) {
+    const badge =
+      document.createElement(
+        "span"
+      );
+
+    badge.textContent =
+      dossierStatementTypeLabel(
+        statementType
+      );
+
+    badge.style.padding =
+      "4px 8px";
+
+    badge.style.border =
+      "1px solid #2a303b";
+
+    badge.style.borderRadius =
+      "999px";
+
+    badge.style.fontSize =
+      "12px";
+
+    badge.style.whiteSpace =
+      "nowrap";
+
+    top.append(
+      badge
+    );
+  }
+
+  card.append(
+    top
+  );
+
+  return card;
+}
+
+
+function renderDossierCareerRelations(
+  report
+) {
+  const container =
+    document.getElementById(
+      "dossier-career-relations"
+    );
+
+  if (!container) {
+    return;
+  }
+
+  container.replaceChildren();
+
+  const careerItems =
+    dossierArray(
+      report?.career?.items
+    );
+
+  const transitions =
+    dossierArray(
+      report
+        ?.career
+        ?.transitions
+    );
+
+  const relatedPeople =
+    dossierArray(
+      report
+        ?.related_people
+        ?.items
+    );
+
+  const relations =
+    dossierArray(
+      report
+        ?.relations
+        ?.items
+    );
+
+  const total =
+    careerItems.length +
+    transitions.length +
+    relatedPeople.length +
+    relations.length;
+
+  if (total === 0) {
+    container.textContent =
+      "Canonical даних про кар’єру та зв’язки у цьому snapshot немає.";
+
+    return;
+  }
+
+  const appendGroup = (
+    title,
+    items,
+    renderItem
+  ) => {
+    if (
+      items.length === 0
+    ) {
+      return;
+    }
+
+    const heading =
+      document.createElement(
+        "div"
+      );
+
+    heading.className =
+      "label";
+
+    heading.style.marginTop =
+      container.childElementCount
+        ? "8px"
+        : "0";
+
+    heading.textContent =
+      `${title} · ${items.length}`;
+
+    container.append(
+      heading
+    );
+
+    for (
+      const item
+      of items
+    ) {
+      container.append(
+        renderItem(item)
+      );
+    }
+  };
+
+  appendGroup(
+    "Кар’єрний шлях",
+    careerItems,
+    (item) => {
+      const title = [
+        item?.year,
+        item?.position,
+      ]
+        .filter(
+          (value) =>
+            value !== null &&
+            value !== undefined &&
+            String(value).trim() !== ""
+        )
+        .join(" · ");
+
+      const card =
+        createDossierPresentationCard(
+          title ||
+            "Кар’єрний запис",
+          item?.statement_type
+        );
+
+      appendDossierField(
+        card,
+        "Організація",
+        item?.organization
+      );
+
+      appendDossierField(
+        card,
+        "Evidence",
+        dossierArray(
+          item?.evidence
+        ).length
+      );
+
+      return card;
+    }
+  );
+
+  appendGroup(
+    "Зміни кар’єри",
+    transitions,
+    (item) => {
+      const fromYear =
+        item?.from_year ??
+        "?";
+
+      const toYear =
+        item?.to_year ??
+        "?";
+
+      const card =
+        createDossierPresentationCard(
+          `${fromYear} → ${toYear}`,
+          item?.statement_type
+        );
+
+      appendDossierField(
+        card,
+        "Організація змінилась",
+        item
+          ?.organization_changed
+      );
+
+      appendDossierField(
+        card,
+        "Посада змінилась",
+        item
+          ?.position_changed
+      );
+
+      appendDossierField(
+        card,
+        "Evidence",
+        dossierArray(
+          item?.evidence
+        ).length
+      );
+
+      return card;
+    }
+  );
+
+  appendGroup(
+    "Пов’язані особи",
+    relatedPeople,
+    (item) => {
+      const card =
+        createDossierPresentationCard(
+          item?.full_name ||
+            "Пов’язана особа",
+          item?.statement_type
+        );
+
+      appendDossierField(
+        card,
+        "Зв’язок",
+        item?.relationship ||
+          item?.relation_type
+      );
+
+      appendDossierField(
+        card,
+        "Роль",
+        item?.role
+      );
+
+      appendDossierField(
+        card,
+        "Роки",
+        item?.years
+      );
+
+      appendDossierField(
+        card,
+        "Identity status",
+        item?.identity_status
+      );
+
+      appendDossierField(
+        card,
+        "Потребує review",
+        item?.review_required
+      );
+
+      appendDossierField(
+        card,
+        "Source system",
+        item
+          ?.source_identity
+          ?.source_system
+      );
+
+      appendDossierField(
+        card,
+        "Reference",
+        item?.item_ref
+      );
+
+      appendDossierField(
+        card,
+        "Evidence",
+        dossierArray(
+          item?.evidence
+        ).length
+      );
+
+      return card;
+    }
+  );
+
+  appendGroup(
+    "Canonical relations",
+    relations,
+    (item) => {
+      const card =
+        createDossierPresentationCard(
+          item?.label ||
+            item?.relation_type ||
+            "Зв’язок",
+          item?.statement_type
+        );
+
+      const from =
+        item?.from_name ||
+        item?.from_entity_id;
+
+      const to =
+        item?.to_name ||
+        item?.to_entity_id;
+
+      appendDossierField(
+        card,
+        "Сторони",
+        from && to
+          ? `${from} → ${to}`
+          : from || to
+      );
+
+      appendDossierField(
+        card,
+        "Рік",
+        item?.year ??
+          (
+            item?.relation_scope ===
+              "timeless"
+              ? "Позачасовий"
+              : null
+          )
+      );
+
+      appendDossierField(
+        card,
+        "Scope",
+        item?.relation_scope
+      );
+
+      appendDossierField(
+        card,
+        "Verification",
+        item
+          ?.verification_status
+      );
+
+      appendDossierField(
+        card,
+        "Confidence",
+        item?.confidence
+      );
+
+      appendDossierField(
+        card,
+        "Relation",
+        item?.metadata?.relation
+      );
+
+      appendDossierField(
+        card,
+        "Workplace",
+        item
+          ?.metadata
+          ?.workplace
+      );
+
+      appendDossierField(
+        card,
+        "Position",
+        item
+          ?.metadata
+          ?.position
+      );
+
+      appendDossierField(
+        card,
+        "Організація",
+        item
+          ?.metadata
+          ?.organization_name
+      );
+
+      appendDossierField(
+        card,
+        "ЄДРПОУ",
+        item
+          ?.metadata
+          ?.organization_edrpou
+      );
+
+      appendDossierField(
+        card,
+        "Semantics",
+        item
+          ?.metadata
+          ?.relation_semantics
+      );
+
+      appendDossierField(
+        card,
+        "Потребує review",
+        item
+          ?.metadata
+          ?.review_required
+      );
+
+      appendDossierField(
+        card,
+        "Evidence",
+        dossierArray(
+          item?.evidence
+        ).length
+      );
+
+      return card;
+    }
+  );
+}
+
+
 function renderDossierEvidence() {
   const title =
     document.getElementById(
@@ -685,6 +1257,11 @@ function renderDossierEvidence() {
       "dossier-brief-overview"
     );
 
+  const careerRelations =
+    document.getElementById(
+      "dossier-career-relations"
+    );
+
   const findingsContainer =
     document.getElementById(
       "dossier-evidence-findings"
@@ -705,6 +1282,7 @@ function renderDossierEvidence() {
     !meta ||
     !briefNavigation ||
     !briefOverview ||
+    !careerRelations ||
     !findingsContainer ||
     !sourcesContainer
   ) {
@@ -733,6 +1311,7 @@ function renderDossierEvidence() {
   meta.replaceChildren();
   briefNavigation.replaceChildren();
   briefOverview.replaceChildren();
+  careerRelations.replaceChildren();
   findingsContainer.replaceChildren();
   sourcesContainer.replaceChildren();
 
@@ -865,6 +1444,10 @@ function renderDossierEvidence() {
   }
 
   renderDossierBriefShell(
+    report
+  );
+
+  renderDossierCareerRelations(
     report
   );
 
