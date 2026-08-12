@@ -2,7 +2,7 @@
 
 Person Monitor — система для автоматизованого формування аналітичного досьє на суб’єкта декларування.
 
-Поточний продукт виріс із локального Telegram-бота для моніторингу згадок і тепер включає canonical report model, ідентифікацію, деклараційні дані, ЄДР/ФОП, граф зв’язків, аналітику, evidence/provenance, AI-чат, versioned dossier persistence та foundation для Manual Review Queue.
+Поточний продукт виріс із локального Telegram-бота для моніторингу згадок і тепер включає canonical report model, ідентифікацію, деклараційні дані, ЄДР/ФОП, граф зв’язків, аналітику, evidence/provenance, AI-чат, versioned dossier persistence, Manual Review Queue та analyst evidence/provenance UI.
 
 ## Поточний pipeline
 
@@ -28,6 +28,7 @@ Person Monitor — система для автоматизованого фор
 - `analytical_brief` як стабільний presentation manifest;
 - unified dossier orchestrator;
 - authenticated `POST /api/dossier?subjectId=...`;
+- authenticated read-only `GET /api/dossier-version` для latest snapshot за `subjectId` або exact snapshot за `dossierVersionId`;
 - versioned dossier persistence у Neon через `dossier_versions`;
 - canonical JSON SHA-256 integrity hashing;
 - контрольована live Neon persistence verification;
@@ -43,6 +44,14 @@ Person Monitor — система для автоматизованого фор
   - analyst auth shell через `/api/session`, `/api/login`, `/api/logout`;
   - Manual Review Queue UI з status/subject filters;
   - analyst actions `resolved / dismissed / reopen` через authenticated PATCH;
+  - перехід із Manual Review task до exact persisted snapshot через `latest_dossier_version_id`;
+- persisted dossier evidence/provenance UI:
+  - latest persisted snapshot переглядається за subject без створення нової версії;
+  - exact persisted snapshot переглядається за `dossierVersionId`;
+  - `executive_summary` signals показуються як `finding → evidence → canonical source`;
+  - UI розрізняє `source_fact`, `calculation` та `heuristic_signal`;
+  - canonical source catalog показує лише безпечні source metadata та URL, без provider full article text;
+  - вибір subject, відкриття review task та refresh перегляду не викликають автоматичний `POST /api/dossier`;
 - повний технічний pipeline ЄДР/ФОП:
   discovery → download → parser → normalization → staging → Neon → lookup → matching → graph → weekly check → snapshot diff;
 - timeless EDR relations у canonical report;
@@ -105,12 +114,12 @@ F2a schema foundation, F2b store/sync contract, F2c orchestrator wiring, F2d ana
 
 `GET /api/manual-review` повертає reference-only tasks із фільтрами subject/status/limit. `PATCH /api/manual-review` дозволяє analyst явно встановити `open`, `resolved` або `dismissed`; explicit reopen дозволений, але автоматичний sync resolved/dismissed tasks не reopen-ить.
 
-Frontend тепер має analyst auth shell, read-only queue з status/subject filters та явні actions `resolved / dismissed / reopen`. ПІБ використовується лише як UI-join із `/api/subjects` і не копіюється у Human Manual Review persistence. Після status mutation queue перечитується з API, тому UI не підміняє occurrence metadata неповною PATCH-відповіддю.
+Frontend тепер має analyst auth shell, read-only queue з status/subject filters та явні actions `resolved / dismissed / reopen`. ПІБ використовується лише як UI-join із `/api/subjects` і не копіюється у Human Manual Review persistence. Після status mutation queue перечитується з API, тому UI не підміняє occurrence metadata неповною PATCH-відповіддю. Review task може відкрити саме `latest_dossier_version_id`, а подальший refresh зберігає exact-version semantics.
 
 Наступні блоки:
 
-1. evidence/provenance UI;
-2. фінальна dossier presentation;
+1. фінальна dossier presentation та safe source-context presentation;
+2. явна analyst action `Сформувати / Оновити досьє`;
 3. canonical PDF/Excel та audit/diff.
 
 ## Джерела
@@ -158,7 +167,7 @@ npm start
 npm test
 ```
 
-Поточна зафіксована baseline: **620/620 GREEN**.
+Поточний повний regression suite: **GREEN**.
 
 ## Database migrations
 
@@ -200,5 +209,5 @@ docs/REPORT_MODEL_SPEC.md
 - search query text не є identity evidence;
 - provider output не повинен віддавати користувачу повний текст статті;
 - PDF та Excel поки залишаються legacy exports і ще не переведені повністю на canonical analytical dossier;
-- Manual Review Queue має schema foundation, atomic store/sync contract, orchestrator wiring та authenticated analyst status API; analyst UI ще не завершений;
+- Manual Review Queue має schema foundation, atomic store/sync contract, orchestrator wiring, authenticated analyst status API та analyst UI; actor/note/history audit trail ще не реалізовано;
 - AUTO.RIA / нерухомість / OpenDataBot не повинні випереджати завершення dossier, evidence та review workflow.
