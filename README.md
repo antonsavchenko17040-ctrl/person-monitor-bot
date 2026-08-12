@@ -60,7 +60,10 @@ Person Monitor — система для автоматизованого фор
   - canonical `report.methodology` відображає версії контрактів, notes та limitations;
   - raw `source_document_id` і `tracking_identity.source_item_ref` не показуються у presentation, але можуть використовуватись внутрішньо для exact evidence/source join;
   - `Dossier version` та SHA-256 залишаються видимою audit/integrity metadata snapshot;
-  - вибір subject, відкриття review task та refresh перегляду не викликають автоматичний `POST /api/dossier`;
+  - вибір subject, відкриття review task та `Оновити перегляд` не викликають автоматичний `POST /api/dossier`;
+  - explicit authenticated action `Сформувати / Оновити досьє` запускає `POST /api/dossier` тільки по analyst click;
+  - після успішного `steps.persistence.status = completed` UI перечитує latest persisted snapshot через `GET /api/dossier-version`;
+  - `partial` workflow із успішним persistence не втрачає створений snapshot; failed persistence не підміняється frontend-успіхом;
 - повний технічний pipeline ЄДР/ФОП:
   discovery → download → parser → normalization → staging → Neon → lookup → matching → graph → weekly check → snapshot diff;
 - timeless EDR relations у canonical report;
@@ -127,10 +130,9 @@ Frontend тепер має analyst auth shell, read-only queue з status/subject
 
 Наступні блоки:
 
-1. явна authenticated analyst action `Сформувати / Оновити досьє`;
-2. canonical PDF/Excel на основі persisted analytical dossier;
-3. version history та audit/diff між immutable dossier snapshots;
-4. після цього — розширення великими новими джерелами.
+1. canonical PDF/Excel на основі persisted analytical dossier;
+2. version history та audit/diff між immutable dossier snapshots;
+3. після цього — розширення великими новими джерелами.
 
 ## Джерела
 
