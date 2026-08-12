@@ -2,7 +2,7 @@
 
 Person Monitor — система для автоматизованого формування аналітичного досьє на суб’єкта декларування.
 
-Поточний продукт виріс із локального Telegram-бота для моніторингу згадок і тепер включає canonical report model, ідентифікацію, деклараційні дані, ЄДР/ФОП, граф зв’язків, аналітику, evidence/provenance, AI-чат, versioned dossier persistence, Manual Review Queue, persisted latest/exact snapshot viewing завершену canonical dossier presentation G1–G7 та canonical exact-version PDF/Excel exports.
+Поточний продукт виріс із локального Telegram-бота для моніторингу згадок і тепер включає canonical report model, ідентифікацію, деклараційні дані, ЄДР/ФОП, граф зв’язків, аналітику, evidence/provenance, AI-чат, versioned dossier persistence, Manual Review Queue, persisted latest/exact snapshot viewing та завершену canonical dossier presentation G1–G7 та canonical exact-version PDF/Excel exports.
 
 ## Поточний pipeline
 
