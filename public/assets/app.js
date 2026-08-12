@@ -29,6 +29,12 @@ let manualReviewLoading = false;
 const manualReviewPendingTaskIds =
   new Set();
 
+let activeDossierSubjectId = null;
+let activeDossierSubjectName = "";
+let activeDossierVersion = null;
+let dossierEvidenceLoading = false;
+let dossierEvidenceMessage = "";
+
 const subjectNameById =
   new Map();
 
@@ -117,6 +123,456 @@ function manualReviewSourceLabel(
   return String(
     value ?? ""
   );
+}
+
+
+function canonicalDossierSources(
+  report
+) {
+  if (
+    Array.isArray(
+      report?.sources
+    )
+  ) {
+    return report.sources;
+  }
+
+  if (
+    Array.isArray(
+      report?.sources?.items
+    )
+  ) {
+    return report.sources.items;
+  }
+
+  return [];
+}
+
+
+function renderDossierEvidence() {
+  const title =
+    document.getElementById(
+      "dossier-evidence-title"
+    );
+
+  const status =
+    document.getElementById(
+      "dossier-evidence-status"
+    );
+
+  const meta =
+    document.getElementById(
+      "dossier-evidence-meta"
+    );
+
+  const sourcesContainer =
+    document.getElementById(
+      "dossier-evidence-sources"
+    );
+
+  const refresh =
+    document.getElementById(
+      "dossier-evidence-refresh"
+    );
+
+  if (
+    !status ||
+    !meta ||
+    !sourcesContainer
+  ) {
+    return;
+  }
+
+  if (title) {
+    title.textContent =
+      activeDossierSubjectName
+        ? `Досьє та provenance: ${activeDossierSubjectName}`
+        : "Досьє та provenance";
+  }
+
+  if (refresh) {
+    refresh.disabled =
+      !portalAuthenticated ||
+      !activeDossierSubjectId ||
+      dossierEvidenceLoading;
+
+    refresh.textContent =
+      dossierEvidenceLoading
+        ? "Завантаження…"
+        : "Оновити перегляд";
+  }
+
+  meta.replaceChildren();
+  sourcesContainer.replaceChildren();
+
+  if (!activeDossierSubjectId) {
+    status.textContent =
+      "Оберіть суб’єкта моніторингу.";
+
+    return;
+  }
+
+  if (!portalAuthenticated) {
+    status.textContent =
+      "Увійдіть у режим аналітика для перегляду persisted dossier.";
+
+    return;
+  }
+
+  if (dossierEvidenceLoading) {
+    status.textContent =
+      "Завантаження останнього persisted snapshot…";
+
+    return;
+  }
+
+  if (!activeDossierVersion) {
+    status.textContent =
+      dossierEvidenceMessage ||
+      "Збереженого dossier snapshot для цього суб’єкта ще немає.";
+
+    return;
+  }
+
+  const version =
+    activeDossierVersion;
+
+  const report =
+    version.report_payload &&
+    typeof version.report_payload ===
+      "object"
+      ? version.report_payload
+      : {};
+
+  status.textContent =
+    dossierEvidenceMessage ||
+    "Завантажено останній persisted dossier snapshot.";
+
+  const metadata = [
+    [
+      "Dossier version",
+      version.id,
+    ],
+    [
+      "Статус",
+      version.dossier_status,
+    ],
+    [
+      "Створено",
+      version.created_at
+        ? formatPortalDateTime(
+            version.created_at
+          )
+        : null,
+    ],
+    [
+      "Report schema",
+      version.report_schema_version,
+    ],
+    [
+      "Generated at",
+      version.report_generated_at
+        ? formatPortalDateTime(
+            version.report_generated_at
+          )
+        : null,
+    ],
+    [
+      "Hash version",
+      version.report_payload_hash_version,
+    ],
+    [
+      "SHA-256",
+      version.report_payload_hash,
+    ],
+  ];
+
+  for (
+    const [label, value]
+    of metadata
+  ) {
+    if (
+      value === null ||
+      value === undefined ||
+      String(value).trim() === ""
+    ) {
+      continue;
+    }
+
+    const row =
+      document.createElement(
+        "div"
+      );
+
+    row.style.wordBreak =
+      "break-word";
+
+    const strong =
+      document.createElement(
+        "strong"
+      );
+
+    strong.textContent =
+      `${label}: `;
+
+    row.append(
+      strong,
+      document.createTextNode(
+        String(value)
+      )
+    );
+
+    meta.append(
+      row
+    );
+  }
+
+  const sources =
+    canonicalDossierSources(
+      report
+    );
+
+  if (sources.length === 0) {
+    sourcesContainer.textContent =
+      "Canonical sources у цьому snapshot відсутні.";
+
+    return;
+  }
+
+  for (
+    const source
+    of sources
+  ) {
+    const card =
+      document.createElement(
+        "div"
+      );
+
+    card.className =
+      "card";
+
+    card.style.padding =
+      "16px";
+
+    const heading =
+      document.createElement(
+        "strong"
+      );
+
+    heading.textContent =
+      source.title ||
+      providerLabel(
+        source.provider
+      ) ||
+      source.source_type ||
+      "Джерело";
+
+    const details =
+      document.createElement(
+        "div"
+      );
+
+    details.className =
+      "label";
+
+    details.style.marginTop =
+      "8px";
+
+    const parts = [
+      source.provider
+        ? providerLabel(
+            source.provider
+          )
+        : null,
+      source.source_type,
+      source.published_at
+        ? `опубліковано ${formatPortalDateTime(
+            source.published_at
+          )}`
+        : null,
+      source.observed_at
+        ? `отримано ${formatPortalDateTime(
+            source.observed_at
+          )}`
+        : null,
+    ].filter(Boolean);
+
+    details.textContent =
+      parts.join(" · ");
+
+    const reference =
+      document.createElement(
+        "div"
+      );
+
+    reference.className =
+      "label";
+
+    reference.style.marginTop =
+      "8px";
+
+    reference.style.wordBreak =
+      "break-all";
+
+    reference.textContent =
+      source.source_document_id
+        ? `Source document: ${source.source_document_id}`
+        : source.external_id
+          ? `External ID: ${source.external_id}`
+          : "Source ID відсутній";
+
+    card.append(
+      heading,
+      details,
+      reference
+    );
+
+    if (source.url) {
+      const link =
+        document.createElement(
+          "a"
+        );
+
+      link.href =
+        source.url;
+
+      link.target =
+        "_blank";
+
+      link.rel =
+        "noopener noreferrer";
+
+      link.textContent =
+        "Відкрити джерело";
+
+      link.style.display =
+        "inline-block";
+
+      link.style.marginTop =
+        "10px";
+
+      link.style.color =
+        "inherit";
+
+      card.append(
+        link
+      );
+    }
+
+    sourcesContainer.append(
+      card
+    );
+  }
+}
+
+
+async function loadDossierEvidence(
+  subjectId,
+  fullName
+) {
+  if (
+    !portalAuthenticated ||
+    !subjectId
+  ) {
+    return;
+  }
+
+  activeDossierSubjectId =
+    subjectId;
+
+  activeDossierSubjectName =
+    fullName ||
+    subjectNameById.get(
+      subjectId
+    ) ||
+    subjectId;
+
+  dossierEvidenceLoading =
+    true;
+
+  dossierEvidenceMessage =
+    "";
+
+  activeDossierVersion =
+    null;
+
+  renderDossierEvidence();
+
+  try {
+    const params =
+      new URLSearchParams({
+        subjectId,
+      });
+
+    const response =
+      await fetch(
+        `/api/dossier-version?${params.toString()}`,
+        {
+          headers: {
+            Accept:
+              "application/json",
+          },
+        }
+      );
+
+    let data = null;
+
+    try {
+      data =
+        await response.json();
+    } catch {}
+
+    if (
+      response.status === 401
+    ) {
+      portalAuthenticated =
+        false;
+
+      applyPortalAuthState();
+
+      dossierEvidenceMessage =
+        "Сесія завершилась. Увійдіть повторно.";
+
+      return;
+    }
+
+    if (
+      response.status === 404
+    ) {
+      dossierEvidenceMessage =
+        "Persisted dossier snapshot для цього суб’єкта ще не створено.";
+
+      return;
+    }
+
+    if (
+      !response.ok ||
+      data?.ok !== true
+    ) {
+      throw new Error(
+        data?.error ||
+        `HTTP ${response.status}`
+      );
+    }
+
+    activeDossierVersion =
+      data.dossierVersion ||
+      null;
+  } catch (error) {
+    console.error(
+      "Dossier evidence loading failed:",
+      error
+    );
+
+    dossierEvidenceMessage =
+      error?.message ||
+      "Не вдалося завантажити dossier snapshot.";
+  } finally {
+    dossierEvidenceLoading =
+      false;
+
+    renderDossierEvidence();
+  }
 }
 
 
@@ -1048,7 +1504,10 @@ async function logoutPortal() {
     portalAuthPending = false;
     manualReviewTasks = [];
     manualReviewPendingTaskIds.clear();
+    activeDossierVersion = null;
+    dossierEvidenceMessage = "";
     renderManualReviewQueue();
+    renderDossierEvidence();
     applyPortalAuthState();
   }
 }
@@ -1832,11 +2291,33 @@ async function loadSubjects() {
           subject.full_name
         );
 
+        activeDossierSubjectId =
+          subject.id;
+
+        activeDossierSubjectName =
+          subject.full_name ||
+          subject.id;
+
+        activeDossierVersion =
+          null;
+
+        dossierEvidenceMessage =
+          "";
+
+        renderDossierEvidence();
+
         await Promise.all([
           loadSubjectStats(subject.id, subject.full_name),
           loadMentions(subject.id, subject.full_name),
           loadSubjectGraph(subject.id, subject.full_name),
         ]);
+
+        if (portalAuthenticated) {
+          await loadDossierEvidence(
+            subject.id,
+            subject.full_name
+          );
+        }
 
         document
           .getElementById("subject-stats-section")
@@ -3608,6 +4089,24 @@ document
   );
 
 loadPortalSession();
+document
+  .getElementById(
+    "dossier-evidence-refresh"
+  )
+  ?.addEventListener(
+    "click",
+    () => {
+      if (
+        activeDossierSubjectId
+      ) {
+        loadDossierEvidence(
+          activeDossierSubjectId,
+          activeDossierSubjectName
+        );
+      }
+    }
+  );
+
 loadHealth();
 loadChatAvailability();
 loadSubjects();
