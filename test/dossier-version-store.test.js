@@ -208,6 +208,28 @@ test(
     );
 
     assert.equal(
+      saved.id,
+      VERSION_ID,
+    );
+
+    assert.equal(
+      report.meta.report_id,
+      null,
+    );
+
+    assert.equal(
+      JSON.parse(
+        call.values[5],
+      ).meta.report_id,
+      null,
+    );
+
+    assert.notEqual(
+      saved.id,
+      report.meta.report_id,
+    );
+
+    assert.equal(
       call.values[6],
       canonicalJsonHash(
         report,

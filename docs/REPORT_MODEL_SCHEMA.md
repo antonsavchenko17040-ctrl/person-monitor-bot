@@ -35,6 +35,19 @@ Canonical naming: `snake_case`.
 ### meta
 `report_id`, `schema_version`, `analytics_version`, `period`, `available_years`, `freshness`.
 
+`report_id` у `report-model-v1` є reserved nullable compatibility field і наразі має значення `null`.
+Він НЕ є ідентифікатором persisted dossier snapshot і не повинен автоматично
+заповнюватися значенням `dossier_versions.id`.
+
+Persisted snapshot identity належить storage layer: `dossier_versions.id`
+(`dossier_version_id` у зовнішніх reference contracts). Persistence не мутує
+canonical report payload після build для backfill storage ID, тому integrity hash
+рахується по тому самому canonical report content, який зберігається.
+
+Якщо в майбутньому зʼявиться окрема identity самого report, її семантика має бути
+введена явно через versioned contract, а не через неявне перевикористання
+`dossier_versions.id`.
+
 ### subject
 `subject_id`, `entity_id`, `full_name`, `organization`, `position`, `city`, `status`.
 
