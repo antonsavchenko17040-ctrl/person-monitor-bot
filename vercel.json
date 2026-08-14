@@ -1,4 +1,10 @@
 {
+  "rewrites": [
+    {
+      "source": "/api/health",
+      "destination": "/api/chat?route=health"
+    }
+  ],
   "functions": {
     "api/report-pdf.js": {
       "includeFiles": "node_modules/dejavu-fonts-ttf/ttf/DejaVuSans*.ttf"
