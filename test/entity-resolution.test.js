@@ -39,6 +39,10 @@ const candidate = {
       type: "city",
       value: "Київ",
     },
+    {
+      type: "birth_date",
+      value: "1980-01-02",
+    },
   ],
 };
 
@@ -102,6 +106,33 @@ test("full name plus position confirms identity", () => {
 
   assert.equal(result.score, 85);
   assert.equal(result.level, "confirmed");
+});
+
+test("birth date strengthens a full-name candidate", () => {
+  const result = scorePersonCandidate(
+    {
+      fullName: "Савченко Антон Віталійович",
+      birthDate: "1980-01-02",
+    },
+    candidate,
+  );
+
+  assert.equal(result.score, 90);
+  assert.equal(result.level, "confirmed");
+  assert.match(result.reasons.join(" "), /дати народження/);
+});
+
+test("conflicting known birth date marks identity conflict", () => {
+  const result = scorePersonCandidate(
+    {
+      fullName: "Савченко Антон Віталійович",
+      birthDate: "1990-01-02",
+    },
+    candidate,
+  );
+
+  assert.equal(result.score, 0);
+  assert.equal(result.level, "conflict");
 });
 
 test("different ordering of full name still matches", () => {

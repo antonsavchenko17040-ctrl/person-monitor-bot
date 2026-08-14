@@ -6,10 +6,19 @@ Person Monitor — система для автоматизованого фор
 
 ## Поточний pipeline
 
-**Ідентифікація → збір джерел → нормалізація → зв’язки → порівняння років → cross-checks / сигнали → граф і метрики → evidence → аналітичне досьє → AI-чат → PDF / Excel → подальший моніторинг.**
+**Research request → candidate discovery → identity resolution / clarification → збір джерел → нормалізація → зв’язки → cross-checks / сигнали → evidence → аналітичне досьє → AI-чат → PDF / Excel.**
 
 ## Що вже реалізовано
 
+- нова точка входу `research_request`:
+  - початкова форма містить лише обов’язкове поле ПІБ;
+  - організація, посада, місто та дата народження пропонуються системою як уточнюючі випадайки зі знайдених кандидатів;
+  - `POST /api/research-refine` повторно запускає identity resolution у межах того самого request;
+  - candidate payload містить лише safe identity attributes;
+  - ручні candidate actions `accept / reject` збережені;
+  - дата народження є strong identity signal, а відома суперечлива дата створює `conflict`;
+- research API contract: `POST /api/research`, `GET /api/research-status`, `POST /api/research-refine`, `POST /api/research-resolve`;
+- Neon persistence `research_requests` із migration/verify scripts;
 - ідентифікація суб’єкта за ПІБ, GUID, посадою, організацією, містом та додатковим контекстом;
 - рівні identity match: `confirmed / probable / possible / rejected`;
 - GUID як hard identity evidence; ПІБ сам по собі не є hard confirmation;

@@ -98,6 +98,21 @@ function bestSimilarity(input, values) {
   return best;
 }
 
+function normalizeDate(value) {
+  const text = String(value ?? "").trim();
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+
+  if (iso) {
+    return text;
+  }
+
+  const ukrainian = /^(\d{2})[./-](\d{2})[./-](\d{4})$/.exec(text);
+
+  return ukrainian
+    ? `${ukrainian[3]}-${ukrainian[2]}-${ukrainian[1]}`
+    : text;
+}
+
 function classify(score) {
   if (score >= 85) {
     return "confirmed";
@@ -207,6 +222,33 @@ export function scorePersonCandidate(input, candidate) {
   }
 
   score += nameScore;
+
+  /*
+   * DATE OF BIRTH: strong signal, максимум 20.
+   * A conflicting known date is an explicit identity conflict.
+   */
+
+  if (input.birthDate) {
+    const suppliedBirthDate = normalizeDate(input.birthDate);
+    const candidateBirthDates = [
+      ...factValues(candidate, "birth_date"),
+      ...factValues(candidate, "date_of_birth"),
+    ].map(normalizeDate);
+
+    if (candidateBirthDates.includes(suppliedBirthDate)) {
+      score += 20;
+      reasons.push("Точний збіг дати народження");
+    } else if (candidateBirthDates.length > 0) {
+      return {
+        entityId: candidate.id,
+        canonicalName: candidate.canonical_name,
+        score: 0,
+        level: "conflict",
+        hardMatch: false,
+        reasons: ["Дата народження суперечить даним кандидата"],
+      };
+    }
+  }
 
   /*
    * POSITION: максимум 15
@@ -379,6 +421,7 @@ export async function resolvePersonIdentity(input, options = {}) {
       position: input.position ?? null,
       organization: input.organization ?? null,
       city: input.city ?? null,
+      birthDate: input.birthDate ?? input.birth_date ?? null,
       guid: input.guid ?? null,
     },
     candidates,

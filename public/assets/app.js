@@ -37,6 +37,262 @@ let dossierBuildPending = false;
 const subjectNameById =
   new Map();
 
+let activeResearch = null;
+let researchPending = false;
+
+function researchStatusLabel(research) {
+  const labels = {
+    created: "Запит створено.",
+    identity_search: "Система шукає та зіставляє кандидатів...",
+    identity_review: "Потрібне уточнення або вибір кандидата.",
+    collecting: "Особу підтверджено. Можна продовжувати збір даних.",
+    completed: "Дослідження завершено.",
+    partial: "Дослідження завершено частково.",
+    failed: "Дослідження завершилося з помилкою.",
+  };
+
+  return labels[research?.status] ?? "Статус дослідження оновлено.";
+}
+
+function setResearchPending(value) {
+  researchPending = value;
+
+  for (const id of ["research-submit", "research-refine"]) {
+    const button = document.getElementById(id);
+    if (button) button.disabled = value;
+  }
+}
+
+function populateResearchSelect(id, values, emptyLabel) {
+  const select = document.getElementById(id);
+  if (!select) return;
+
+  const previous = select.value;
+  select.replaceChildren();
+
+  const empty = document.createElement("option");
+  empty.value = "";
+  empty.textContent = emptyLabel;
+  select.append(empty);
+
+  for (const value of values ?? []) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    select.append(option);
+  }
+
+  if ([...select.options].some((option) => option.value === previous)) {
+    select.value = previous;
+  }
+}
+
+function renderResearchCandidate(candidate) {
+  const card = document.createElement("div");
+  card.className = "card";
+  card.style.padding = "16px";
+
+  const title = document.createElement("strong");
+  title.textContent = candidate.fullName || "Кандидат без ПІБ";
+  title.style.fontSize = "18px";
+  card.append(title);
+
+  const details = [
+    ["Організація", candidate.organization],
+    ["Посада", candidate.position],
+    ["Місто", candidate.city],
+    ["Дата народження", candidate.birthDate],
+    ["Рівень", candidate.level],
+    ["Score", `${candidate.score ?? 0}%`],
+  ].filter(([, value]) => value);
+
+  const detailList = document.createElement("div");
+  detailList.style.display = "grid";
+  detailList.style.gap = "6px";
+  detailList.style.marginTop = "10px";
+
+  for (const [label, value] of details) {
+    const row = document.createElement("div");
+    row.textContent = `${label}: ${value}`;
+    detailList.append(row);
+  }
+
+  card.append(detailList);
+
+  if (candidate.reasons?.length) {
+    const reasons = document.createElement("div");
+    reasons.className = "label";
+    reasons.style.marginTop = "10px";
+    reasons.textContent = candidate.reasons.join(" · ");
+    card.append(reasons);
+  }
+
+  const actions = document.createElement("div");
+  actions.style.display = "flex";
+  actions.style.gap = "8px";
+  actions.style.marginTop = "12px";
+
+  for (const [decision, label] of [
+    ["accept", "Це потрібна особа"],
+    ["reject", "Відхилити"],
+  ]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "research-button";
+    button.textContent = label;
+    button.style.background = decision === "accept" ? "#f5f7fa" : "#141821";
+    button.style.color = decision === "accept" ? "#0b0d12" : "#f5f7fa";
+    button.disabled = researchPending || Boolean(candidate.decision);
+    button.addEventListener("click", () =>
+      resolveResearchCandidate(candidate.candidateId, decision),
+    );
+    actions.append(button);
+  }
+
+  if (candidate.decision) {
+    const decision = document.createElement("div");
+    decision.className = "label";
+    decision.style.marginTop = "10px";
+    decision.textContent = candidate.decision === "accepted"
+      ? "Кандидата підтверджено."
+      : "Кандидата відхилено.";
+    card.append(decision);
+  }
+
+  card.append(actions);
+  return card;
+}
+
+function renderResearch(research) {
+  activeResearch = research;
+
+  const status = document.getElementById("research-status");
+  const clarifications = document.getElementById("research-clarifications");
+  const candidates = document.getElementById("research-candidates");
+
+  if (status) {
+    status.textContent = researchStatusLabel(research);
+    status.classList.remove("error");
+  }
+
+  const options = research?.clarificationOptions ?? {};
+  const hasOptions = [
+    options.organizations,
+    options.positions,
+    options.cities,
+    options.birthDates,
+  ].some((values) => values?.length);
+
+  if (clarifications) clarifications.hidden = !hasOptions;
+
+  populateResearchSelect("research-organization", options.organizations, "Не уточнювати організацію");
+  populateResearchSelect("research-position", options.positions, "Не уточнювати посаду");
+  populateResearchSelect("research-city", options.cities, "Не уточнювати місто");
+  populateResearchSelect("research-birth-date", options.birthDates, "Не уточнювати дату народження");
+
+  if (candidates) {
+    candidates.replaceChildren();
+
+    for (const candidate of research?.candidates ?? []) {
+      if (candidate.level !== "rejected" || candidate.decision) {
+        candidates.append(renderResearchCandidate(candidate));
+      }
+    }
+
+    if (!candidates.childElementCount) {
+      const empty = document.createElement("div");
+      empty.className = "card";
+      empty.textContent = "Безпечних кандидатів поки не знайдено. Спробуйте перевірити написання ПІБ.";
+      candidates.append(empty);
+    }
+  }
+}
+
+async function researchRequest(url, body) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+  return data.research;
+}
+
+async function submitResearch(event) {
+  event.preventDefault();
+  if (researchPending) return;
+
+  const fullName = document.getElementById("research-full-name")?.value.trim();
+  const status = document.getElementById("research-status");
+
+  if (!fullName) {
+    status.textContent = "Вкажіть ПІБ особи.";
+    status.classList.add("error");
+    return;
+  }
+
+  setResearchPending(true);
+  status.textContent = "Шукаємо кандидатів і формуємо уточнення...";
+  status.classList.remove("error");
+
+  try {
+    renderResearch(await researchRequest("/api/research", { fullName }));
+  } catch (error) {
+    status.textContent = error.message;
+    status.classList.add("error");
+  } finally {
+    setResearchPending(false);
+  }
+}
+
+async function refineActiveResearch() {
+  if (!activeResearch?.id || researchPending) return;
+
+  const status = document.getElementById("research-status");
+  setResearchPending(true);
+  status.textContent = "Повторно зіставляємо кандидатів з уточненнями...";
+
+  try {
+    renderResearch(await researchRequest("/api/research-refine", {
+      researchRequestId: activeResearch.id,
+      organization: document.getElementById("research-organization")?.value || null,
+      position: document.getElementById("research-position")?.value || null,
+      city: document.getElementById("research-city")?.value || null,
+      birthDate: document.getElementById("research-birth-date")?.value || null,
+    }));
+  } catch (error) {
+    status.textContent = error.message;
+    status.classList.add("error");
+  } finally {
+    setResearchPending(false);
+  }
+}
+
+async function resolveResearchCandidate(candidateId, decision) {
+  if (!activeResearch?.id || researchPending) return;
+
+  const status = document.getElementById("research-status");
+  setResearchPending(true);
+
+  try {
+    renderResearch(await researchRequest("/api/research-resolve", {
+      researchRequestId: activeResearch.id,
+      candidateId,
+      decision,
+    }));
+  } catch (error) {
+    status.textContent = error.message;
+    status.classList.add("error");
+  } finally {
+    setResearchPending(false);
+  }
+}
+
 function providerLabel(provider) {
   return PROVIDER_LABELS[provider] ?? provider ?? "Інше джерело";
 }
@@ -7081,6 +7337,20 @@ async function loadSubjectGraph(
       "Не вдалося завантажити граф.";
   }
 }
+
+document
+  .getElementById("research-form")
+  ?.addEventListener(
+    "submit",
+    submitResearch
+  );
+
+document
+  .getElementById("research-refine")
+  ?.addEventListener(
+    "click",
+    refineActiveResearch
+  );
 
 document
   .getElementById("graph-year")

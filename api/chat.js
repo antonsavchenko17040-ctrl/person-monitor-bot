@@ -2,9 +2,15 @@ import {
   createChatApiHandler,
 } from "../src/chat-api.js";
 import { db } from "../src/db.js";
+import {
+  createResearchApiHandler,
+} from "../src/research-api.js";
 
 const chatHandler =
   createChatApiHandler();
+
+const researchHandler =
+  createResearchApiHandler();
 
 async function healthHandler(
   request,
@@ -45,6 +51,16 @@ export default async function handler(
     "health"
   ) {
     return healthHandler(
+      request,
+      response,
+    );
+  }
+
+  if (
+    String(request.query?.route ?? "")
+      .startsWith("research")
+  ) {
+    return researchHandler(
       request,
       response,
     );

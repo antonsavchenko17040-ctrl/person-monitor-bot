@@ -68,6 +68,28 @@
     .error {
       color: #ff7b7b;
     }
+    .research-field {
+      width: 100%;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid #2a303b;
+      background: #0b0d12;
+      color: inherit;
+      font: inherit;
+    }
+    .research-button {
+      padding: 11px 18px;
+      border: 1px solid #2a303b;
+      border-radius: 10px;
+      background: #f5f7fa;
+      color: #0b0d12;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .research-button:disabled {
+      cursor: wait;
+      opacity: 0.6;
+    }
     @media (max-width: 560px) {
       .grid { grid-template-columns: 1fr; }
       h1 { font-size: 34px; }
@@ -83,6 +105,103 @@
       <span id="dot" class="dot"></span>
       <span id="status">Перевірка сервісу...</span>
     </div>
+
+    <section
+      id="research-section"
+      style="margin-bottom: 32px;"
+    >
+      <h2>Нове дослідження</h2>
+
+      <form
+        id="research-form"
+        method="post"
+        action="/api/research"
+        class="card"
+      >
+        <label for="research-full-name">
+          <div class="label">ПІБ</div>
+        </label>
+        <input
+          id="research-full-name"
+          name="fullName"
+          class="research-field"
+          type="text"
+          required
+          minlength="3"
+          maxlength="240"
+          autocomplete="name"
+          placeholder="Наприклад: Іваненко Іван Іванович"
+        >
+
+        <div
+          style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 12px;"
+        >
+          <div
+            id="research-status"
+            class="label"
+            aria-live="polite"
+            style="margin: 0;"
+          >
+            Введіть ПІБ — решту контексту система запропонує після пошуку кандидатів.
+          </div>
+
+          <button
+            id="research-submit"
+            class="research-button"
+            type="submit"
+          >
+            Знайти особу
+          </button>
+        </div>
+      </form>
+
+      <div
+        id="research-clarifications"
+        class="card"
+        hidden
+        style="margin-top: 16px;"
+      >
+        <h3 style="margin-top: 0;">Уточніть особу</h3>
+        <div class="label">
+          Варіанти сформовано зі знайдених кандидатів. Оберіть лише відомі вам значення.
+        </div>
+
+        <div
+          style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px;"
+        >
+          <label>
+            <div class="label">Організація</div>
+            <select id="research-organization" class="research-field"></select>
+          </label>
+          <label>
+            <div class="label">Посада</div>
+            <select id="research-position" class="research-field"></select>
+          </label>
+          <label>
+            <div class="label">Місто</div>
+            <select id="research-city" class="research-field"></select>
+          </label>
+          <label>
+            <div class="label">Дата народження</div>
+            <select id="research-birth-date" class="research-field"></select>
+          </label>
+        </div>
+
+        <button
+          id="research-refine"
+          class="research-button"
+          type="button"
+          style="margin-top: 16px;"
+        >
+          Застосувати уточнення
+        </button>
+      </div>
+
+      <div
+        id="research-candidates"
+        style="display: grid; gap: 12px; margin-top: 16px;"
+      ></div>
+    </section>
 
     <div
       id="analyst-tools"
@@ -550,6 +669,6 @@
     </section>
   </main>
 
-  <script src="/assets/app.js"></script>
+  <script src="/assets/app.js?v=research-clarification-v1"></script>
 </body>
 </html>

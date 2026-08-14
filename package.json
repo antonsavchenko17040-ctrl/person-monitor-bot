@@ -48,7 +48,9 @@
     "db:migrate:dossier": "node --env-file=.env scripts/migrate-dossier-schema.js",
     "db:verify:dossier": "node --env-file=.env scripts/migrate-dossier-schema.js --verify-only",
     "db:migrate:manual-review": "node --env-file=.env scripts/migrate-manual-review-schema.js",
-    "db:verify:manual-review": "node --env-file=.env scripts/migrate-manual-review-schema.js --verify-only"
+    "db:verify:manual-review": "node --env-file=.env scripts/migrate-manual-review-schema.js --verify-only",
+    "db:migrate:research": "node --env-file=.env scripts/migrate-research-schema.js",
+    "db:verify:research": "node --env-file=.env scripts/migrate-research-schema.js --verify-only"
   },
   "engines": {
     "node": ">=22"

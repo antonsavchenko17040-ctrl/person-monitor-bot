@@ -1,6 +1,22 @@
 {
   "rewrites": [
     {
+      "source": "/api/research",
+      "destination": "/api/chat?route=research"
+    },
+    {
+      "source": "/api/research-status",
+      "destination": "/api/chat?route=research-status"
+    },
+    {
+      "source": "/api/research-resolve",
+      "destination": "/api/chat?route=research-resolve"
+    },
+    {
+      "source": "/api/research-refine",
+      "destination": "/api/chat?route=research-refine"
+    },
+    {
       "source": "/api/health",
       "destination": "/api/chat?route=health"
     }
